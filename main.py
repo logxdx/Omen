@@ -121,7 +121,7 @@ async def main():
         with Live(
             Group(
                 Panel(events_text, title="Events", border_style="dim"),
-                Panel(response_text, title=f"🤖 {agent.name}", border_style="blue"),
+                Panel(response_text, title=f"🤖 {agent.name}", border_style="yellow"),
             ),
             console=console,
             refresh_per_second=10,
@@ -138,7 +138,7 @@ async def main():
                                 Panel(
                                     response_text,
                                     title=f"🤖 {agent.name}",
-                                    border_style="blue",
+                                    border_style="yellow",
                                 ),
                             )
                         )
@@ -181,7 +181,7 @@ async def main():
                             Panel(
                                 response_text,
                                 title=f"🤖 {agent.name}",
-                                border_style="blue",
+                                border_style="yellow",
                             ),
                         )
                     )
