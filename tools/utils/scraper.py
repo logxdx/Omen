@@ -61,7 +61,7 @@ for logger_name in logging.root.manager.loggerDict:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 # Set the summarization model
-SUMMARIZATION_MODEL = "gpt-oss-120b"
+SUMMARIZATION_MODEL = "qwen-3-32b"
 BASE_URL = os.getenv("CEREBRAS_BASE_URL")
 API_KEY = os.getenv("CEREBRAS_API_KEY")
 
