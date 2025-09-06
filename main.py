@@ -27,16 +27,21 @@ set_tracing_disabled(disabled=True)
 
 
 # Agent Definitions
+from my_agents.ideation_agent import create_ideation_agent
 from my_agents.web_search_agent import create_web_search_agent
 from my_agents.filesystem_agent import create_filesystem_agent
 from my_agents.triage_agent import create_triage_agent
 
 # Create agents
+ideation_agent = create_ideation_agent()
+
 web_search_agent = create_web_search_agent()
 
 filesystem_agent = create_filesystem_agent()
 
-triage_agent = create_triage_agent(handoffs=[web_search_agent, filesystem_agent])
+triage_agent = create_triage_agent(
+    handoffs=[ideation_agent, web_search_agent, filesystem_agent]
+)
 
 
 # CLI Interface
@@ -55,10 +60,11 @@ def welcome_panel():
     Create a welcome panel.
     """
     welcome_text = Text()
-    welcome_text.append("🤖 Multi-Agent Assistant Ready!\n\n", style="white")
-    welcome_text.append("I can help you with:\n", style="white")
-    welcome_text.append("  🔍 Web searches\n", style="green")
-    welcome_text.append("  📁 File operations\n", style="green")
+    welcome_text.append("🤖 Multi-Agent Assistant Ready!\n\n", style="bold yellow")
+    welcome_text.append("I can help you with:\n", style="bold yellow")
+    welcome_text.append("  💡 Brainstorming and ideation\n", style="bold white")
+    welcome_text.append("  🔍 Web searches\n", style="bold white")
+    welcome_text.append("  📁 File operations\n", style="bold white")
     welcome_text.append("\nType 'quit' to exit", style="dim")
 
     console.print(
@@ -78,7 +84,7 @@ async def main():
     welcome_panel()
 
     # Get initial user input
-    console.print("\n[bold yellow]How can I help you today?[/bold yellow]")
+    console.print("\n[bold yellow]👋 How can I help you today?[/bold yellow]")
 
     agent = triage_agent
     inputs: List[TResponseInputItem] = []
