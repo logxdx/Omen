@@ -1,0 +1,25 @@
+# agents
+requests==2.32.4
+beautifulsoup4==4.13.5
+search-ai-core==1.0.0
+spider_rs==0.0.57
+pydantic==2.11.7
+html2text==2025.4.15
+fake-useragent==2.2.0
+browserforge==1.2.3
+litellm==1.72.0
+python-dotenv==1.1.1
+crawl4ai==0.7.0
+ddgs==9.4.3
+crewai==0.134.0
+
+
+# stt
+faster_whisper==1.2.0
+halo==0.0.31
+openwakeword==0.6.0
+silero-vad==6.0.0a
+
+# tts
+pyaudio==0.2.14
+openai==1.106.1
