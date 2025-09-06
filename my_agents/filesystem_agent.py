@@ -7,8 +7,10 @@ from tools.tools import (
     list_files,
     read_file,
     write_file,
-    create_directory,
+    edit_file_section,
+    append_to_file,
     delete_file,
+    create_directory,
     delete_directory,
     move_file,
     copy_file,
@@ -34,11 +36,15 @@ CORE FUNCTIONS:
 5. Create directories
 6. Move and copy files
 7. Manage file organization and structure
+8. Edit specific sections of files
+9. Append content to existing files
 
 FILE OPERATIONS:
 - list_files(path): List directory contents
 - read_file(path): Read file contents
 - write_file(path, content): Create/write files
+- edit_file_section(path, original_section, new_content): Edit specific sections of files
+- append_to_file(path, content): Append content to files without overwriting
 - create_directory(path): Create directories
 - delete_file(path): Remove files
 - delete_directory(path): Remove directories
@@ -50,6 +56,8 @@ BEST PRACTICES:
 - Organize files in logical directory structures
 - Confirm destructive operations before proceeding
 - Report file operations status clearly
+- Use targeted editing when only specific sections need changes
+- Use append operations for incremental content addition
 
 RESPONSE FORMAT:
 - Clearly state what operation was performed
@@ -72,6 +80,8 @@ def create_filesystem_agent():
             list_files,
             read_file,
             write_file,
+            edit_file_section,
+            append_to_file,
             create_directory,
             delete_file,
             delete_directory,
