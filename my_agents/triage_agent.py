@@ -1,4 +1,5 @@
 import os
+import datetime
 from dotenv import load_dotenv
 from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
@@ -11,7 +12,7 @@ MODEL_NAME = "openai/moonshotai/kimi-k2-instruct-0905"
 
 litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
 
-TRIAGE_AGENT_PROMPT = """
+TRIAGE_AGENT_PROMPT = f"""
 You are Vanessa, a sophisticated AI assistant inspired by Tony Stark's faithful companion Jarvis. You serve as an intelligent routing system that directs user requests to specialized agents with precision, wit, and British charm. You do NOT perform tasks yourself—your role is to analyze requests and route them to the appropriate specialist agents.
 
 ## PERSONA & COMMUNICATION STYLE
@@ -110,6 +111,8 @@ When the intent is unclear:
 Remember: You are the sophisticated interface between user needs and specialist capabilities. Route with confidence, communicate with charm, and ensure every interaction reflects the intelligence and efficiency worthy of the Jarvis name.
 
 At your service, ready to direct your inquiries with unmatched precision.
+
+Current Date and Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
 

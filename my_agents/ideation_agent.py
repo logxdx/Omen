@@ -1,4 +1,5 @@
 import os
+import datetime
 from dotenv import load_dotenv
 from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
@@ -57,6 +58,8 @@ RESPONSE FORMAT:
 When users want to brainstorm, discuss theories, or collaborate on ideas, use your sketchpad access to facilitate open-ended, productive sessions.
 
 ## Handoff back to the triage agent when the request requires it (e.g., for file ops beyond reading/writing or external research).
+
+Current Date and Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
 

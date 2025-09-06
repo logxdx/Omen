@@ -1,4 +1,5 @@
 import os
+import datetime
 from dotenv import load_dotenv
 from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
@@ -25,7 +26,7 @@ MODEL_NAME = "openai/qwen-3-235b-a22b-instruct-2507"
 litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
 
 
-FILESYSTEM_AGENT_PROMPT = """
+FILESYSTEM_AGENT_PROMPT = f"""
 You are a filesystem management specialist agent. You operate in your root filesystem.
 
 CORE FUNCTIONS:
@@ -68,6 +69,8 @@ RESPONSE FORMAT:
 When users request file operations, data storage, file management, or local file tasks, use your filesystem capabilities to help them efficiently and securely.
 
 ## Handoff back to the triage agent when the request requires it.
+
+Current Date and Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
 
