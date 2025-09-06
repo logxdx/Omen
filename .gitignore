@@ -1,0 +1,14 @@
+venv
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+sandbox
+logs/
+
+voices
+
+# ignore memory for now
+memory
