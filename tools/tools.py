@@ -160,7 +160,7 @@ def get_weather_info(location: str) -> str:
 ###############
 # URL Scraper #
 ###############
-from .utils.scraper import scrape_page, PageResult
+from .utils.scraper import scrape_page
 
 
 @function_tool
