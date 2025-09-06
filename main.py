@@ -7,6 +7,7 @@ from openai.types.responses import ResponseContentPartDoneEvent, ResponseTextDel
 from agents import (
     RawResponsesStreamEvent,
     Runner,
+    RunItemStreamEvent,
     TResponseInputItem,
     set_tracing_disabled,
 )
@@ -69,8 +70,6 @@ async def main():
 
     while True:
 
-        print(agent.name)
-
         user_msg = console.input("\n[cyan]>[/cyan] ")
 
         if user_msg.lower() in ["quit", "exit", "/q", "/quit", "/bye", "/exit"]:
@@ -99,22 +98,59 @@ async def main():
         with Live(
             Panel(response_text, title=f"🤖 {agent.name}", border_style="blue"),
             console=console,
-            refresh_per_second=60,
+            refresh_per_second=10,
         ) as live:
             # Stream the response
             async for event in result.stream_events():
-                if not isinstance(event, RawResponsesStreamEvent):
-                    continue
-                data = event.data
-                if isinstance(data, ResponseTextDeltaEvent):
-                    response_text.append(data.delta)
+                if isinstance(event, RawResponsesStreamEvent):
+                    data = event.data
+                    if isinstance(data, ResponseTextDeltaEvent):
+                        response_text.append(data.delta)
+                        live.update(
+                            Panel(
+                                response_text,
+                                title=f"🤖 {agent.name}",
+                                border_style="blue",
+                            )
+                        )
+                    elif isinstance(data, ResponseContentPartDoneEvent):
+                        pass
+                elif isinstance(event, RunItemStreamEvent):
+                    # Handle handoffs and tool calls
+                    if event.name == "handoff_requested":
+                        handoff_msg = f"\n🔄 Handoff requested to {event.item.raw_item.name if hasattr(event.item.raw_item, 'name') else 'another agent'}.\n"
+                        response_text.append(handoff_msg)
+                    elif (
+                        event.name == "handoff_occured"
+                    ):  # Note: This is misspelled in the library
+                        handoff_msg = f"\n✅ Handoff completed to {event.item.target_agent.name}.\n"
+                        response_text.append(handoff_msg)
+                    elif event.name == "tool_called":
+                        tool_name = getattr(event.item.raw_item, "name", "unknown tool")
+                        tool_args = getattr(event.item.raw_item, "arguments", {})
+                        tool_msg = f"\n🛠️ Tool called: {tool_name}"
+                        if tool_args:
+                            tool_msg += f" with args: {tool_args}"
+                        tool_msg += "\n"
+                        response_text.append(tool_msg)
+                    elif event.name == "tool_output":
+                        tool_output = getattr(
+                            event.item.raw_item, "content", "No output"
+                        )
+                        tool_output_msg = f"\n📤 Tool output: {tool_output}\n\n"
+                        response_text.append(tool_output_msg)
+                    elif event.name == "reasoning_item_created":
+                        reasoning = getattr(
+                            event.item.raw_item, "content", "No reasoning"
+                        )
+                        reasoning_msg = f"\n🤔 Reasoning: {reasoning}\n"
+                        response_text.append(reasoning_msg)
+                    # Update the live panel after appending
                     live.update(
                         Panel(
                             response_text, title=f"🤖 {agent.name}", border_style="blue"
                         )
                     )
-                elif isinstance(data, ResponseContentPartDoneEvent):
-                    pass
 
         # Update conversation state
         inputs = result.to_input_list()
