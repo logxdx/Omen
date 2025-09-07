@@ -72,7 +72,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 
 
-console = Console(width=100)
+console = Console(width=120)
 console.clear()
 
 
@@ -113,7 +113,7 @@ async def main():
     inputs: List[TResponseInputItem] = []
 
     current_display = display_names.get(agent.name.replace("_agent", ""), agent.name)
-    console.print(f"[bold magenta]Current agent: {current_display}[/bold magenta]")
+    console.print(f"[bold purple]Current agent: {current_display}[/bold purple]")
 
     console.print("\n[bold yellow]👋 How can I help you today?[/bold yellow]")
 
@@ -152,7 +152,7 @@ async def main():
             console.print("[bold green]👋 Goodbye![/bold green]")
             break
 
-        if user_msg.lower() in ["/clear"]:
+        if user_msg.lower() in ["/clear", "/c"]:
             inputs = []
             console.clear()
             console.print("[bold yellow]🔄 Conversation cleared![/bold yellow]")
@@ -235,7 +235,7 @@ async def main():
                         elif (
                             event.name == "handoff_occured"
                         ):  # Note: This is misspelled in the library
-                            agent = event.item.target_agent
+                            # agent = event.item.target_agent
                             target_name = event.item.target_agent.name
                             display_target = display_names.get(
                                 target_name.replace("_agent", ""), target_name

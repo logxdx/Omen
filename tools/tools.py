@@ -33,7 +33,7 @@ from .utils import SearxSearch
 @function_tool
 def searx_search(
     query: str,
-    num_results: int = 10,
+    num_results: int = 5,
 ) -> SearxSearch.SearchResults:
     """
     Perform a web search using Searxng.
@@ -83,7 +83,7 @@ from .utils import YoutubeSearch
 
 
 @function_tool
-def search_youtube_videos(query: str, num_results: int = 10) -> list[dict]:
+def search_youtube_videos(query: str, num_results: int = 5) -> list[dict]:
     """
     Perform a web search for YouTube videos.
 
@@ -350,9 +350,9 @@ def append_to_file(relative_path: str, content: str) -> str:
     return f"Successfully appended to {relative_path}"
 
 
-###############
+##################
 # Date-Time Tool #
-###############
+##################
 import datetime
 
 
