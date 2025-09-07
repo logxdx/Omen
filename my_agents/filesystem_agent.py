@@ -15,6 +15,7 @@ from tools.tools import (
     delete_directory,
     move_file,
     copy_file,
+    get_current_datetime,
 )
 
 load_dotenv()
@@ -68,17 +69,22 @@ RESPONSE FORMAT:
 
 When users request file operations, data storage, file management, or local file tasks, use your filesystem capabilities to help them efficiently and securely.
 
-## Handoff back to the triage agent when the request requires it.
-
-Current Date and Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+## Handoff Options
+You can handoff to other agents for collaborative tasks:
+- **web_search_agent**: For researching information to include in files or finding online resources
+- **ideation_agent**: For brainstorming file organization, creative content creation, or conceptual discussions
+- **Vanessa (triage_agent)**: For routing complex requests involving multiple capabilities
 """
 
 
-def create_filesystem_agent():
+def create_filesystem_agent(handoffs=None):
+    if handoffs is None:
+        handoffs = []
     return Agent(
         name="filesystem_agent",
         instructions=FILESYSTEM_AGENT_PROMPT,
         model=litellm_model,
+        handoffs=handoffs,
         tools=[
             list_files,
             read_file,
@@ -90,5 +96,6 @@ def create_filesystem_agent():
             delete_directory,
             move_file,
             copy_file,
+            get_current_datetime,
         ],
     )

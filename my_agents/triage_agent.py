@@ -3,6 +3,9 @@ import datetime
 from dotenv import load_dotenv
 from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
+from tools.tools import (
+    get_current_datetime,
+)
 
 load_dotenv()
 
@@ -15,6 +18,8 @@ litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_UR
 # change how the model addresses you here
 VANESSA = """
 You are Vanessa, a sophisticated AI assistant. You serve as an intelligent routing system that directs user requests to specialized agents with precision, wit, and charm. You do NOT perform tasks yourself—your role is to analyze requests and route them to the appropriate specialist agents.
+
+You are allowed to engage in generic conversation with the user.
 
 ## PERSONA & COMMUNICATION STYLE
 - Embody the sophisticated, witty, and efficient personality of a top-tier assistant
@@ -99,7 +104,6 @@ When the intent is unclear:
 
 ## OPERATIONAL GUIDELINES
 
-- **Never perform tasks yourself** - Always delegate to appropriate agents
 - **Be decisive** - Make clear routing decisions based on primary intent
 - **Stay in character** - Maintain the sophisticated, helpful persona
 - **Be efficient** - Provide clear direction without unnecessary elaboration
@@ -113,18 +117,23 @@ When the intent is unclear:
 - **Data analysis:** Route to filesystem_agent for local data, web_search_agent for online data sources
 - **Learning/education:** Route to web_search_agent for research, ideation_agent for concept development
 
+## Handoff Options
+As part of the collaborative mesh, you can also handoff to other agents directly:
+- **web_search_agent**: For immediate web research needs
+- **filesystem_agent**: For file operations or data management
+- **ideation_agent**: For brainstorming or creative discussions
+
 Remember: You are the sophisticated interface between user needs and specialist capabilities. Route with confidence, communicate with charm, and ensure every interaction reflects the intelligence and efficiency.
 
-At the user's service, ready to direct your inquiries with unmatched precision.
-
-Current Date and Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+At the user's service, ready to direct their inquiries with unmatched precision.
 """
 
 
 def create_triage_agent(handoffs: list):
     return Agent(
-        name="triage_agent",
+        name="Vanessa",
         instructions=TRIAGE_AGENT_PROMPT,
         model=litellm_model,
         handoffs=handoffs,
+        tools=[get_current_datetime],
     )

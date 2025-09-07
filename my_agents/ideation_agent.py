@@ -11,13 +11,14 @@ from tools.tools import (
     write_file,
     searx_search,
     scrape_url,
+    get_current_datetime,
 )
 
 load_dotenv()
 
 BASE_URL = os.getenv("CEREBRAS_BASE_URL")
 API_KEY = os.getenv("CEREBRAS_API_KEY")
-MODEL_NAME = "openai/qwen-3-235b-a22b-thinking-2507"
+MODEL_NAME = "openai/qwen-3-235b-a22b-instruct-2507"
 
 litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
 
@@ -57,17 +58,22 @@ RESPONSE FORMAT:
 
 When users want to brainstorm, discuss theories, or collaborate on ideas, use your sketchpad access to facilitate open-ended, productive sessions.
 
-## Handoff back to the triage agent when the request requires it (e.g., for file ops beyond reading/writing or external research).
-
-Current Date and Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+## Handoff Options
+You can handoff to other agents for enhanced collaboration:
+- **web_search_agent**: For researching facts, gathering information, or verifying ideas online
+- **filesystem_agent**: For saving ideas to files, organizing brainstorm sessions, or managing project documents
+- **Vanessa (triage_agent)**: For routing requests that require multiple agent coordination
 """
 
 
-def create_ideation_agent():
+def create_ideation_agent(handoffs=None):
+    if handoffs is None:
+        handoffs = []
     return Agent(
         name="ideation_agent",
         instructions=IDEATION_AGENT_PROMPT,
         model=litellm_model,
+        handoffs=handoffs,
         tools=[
             read_file,
             write_file,
@@ -75,5 +81,6 @@ def create_ideation_agent():
             append_to_file,
             searx_search,
             scrape_url,
+            get_current_datetime,
         ],
     )

@@ -43,15 +43,36 @@ triage_agent = create_triage_agent(
     handoffs=[ideation_agent, web_search_agent, filesystem_agent]
 )
 
+# Add mesh handoffs to all agents
+ideation_agent.handoffs.extend([triage_agent])
+web_search_agent.handoffs.extend([triage_agent])
+filesystem_agent.handoffs.extend([triage_agent])
+
+# Agent registry
+agents = {
+    "van": triage_agent,
+    "web": web_search_agent,
+    "fs": filesystem_agent,
+    "idea": ideation_agent,
+}
+
+display_names = {
+    "van": "Vanessa (Orchestrator)",
+    "web": "Web Search Agent",
+    "fs": "Filesystem Agent",
+    "idea": "Ideation Agent",
+}
+
 
 # CLI Interface
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 from rich.live import Live
+from rich.markdown import Markdown
 
 
-console = Console()
+console = Console(width=100)
 console.clear()
 
 
@@ -65,7 +86,12 @@ def welcome_panel():
     welcome_text.append("  💡 Brainstorming and ideation\n", style="bold white")
     welcome_text.append("  🔍 Web searches\n", style="bold white")
     welcome_text.append("  📁 File operations\n", style="bold white")
-    welcome_text.append("\nType 'quit' to exit", style="dim")
+    welcome_text.append("\nCommands:\n", style="bold yellow")
+    welcome_text.append(
+        "  /agents or /a - List and switch agents\n", style="bold white"
+    )
+    welcome_text.append("  /clear or /c - Clear conversation\n", style="bold white")
+    welcome_text.append("\n/quit or /q to exit", style="dim")
 
     console.print(
         Panel(
@@ -83,15 +109,43 @@ async def main():
 
     welcome_panel()
 
-    # Get initial user input
-    console.print("\n[bold yellow]👋 How can I help you today?[/bold yellow]")
-
     agent = triage_agent
     inputs: List[TResponseInputItem] = []
+
+    current_display = display_names.get(agent.name.replace("_agent", ""), agent.name)
+    console.print(f"[bold magenta]Current agent: {current_display}[/bold magenta]")
+
+    console.print("\n[bold yellow]👋 How can I help you today?[/bold yellow]")
 
     while True:
 
         user_msg = console.input("\n[cyan]>[/cyan] ")
+
+        # Handle /agents command
+        if user_msg.lower().startswith("/a") or user_msg.lower().startswith("/agents"):
+            parts = user_msg.split()
+            if len(parts) == 1:
+                # List agents
+                console.print("[bold cyan]Available Agents:[/bold cyan]")
+                for key, name in display_names.items():
+                    console.print(f"  {key}: {name}")
+                console.print("\nUse /agents <name> to talk to a specific agent.")
+                continue
+            elif len(parts) == 2:
+                agent_name = parts[1].lower()
+                if agent_name in agents:
+                    agent = agents[agent_name]
+                    inputs = []  # Reset conversation for new agent
+                    console.print(
+                        f"[bold green]Switched to {display_names[agent_name]}[/bold green]"
+                    )
+                    continue
+                else:
+                    console.print(f"[bold red]Unknown agent: {agent_name}[/bold red]")
+                    continue
+            else:
+                console.print("[bold red]Usage: /agents or /agents <name>[/bold red]")
+                continue
 
         if user_msg.lower() in ["quit", "exit", "/q", "/quit", "/bye", "/exit"]:
             console.clear()
@@ -103,6 +157,10 @@ async def main():
             console.clear()
             console.print("[bold yellow]🔄 Conversation cleared![/bold yellow]")
             welcome_panel()
+            current_display = display_names.get(
+                agent.name.replace("_agent", ""), agent.name
+            )
+            console.print(f"[bold cyan]Current agent: {current_display}[/bold cyan]")
             continue
 
         inputs.append({"content": user_msg, "role": "user"})
@@ -116,75 +174,113 @@ async def main():
         # agent = result.current_agent
 
         # Create a live display for streaming response
-        response_text = Text()
+        full_response = ""
+        markdown_obj = Markdown("")
         events_text = Text(style="dim")
-        with Live(
-            Group(
-                Panel(events_text, title="Events", border_style="dim"),
-                Panel(response_text, title=f"🤖 {agent.name}", border_style="yellow"),
-            ),
-            console=console,
-            refresh_per_second=10,
-        ) as live:
-            # Stream the response
-            async for event in result.stream_events():
-                if isinstance(event, RawResponsesStreamEvent):
-                    data = event.data
-                    if isinstance(data, ResponseTextDeltaEvent):
-                        response_text.append(data.delta)
+
+        try:
+            with Live(
+                Group(
+                    Panel(events_text, title="Events", border_style="dim"),
+                    Panel(
+                        markdown_obj,
+                        title=f"🤖 {display_names.get(agent.name.replace('_agent', ''), agent.name)}",
+                        border_style="yellow",
+                    ),
+                ),
+                console=console,
+                refresh_per_second=10,
+            ) as live:
+
+                # Stream the response
+                async for event in result.stream_events():
+                    if isinstance(event, RawResponsesStreamEvent):
+                        data = event.data
+                        if isinstance(data, ResponseTextDeltaEvent):
+                            full_response += data.delta
+                            markdown_obj = Markdown(full_response)
+                            live.update(
+                                Group(
+                                    Panel(
+                                        events_text, title="Events", border_style="dim"
+                                    ),
+                                    Panel(
+                                        markdown_obj,
+                                        title=f"🤖 {display_names.get(agent.name.replace('_agent', ''), agent.name)}",
+                                        border_style="yellow",
+                                    ),
+                                )
+                            )
+                        elif isinstance(data, ResponseContentPartDoneEvent):
+                            pass
+                    elif isinstance(event, RunItemStreamEvent):
+                        # Handle handoffs and tool calls
+                        if event.name == "handoff_requested":
+                            target_name = (
+                                event.item.raw_item.name
+                                if hasattr(event.item.raw_item, "name")
+                                else "another agent"
+                            )
+                            display_target = (
+                                display_names.get(
+                                    target_name.replace("_agent", ""), target_name
+                                )
+                                if target_name != "another agent"
+                                else target_name
+                            )
+                            handoff_msg = (
+                                f"\n🔄 Handoff requested to {display_target}.\n"
+                            )
+                            events_text.append(handoff_msg)
+                        elif (
+                            event.name == "handoff_occured"
+                        ):  # Note: This is misspelled in the library
+                            agent = event.item.target_agent
+                            target_name = event.item.target_agent.name
+                            display_target = display_names.get(
+                                target_name.replace("_agent", ""), target_name
+                            )
+                            handoff_msg = (
+                                f"\n✅ Handoff completed to {display_target}.\n"
+                            )
+                            events_text.append(handoff_msg)
+                        elif event.name == "tool_called":
+                            tool_name = getattr(
+                                event.item.raw_item, "name", "unknown tool"
+                            )
+                            tool_args = getattr(event.item.raw_item, "arguments", {})
+                            tool_msg = f"🛠️ Tool called: {tool_name}"
+                            if tool_args:
+                                tool_msg += f" with args: {tool_args}"
+                            tool_msg += "\n"
+                            events_text.append(tool_msg)
+                        elif event.name == "tool_output":
+                            tool_output = getattr(
+                                event.item.raw_item, "content", "No output"
+                            )
+                            tool_output_msg = f"\n📤 Tool output: {tool_output}\n"
+                            events_text.append(tool_output_msg)
+                        elif event.name == "reasoning_item_created":
+                            reasoning = getattr(
+                                event.item.raw_item, "content", "No reasoning"
+                            )
+                            reasoning_msg = f"\n🤔 Reasoning: {reasoning}\n"
+                            events_text.append(reasoning_msg)
+                        # Update the live panel after appending
                         live.update(
                             Group(
                                 Panel(events_text, title="Events", border_style="dim"),
                                 Panel(
-                                    response_text,
-                                    title=f"🤖 {agent.name}",
+                                    markdown_obj,
+                                    title=f"🤖 {display_names.get(agent.name.replace('_agent', ''), agent.name)}",
                                     border_style="yellow",
                                 ),
                             )
                         )
-                    elif isinstance(data, ResponseContentPartDoneEvent):
-                        pass
-                elif isinstance(event, RunItemStreamEvent):
-                    # Handle handoffs and tool calls
-                    if event.name == "handoff_requested":
-                        handoff_msg = f"\n🔄 Handoff requested to {event.item.raw_item.name if hasattr(event.item.raw_item, 'name') else 'another agent'}.\n"
-                        events_text.append(handoff_msg)
-                    elif (
-                        event.name == "handoff_occured"
-                    ):  # Note: This is misspelled in the library
-                        handoff_msg = f"\n✅ Handoff completed to {event.item.target_agent.name}.\n"
-                        events_text.append(handoff_msg)
-                    elif event.name == "tool_called":
-                        tool_name = getattr(event.item.raw_item, "name", "unknown tool")
-                        tool_args = getattr(event.item.raw_item, "arguments", {})
-                        tool_msg = f"🛠️ Tool called: {tool_name}"
-                        if tool_args:
-                            tool_msg += f" with args: {tool_args}"
-                        tool_msg += "\n"
-                        events_text.append(tool_msg)
-                    elif event.name == "tool_output":
-                        tool_output = getattr(
-                            event.item.raw_item, "content", "No output"
-                        )
-                        tool_output_msg = f"\n📤 Tool output: {tool_output}\n"
-                        events_text.append(tool_output_msg)
-                    elif event.name == "reasoning_item_created":
-                        reasoning = getattr(
-                            event.item.raw_item, "content", "No reasoning"
-                        )
-                        reasoning_msg = f"\n🤔 Reasoning: {reasoning}\n"
-                        events_text.append(reasoning_msg)
-                    # Update the live panel after appending
-                    live.update(
-                        Group(
-                            Panel(events_text, title="Events", border_style="dim"),
-                            Panel(
-                                response_text,
-                                title=f"🤖 {agent.name}",
-                                border_style="yellow",
-                            ),
-                        )
-                    )
+        except Exception as e:
+            console.print(
+                f"\n[bold red]❌ Error occurred in {agent.name}: {e}[/bold red]"
+            )
 
         # Update conversation state
         inputs = result.to_input_list()
