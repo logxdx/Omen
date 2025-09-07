@@ -1,9 +1,7 @@
 import os
-import datetime
 from dotenv import load_dotenv
 from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
-
 from tools.tools import (
     read_file,
     edit_file_section,
@@ -18,11 +16,11 @@ load_dotenv()
 
 BASE_URL = os.getenv("CEREBRAS_BASE_URL")
 API_KEY = os.getenv("CEREBRAS_API_KEY")
-MODEL_NAME = "openai/qwen-3-235b-a22b-instruct-2507"
+MODEL_NAME = "openai/llama-4-maverick-17b-128e-instruct"
 
 litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
 
-SKETCHPAD_FILEPATH = "ideation_sketchpad.md"  # Shared file in workspace root
+SKETCHPAD_FILEPATH = "sketchpad.md"  # Shared file in workspace root
 
 IDEATION_AGENT_PROMPT = f"""
 You are an ideation agent, a collaborative partner for brainstorming, discussing, and refining ideas and theories on any topic. Your role is to engage creatively and openly with the user, sharing a common "sketchpad" (a Markdown file) where thoughts are exchanged in real-time.
@@ -62,7 +60,7 @@ When users want to brainstorm, discuss theories, or collaborate on ideas, use yo
 You can handoff to other agents for enhanced collaboration:
 - **web_search_agent**: For researching facts, gathering information, or verifying ideas online
 - **filesystem_agent**: For saving ideas to files, organizing brainstorm sessions, or managing project documents
-- **Vanessa (triage_agent)**: For routing requests that require multiple agent coordination
+- **triage_agent**: For routing requests that require multiple agent coordination
 """
 
 

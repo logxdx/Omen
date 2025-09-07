@@ -56,7 +56,7 @@ When users ask for web searches, information lookup, research tasks, or online c
 You can handoff to other agents for collaborative tasks:
 - **ideation_agent**: For brainstorming ideas based on search results, creative analysis, or theoretical discussions
 - **filesystem_agent**: For saving search results to files, organizing research data, or managing local documents
-- **Vanessa (triage_agent)**: For routing complex requests or when unsure which agent to involve next
+- **triage_agent**: For routing complex requests or when unsure which agent to involve next
 """
 
 

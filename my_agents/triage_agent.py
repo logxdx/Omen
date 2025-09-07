@@ -5,7 +5,7 @@ from agents.extensions.models.litellm_model import LitellmModel
 from tools.tools import (
     get_current_datetime,
 )
-import agent_personality as personality
+import my_agents.agent_personality as personality
 import random
 
 load_dotenv()
@@ -120,7 +120,7 @@ At the user's service, ready to direct their inquiries with unmatched precision.
 
 def create_triage_agent(handoffs: list):
     return Agent(
-        name="Vanessa",
+        name="triage_agent",
         instructions=TRIAGE_AGENT_PROMPT,
         model=litellm_model,
         handoffs=handoffs,

@@ -1,5 +1,4 @@
 import os
-import datetime
 from dotenv import load_dotenv
 from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
@@ -22,7 +21,7 @@ load_dotenv()
 
 BASE_URL = os.getenv("CEREBRAS_BASE_URL")
 API_KEY = os.getenv("CEREBRAS_API_KEY")
-MODEL_NAME = "openai/qwen-3-235b-a22b-instruct-2507"
+MODEL_NAME = "openai/qwen-3-32b"
 
 litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
 
@@ -73,7 +72,7 @@ When users request file operations, data storage, file management, or local file
 You can handoff to other agents for collaborative tasks:
 - **web_search_agent**: For researching information to include in files or finding online resources
 - **ideation_agent**: For brainstorming file organization, creative content creation, or conceptual discussions
-- **Vanessa (triage_agent)**: For routing complex requests involving multiple capabilities
+- **triage_agent**: For routing complex requests involving multiple capabilities
 """
 
 
