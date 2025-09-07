@@ -49,33 +49,6 @@ def searx_search(
     return SearxSearch.search(query=query, max_results=num_results)
 
 
-#################
-# Google Search #
-#################
-from .utils import GoogleSearch
-
-
-@function_tool
-def google_search(
-    query: str,
-    num_results: int = 5,
-) -> list[GoogleSearch.SearchResult]:
-    """
-    Perform a web search using Google.
-
-    Args:
-        query: Search query string
-        num_results: Maximum number of results to return
-
-    Returns:
-        List of search results
-    """
-    results = []
-    for result in GoogleSearch.search(query, num_results=num_results):
-        results.append(result)
-    return results
-
-
 ##################
 # Youtube Search #
 ##################
@@ -318,7 +291,9 @@ def copy_file(src_relative_path: str, dst_relative_path: str) -> str:
 
 
 @function_tool
-def edit_file_section(relative_path: str, original_section: str, new_content: str) -> str:
+def edit_file_section(
+    relative_path: str, original_section: str, new_content: str
+) -> str:
     """
     Edit a specific section of a file in the filesystem by replacing the original_section with new_content.
 
@@ -367,4 +342,4 @@ def get_current_datetime() -> str:
     ist_offset = datetime.timedelta(hours=5, minutes=30)
     current_utc = datetime.datetime.now(datetime.timezone.utc)
     ist_time = current_utc + ist_offset
-    return ist_time.strftime('%Y-%m-%d %H:%M:%S')
+    return ist_time.strftime("%Y-%m-%d %H:%M:%S")

@@ -9,7 +9,9 @@ class YoutubeSearch:
     def __init__(self):
         self.BASE_URL = "https://youtube.com"
 
-    def _search(self, search_terms: str, max_results: int = 10, start: int = 0) -> list[dict]:
+    def _search(
+        self, search_terms: str, max_results: int = 10, start: int = 0
+    ) -> list[dict]:
         """
         Performs a search on YouTube and returns a list of video results.
 
@@ -129,6 +131,7 @@ class YoutubeSearch:
 # Example usage:
 if __name__ == "__main__":
     import json
+
     search = YoutubeSearch()
     results = search.search("embed gemma", max_results=10)
     for result in results:
