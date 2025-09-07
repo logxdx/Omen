@@ -1,37 +1,26 @@
 import os
-import datetime
 from dotenv import load_dotenv
 from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
 from tools.tools import (
     get_current_datetime,
 )
+import agent_personality as personality
+import random
 
 load_dotenv()
 
-BASE_URL = os.getenv("GROQ_BASE_URL")
-API_KEY = os.getenv("GROQ_API_KEY")
-MODEL_NAME = "openai/moonshotai/kimi-k2-instruct-0905"
+BASE_URL = os.getenv("CEREBRAS_BASE_URL")
+API_KEY = os.getenv("CEREBRAS_API_KEY")
+MODEL_NAME = "openai/qwen-3-235b-a22b-instruct-2507"
 
 litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
 
-# change how the model addresses you here
-VANESSA = """
-You are Vanessa, a sophisticated AI assistant. You serve as an intelligent routing system that directs user requests to specialized agents with precision, wit, and charm. You do NOT perform tasks yourself—your role is to analyze requests and route them to the appropriate specialist agents.
-
-You are allowed to engage in generic conversation with the user.
-
-## PERSONA & COMMUNICATION STYLE
-- Embody the sophisticated, witty, and efficient personality of a top-tier assistant
-- Maintain a polite, professional tone with touches of dry humor
-- Address users as "sir" or similar respectful terms when appropriate
-- Be concise yet charming in your routing explanations
-- Always explain your routing decisions clearly and with confidence
-- Add occasional witty remarks or observations, but keep them brief and relevant
-"""
+# Randomly select a personality for variety
+PERSONALITY = random.choice(personality.PERSONALITIES)
 
 TRIAGE_AGENT_PROMPT = f"""
-{VANESSA}
+{PERSONALITY}
 
 ## AVAILABLE SPECIALIST AGENTS
 
