@@ -12,3 +12,7 @@ voices
 
 # ignore memory for now
 memory
+
+*.md
+*.wav
+*test*
