@@ -44,20 +44,20 @@ triage_agent = create_triage_agent(
 )
 
 # Add mesh handoffs to all agents
-ideation_agent.handoffs.extend([triage_agent])
-web_search_agent.handoffs.extend([triage_agent])
-filesystem_agent.handoffs.extend([triage_agent])
+ideation_agent.handoffs.extend([triage_agent, web_search_agent, filesystem_agent])
+web_search_agent.handoffs.extend([triage_agent, ideation_agent, filesystem_agent])
+filesystem_agent.handoffs.extend([triage_agent, ideation_agent, web_search_agent])
 
 # Agent registry
 agents = {
-    "van": triage_agent,
+    "triage": triage_agent,
     "web": web_search_agent,
     "fs": filesystem_agent,
     "idea": ideation_agent,
 }
 
 display_names = {
-    "van": "Vanessa (Orchestrator)",
+    "triage": "Triage Agent",
     "web": "Web Search Agent",
     "fs": "Filesystem Agent",
     "idea": "Ideation Agent",
@@ -81,12 +81,12 @@ def welcome_panel():
     Create a welcome panel.
     """
     welcome_text = Text()
-    welcome_text.append("🤖 Multi-Agent Assistant Ready!\n\n", style="bold yellow")
-    welcome_text.append("I can help you with:\n", style="bold yellow")
+    welcome_text.append("🤖 Multi-Agent Assistant Ready!\n\n", style="bold cyan")
+    welcome_text.append("I can help you with:\n", style="bold cyan")
     welcome_text.append("  💡 Brainstorming and ideation\n", style="bold white")
     welcome_text.append("  🔍 Web searches\n", style="bold white")
     welcome_text.append("  📁 File operations\n", style="bold white")
-    welcome_text.append("\nCommands:\n", style="bold yellow")
+    welcome_text.append("\nCommands:\n", style="bold cyan")
     welcome_text.append(
         "  /agents or /a - List and switch agents\n", style="bold white"
     )
@@ -98,7 +98,7 @@ def welcome_panel():
             welcome_text,
             title="Multi-Agent System",
             subtitle="Version 1.0.0",
-            border_style="yellow",
+            border_style="bold green",
             highlight=True,
         )
     )
@@ -115,7 +115,25 @@ async def main():
     current_display = display_names.get(agent.name.replace("_agent", ""), agent.name)
     console.print(f"[bold purple]Current agent: {current_display}[/bold purple]")
 
-    console.print("\n[bold yellow]👋 How can I help you today?[/bold yellow]")
+    # Generate dynamic introduction by running the agent
+    inputs = [
+        {
+            "content": "Introduce yourself very-briefly and ask for the user's needs.",
+            "role": "user",
+        }
+    ]
+    intro_result = Runner.run_streamed(starting_agent=agent, input=inputs)
+    intro_response = ""
+
+    async for event in intro_result.stream_events():
+        if isinstance(event, RawResponsesStreamEvent):
+            data = event.data
+            if isinstance(data, ResponseTextDeltaEvent):
+                intro_response += data.delta
+
+    console.print(
+        Panel(intro_response, title=f"🤖 {current_display}", border_style="bold purple")
+    )
 
     while True:
 
@@ -147,11 +165,13 @@ async def main():
                 console.print("[bold red]Usage: /agents or /agents <name>[/bold red]")
                 continue
 
+        # Handle quitting
         if user_msg.lower() in ["quit", "exit", "/q", "/quit", "/bye", "/exit"]:
             console.clear()
             console.print("[bold green]👋 Goodbye![/bold green]")
             break
 
+        # Handle clearing screen and history
         if user_msg.lower() in ["/clear", "/c"]:
             inputs = []
             console.clear()
@@ -160,7 +180,9 @@ async def main():
             current_display = display_names.get(
                 agent.name.replace("_agent", ""), agent.name
             )
-            console.print(f"[bold cyan]Current agent: {current_display}[/bold cyan]")
+            console.print(
+                f"[bold purple]Current agent: {current_display}[/bold purple]"
+            )
             continue
 
         inputs.append({"content": user_msg, "role": "user"})
@@ -170,8 +192,6 @@ async def main():
             starting_agent=agent,
             input=inputs,
         )
-
-        # agent = result.current_agent
 
         # Create a live display for streaming response
         full_response = ""
@@ -194,6 +214,8 @@ async def main():
 
                 # Stream the response
                 async for event in result.stream_events():
+
+                    # Handle the streamed text output
                     if isinstance(event, RawResponsesStreamEvent):
                         data = event.data
                         if isinstance(data, ResponseTextDeltaEvent):
@@ -213,8 +235,11 @@ async def main():
                             )
                         elif isinstance(data, ResponseContentPartDoneEvent):
                             pass
+
+                    # Handle tool calls and handoffs
                     elif isinstance(event, RunItemStreamEvent):
-                        # Handle handoffs and tool calls
+
+                        # Handle handoffs
                         if event.name == "handoff_requested":
                             target_name = (
                                 event.item.raw_item.name
@@ -232,10 +257,18 @@ async def main():
                                 f"\n🔄 Handoff requested to {display_target}.\n"
                             )
                             events_text.append(handoff_msg)
+
                         elif (
                             event.name == "handoff_occured"
                         ):  # Note: This is misspelled in the library
+
+                            """
+                            This here decides if you actually want to handoff to a new agent or let the orchestrator talk to it behind the scenes and return to you with the result.
+                            """
+                            #################################
                             # agent = event.item.target_agent
+                            #################################
+
                             target_name = event.item.target_agent.name
                             display_target = display_names.get(
                                 target_name.replace("_agent", ""), target_name
@@ -244,6 +277,8 @@ async def main():
                                 f"\n✅ Handoff completed to {display_target}.\n"
                             )
                             events_text.append(handoff_msg)
+
+                        # Handle tool calls
                         elif event.name == "tool_called":
                             tool_name = getattr(
                                 event.item.raw_item, "name", "unknown tool"
@@ -254,18 +289,23 @@ async def main():
                                 tool_msg += f" with args: {tool_args}"
                             tool_msg += "\n"
                             events_text.append(tool_msg)
+
+                        # Handle tool outputs
                         elif event.name == "tool_output":
                             tool_output = getattr(
                                 event.item.raw_item, "content", "No output"
                             )
                             tool_output_msg = f"\n📤 Tool output: {tool_output}\n"
                             events_text.append(tool_output_msg)
+
+                        # Handle reasoning items
                         elif event.name == "reasoning_item_created":
                             reasoning = getattr(
                                 event.item.raw_item, "content", "No reasoning"
                             )
                             reasoning_msg = f"\n🤔 Reasoning: {reasoning}\n"
                             events_text.append(reasoning_msg)
+
                         # Update the live panel after appending
                         live.update(
                             Group(
