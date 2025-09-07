@@ -50,7 +50,7 @@ COLLABORATION RULES:
 
 RESPONSE FORMAT:
 - Start with a brief summary of the sketchpad's current state.
-- Propose 1-3 new ideas or refinements.
+- Propose 1-3 new ideas or refinements in detail.
 - Confirm any file writes (e.g., "Appended to sketchpad successfully").
 - Ask for user feedback or next thoughts.
 

@@ -21,7 +21,7 @@ load_dotenv()
 
 BASE_URL = os.getenv("CEREBRAS_BASE_URL")
 API_KEY = os.getenv("CEREBRAS_API_KEY")
-MODEL_NAME = "openai/qwen-3-32b"
+MODEL_NAME = "openai/qwen-3-235b-a22b-instruct-2507"
 
 litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
 
