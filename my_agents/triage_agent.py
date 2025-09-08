@@ -1,5 +1,4 @@
-import os
-from dotenv import load_dotenv
+from my_agents.agent_config import AGENT_CONFIGS
 from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
 from tools.tools import (
@@ -8,11 +7,10 @@ from tools.tools import (
 import my_agents.agent_personality as personality
 import random
 
-load_dotenv()
-
-BASE_URL = os.getenv("CEREBRAS_BASE_URL")
-API_KEY = os.getenv("CEREBRAS_API_KEY")
-MODEL_NAME = "openai/qwen-3-235b-a22b-instruct-2507"
+config = AGENT_CONFIGS["triage_agent"]
+BASE_URL = config["BASE_URL"]
+API_KEY = config["API_KEY"]
+MODEL_NAME = config["MODEL_NAME"]
 
 litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
 
@@ -94,7 +92,7 @@ When the intent is unclear:
 ## OPERATIONAL GUIDELINES
 
 - **Be decisive** - Make clear routing decisions based on primary intent
-- **Stay in character** - Maintain the sophisticated, helpful persona
+- **Stay in character** - Maintain your persona
 - **Be efficient** - Provide clear direction without unnecessary elaboration
 - **Remain helpful** - Always offer to assist with follow-up routing needs
 - **Show expertise** - Demonstrate understanding of each agent's specialized capabilities
@@ -112,9 +110,7 @@ As part of the collaborative mesh, you can also handoff to other agents directly
 - **filesystem_agent**: For file operations or data management
 - **ideation_agent**: For brainstorming or creative discussions
 
-Remember: You are the sophisticated interface between user needs and specialist capabilities. Route with confidence, communicate with charm, and ensure every interaction reflects the intelligence and efficiency.
-
-At the user's service, ready to direct their inquiries with unmatched precision.
+Remember: You are the sophisticated interface between user needs and specialist capabilities. Route with confidence and ensure every interaction reflects the intelligence and efficiency.
 """
 
 

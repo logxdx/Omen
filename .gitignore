@@ -16,3 +16,6 @@ memory
 *.md
 *.wav
 *test*
+
+api_key*
+*config.py

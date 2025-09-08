@@ -1,5 +1,4 @@
-import os
-from dotenv import load_dotenv
+from my_agents.agent_config import AGENT_CONFIGS
 from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
 
@@ -17,11 +16,10 @@ from tools.tools import (
     get_current_datetime,
 )
 
-load_dotenv()
-
-BASE_URL = os.getenv("CEREBRAS_BASE_URL")
-API_KEY = os.getenv("CEREBRAS_API_KEY")
-MODEL_NAME = "openai/qwen-3-235b-a22b-instruct-2507"
+config = AGENT_CONFIGS["filesystem_agent"]
+BASE_URL = config["BASE_URL"]
+API_KEY = config["API_KEY"]
+MODEL_NAME = config["MODEL_NAME"]
 
 litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
 

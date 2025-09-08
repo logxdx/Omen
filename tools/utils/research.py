@@ -36,11 +36,6 @@ LLM_BASE_URL = str(os.getenv("CEREBRAS_BASE_URL"))
 LLM_API_KEY = str(os.getenv("CEREBRAS_API_KEY"))
 LLM_MODEL = "gpt-oss-120b"
 
-LLM_BASE_URL = str(os.getenv("GROQ_BASE_URL"))
-LLM_API_KEY = str(os.getenv("GROQ_API_KEY"))
-LLM_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-
-
 # Async URL scraper function
 async def async_scrape_url(url: str, query: str) -> str:
     """
@@ -98,7 +93,7 @@ async def async_scrape_url(url: str, query: str) -> str:
         provider=f"openai/{LLM_MODEL}",
         api_token=LLM_API_KEY,
         base_url=LLM_BASE_URL,
-        temprature=1,
+        temperature=0.3,
     )
 
     llm_strategy = LLMExtractionStrategy(

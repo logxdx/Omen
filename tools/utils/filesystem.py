@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 SANDBOX_PATH = Path(__file__).resolve().parent.parent.parent / 'sandbox'
+SANDBOX_PATH.mkdir(parents=True, exist_ok=True)
 
 def list_files_in_sandbox(relative_path=""):
     """List files and directories in the sandbox at the given relative path."""
