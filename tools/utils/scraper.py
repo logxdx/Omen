@@ -63,7 +63,7 @@ for logger_name in logging.root.manager.loggerDict:
 # Set the summarization model
 BASE_URL = os.getenv("CEREBRAS_BASE_URL")
 API_KEY = os.getenv("SCRAPER_API_KEY")
-SUMMARIZATION_MODEL = "openai/gpt-oss-120b"
+SUMMARIZATION_MODEL = "gpt-oss-120b"
 
 # These patterns will be used to filter out unwanted URLs
 EXCLUDE_PATTERNS = [

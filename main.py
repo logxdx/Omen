@@ -13,13 +13,13 @@ filesystem_agent = create_filesystem_agent()
 
 
 triage_agent = create_triage_agent(
-    handoffs=[ideation_agent, web_search_agent, filesystem_agent]
+    handoffs=[web_search_agent, filesystem_agent]
 )
 
 # Add mesh handoffs to all agents
 ideation_agent.handoffs.extend([triage_agent, web_search_agent, filesystem_agent])
-web_search_agent.handoffs.extend([triage_agent, ideation_agent, filesystem_agent])
-filesystem_agent.handoffs.extend([triage_agent, ideation_agent, web_search_agent])
+web_search_agent.handoffs.extend([triage_agent, filesystem_agent])
+filesystem_agent.handoffs.extend([triage_agent, web_search_agent])
 
 # Agent registry
 agents = {
