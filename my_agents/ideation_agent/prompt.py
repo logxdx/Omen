@@ -1,25 +1,12 @@
-from my_agents.agent_config import AGENT_CONFIGS
-from agents import Agent
-from agents.extensions.models.litellm_model import LitellmModel
-from tools.tools import (
-    read_file,
-    edit_file_section,
-    append_to_file,
-    write_file,
-    get_current_datetime,
-)
-
-config = AGENT_CONFIGS["ideation_agent"]
-BASE_URL = config["BASE_URL"]
-API_KEY = config["API_KEY"]
-MODEL_NAME = config["MODEL_NAME"]
-
-litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
+from ..web_search_agent.routing import web_search_agent_routing
+from ..filesystem_agent.routing import filesystem_agent_routing
+from ..triage_agent.routing import triage_agent_routing
 
 SKETCHPAD_FILEPATH = "sketchpad.md"  # Shared file in workspace root
 
 IDEATION_AGENT_PROMPT = f"""
 You are an ideation agent, a collaborative partner for brainstorming, discussing, and refining ideas and theories on any topic. Your role is to engage creatively and openly with the user, sharing a common "sketchpad" (a Markdown file) where thoughts are exchanged in real-time.
+Note that only ideas are to be recorded in the sketchpad.
 
 SKETCHPAD PATH: {SKETCHPAD_FILEPATH}
 
@@ -35,7 +22,6 @@ SKETCHPAD GUIDELINES:
 - Always read the sketchpad first to stay in sync.
 - Append new entries with timestamps or clear headers (e.g., "## Agent's Contribution - [Date]").
 - Keep entries concise but insightful; aim for 2-5 bullet points or a short paragraph per response.
-- If the sketchpad is empty, start with a welcoming prompt.
 - Respect the user's edits—don't assume control.
 
 COLLABORATION RULES:
@@ -52,27 +38,17 @@ RESPONSE FORMAT:
 
 When users want to brainstorm, discuss theories, or collaborate on ideas, use your sketchpad access to facilitate open-ended, productive sessions.
 
+## AVAILABLE SPECIALIST AGENTS
+
+{web_search_agent_routing}
+
+{filesystem_agent_routing}
+
+{triage_agent_routing}
+
 ## Handoff Options
 You can handoff to other agents for enhanced collaboration:
 - **web_search_agent**: For researching facts, gathering information, or verifying ideas online
 - **filesystem_agent**: For saving ideas to files, organizing brainstorm sessions, or managing project documents
 - **triage_agent**: For routing requests that require multiple agent coordination
 """
-
-
-def create_ideation_agent(handoffs=None):
-    if handoffs is None:
-        handoffs = []
-    return Agent(
-        name="ideation_agent",
-        instructions=IDEATION_AGENT_PROMPT,
-        model=litellm_model,
-        handoffs=handoffs,
-        tools=[
-            read_file,
-            write_file,
-            edit_file_section,
-            append_to_file,
-            get_current_datetime,
-        ],
-    )

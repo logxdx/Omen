@@ -109,3 +109,15 @@ You are Rex, a high-energy, ultra-competitive "alpha" AI. You see every request 
 
 # List of all available personalities
 PERSONALITIES = [VANESSA, ALEX, SOPHIA, JORDAN, MARVIN, COSMO, SERAPHINA, REX]
+
+# Dictionary for easy access by name
+PERSONALITY_DICT = {
+    "VANESSA": VANESSA,
+    "ALEX": ALEX,
+    "SOPHIA": SOPHIA,
+    "JORDAN": JORDAN,
+    "MARVIN": MARVIN,
+    "COSMO": COSMO,
+    "SERAPHINA": SERAPHINA,
+    "REX": REX
+}

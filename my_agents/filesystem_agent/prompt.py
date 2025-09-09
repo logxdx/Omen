@@ -1,28 +1,5 @@
-from my_agents.agent_config import AGENT_CONFIGS
-from agents import Agent
-from agents.extensions.models.litellm_model import LitellmModel
-
-from tools.tools import (
-    list_files,
-    read_file,
-    write_file,
-    edit_file_section,
-    append_to_file,
-    delete_file,
-    create_directory,
-    delete_directory,
-    move_file,
-    copy_file,
-    get_current_datetime,
-)
-
-config = AGENT_CONFIGS["filesystem_agent"]
-BASE_URL = config["BASE_URL"]
-API_KEY = config["API_KEY"]
-MODEL_NAME = config["MODEL_NAME"]
-
-litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
-
+from ..triage_agent.routing import triage_agent_routing
+from ..web_search_agent.routing import web_search_agent_routing
 
 FILESYSTEM_AGENT_PROMPT = f"""
 You are a filesystem management specialist agent. You operate in your root filesystem.
@@ -66,33 +43,15 @@ RESPONSE FORMAT:
 
 When users request file operations, data storage, file management, or local file tasks, use your filesystem capabilities to help them efficiently and securely.
 
+## AVAILABLE SPECIALIST AGENTS
+
+{triage_agent_routing}
+
+{web_search_agent_routing}
+
 ## Handoff Options
 You can handoff to other agents for collaborative tasks:
 - **web_search_agent**: For researching information to include in files or finding online resources
 - **ideation_agent**: For brainstorming file organization, creative content creation, or conceptual discussions
 - **triage_agent**: For routing complex requests involving multiple capabilities
 """
-
-
-def create_filesystem_agent(handoffs=None):
-    if handoffs is None:
-        handoffs = []
-    return Agent(
-        name="filesystem_agent",
-        instructions=FILESYSTEM_AGENT_PROMPT,
-        model=litellm_model,
-        handoffs=handoffs,
-        tools=[
-            list_files,
-            read_file,
-            write_file,
-            edit_file_section,
-            append_to_file,
-            create_directory,
-            delete_file,
-            delete_directory,
-            move_file,
-            copy_file,
-            get_current_datetime,
-        ],
-    )
