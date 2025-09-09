@@ -1,470 +1,694 @@
-import asyncio
-import json
 import os
-import re
-from typing import Optional
+import json
 import logging
+import re
+import threading
+import time
+import numpy as np
 from datetime import datetime
-from textwrap import dedent
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Set, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from sklearn.metrics.pairwise import cosine_similarity
 
+from pydantic import BaseModel
+from litellm import completion, embedding
 from dotenv import load_dotenv
+
+from SearxSearch import search, SearchResults, Filters
+from scraper import scrape_page, PageResult
 
 load_dotenv()
 
+BASE_URL = os.getenv("GROQ_BASE_URL")
+
+RESEARCH_API_KEY = os.getenv("RESEARCH_API_KEY")
+RESEARCH_MODEL = "openai/openai/gpt-oss-120b"
+
+SUBMODULAR_BASE_URL = os.getenv("OLLAMA_BASE_URL")
+SUBMODULAR_API_KEY = os.getenv("OLLAMA_API_KEY")
+SUBMODULAR_MODEL = "openai/may"
+
+EMBEDDING_BASE_URL = os.getenv("OLLAMA_BASE_URL")
+EMBEDDING_API_KEY = os.getenv("OLLAMA_API_KEY")
+EMBEDDING_MODEL = "openai/qwen3-embed:0.6b"
+DIMENSIONS = 1024
+
+CONCURRENCY = 5
+
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(lineno)d - %(message)s",
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-import requests
-from crawl4ai import (
-    AsyncWebCrawler,
-    BrowserConfig,
-    CrawlerRunConfig,
-    DefaultMarkdownGenerator,
-    LLMContentFilter,
-    LLMExtractionStrategy,
-    LLMConfig,
-)
-from openai import OpenAI
 
-SCRAPE_CONCURRENCY = 2
+class ResearchQuery(BaseModel):
+    """Represents a decomposed research query"""
 
-LLM_BASE_URL = str(os.getenv("CEREBRAS_BASE_URL"))
-LLM_API_KEY = str(os.getenv("CEREBRAS_API_KEY"))
-LLM_MODEL = "gpt-oss-120b"
+    original_query: str
+    sub_queries: List[str]
+    diversity_score: float = 0.0
+    coverage_score: float = 0.0
+    filters: Optional[Filters] = None
 
-# Async URL scraper function
-async def async_scrape_url(url: str, query: str) -> str:
+
+class ResearchResult(BaseModel):
+    """Represents the result of researching a single query"""
+
+    query: str
+    sources: List[Dict[str, Any]]
+    content: str
+    summary: str
+    timestamp: str
+
+
+class SubmodularQueryDecomposer:
     """
-    Asynchronously scrape content from a URL based on a query.
-
-    Args:
-        url: The URL to scrape
-        query: The search query to filter content
-
-    Returns:
-        str: Extracted content in markdown format or error message
+    Implements submodular optimization for diverse query generation.
+    Based on the approach described in Jina AI's deep research methodology.
     """
-    logger.debug(f"Starting async scrape of URL: {url}")
-    logger.debug(f"Search query: {query}")
 
-    if (
-        not url
-        or not isinstance(url, str)
-        or not url.startswith(("http://", "https://"))
-    ):
-        error_msg = f"Invalid URL provided: {url}"
-        logger.error(error_msg)
-        return error_msg
+    def generate_candidate_queries(
+        self, original_query: str, num_candidates: int = 20
+    ) -> List[str]:
+        """
+        Generate candidate queries using LLM with diverse perspectives
+        """
+        prompt = f"""
+        Generate {num_candidates} diverse search queries for the research topic: "{original_query}"
 
-    # url = "https://r.jina.ai/" + url
+        Create queries that cover different aspects, perspectives, and angles of the topic.
+        Each query should be optimized for web search and include specific keywords.
 
-    if not query or not isinstance(query, str):
-        error_msg = "Invalid search query provided"
-        logger.error(error_msg)
-        return error_msg
+        Focus on diversity across these dimensions:
+        1. Different subtopics and aspects
+        2. Various stakeholder perspectives
+        3. Temporal aspects (current, historical, future)
+        4. Geographic and regional variations
+        5. Technical vs practical approaches
+        6. Challenges vs solutions
+        7. Theoretical vs applied aspects
 
-    # Log the start of the scraping operation
-    start_time = datetime.now()
-    logger.debug(f"Scraping started at {start_time}")
+        Return only the queries as a JSON object, no explanations.
+        JSON Structure: {'{"queries": ["query 1", "query 2", "query 3"]}'}
+        """
 
-    # Configure browser with detailed logging
-    browser_config = BrowserConfig(
-        user_agent_mode="random",
-        verbose=True,
-    )
-
-    logger.debug("Browser configuration completed")
-
-    instruction = dedent(
-        f"""
-                         Extract each and every information relevant to \"{query}\".
-                         Include key concepts, explanations, examples, and essential details. 
-                         Keep all explanations, terminologies and examples intact.
-                         Format the output as a clean structured markdown.
-                         Return "NO RESULTS" if no relevant information is found.
-                        """
-    )
-
-    llm_config = LLMConfig(
-        provider=f"openai/{LLM_MODEL}",
-        api_token=LLM_API_KEY,
-        base_url=LLM_BASE_URL,
-        temperature=0.3,
-    )
-
-    llm_strategy = LLMExtractionStrategy(
-        llm_config=llm_config,
-        instruction=instruction,
-        chunk_token_threshold=2048,
-        overlap_rate=0.2,
-        apply_chunking=True,
-        input_format="markdown",
-        verbose=True,
-    )
-
-    llm_filter = LLMContentFilter(
-        llm_config=llm_config,
-        instruction=instruction,
-        chunk_token_threshold=2048,
-        overlap_rate=0.2,
-        verbose=True,
-    )
-
-    markdown_generator = DefaultMarkdownGenerator(
-        content_filter=llm_filter,
-        options={
-            "body_width": 100,
-            "ignore_emphasis": True,
-            "ignore_links": True,
-            "ignore_images": True,
-            "escape_html": True,
-        },
-    )
-
-    crawl_config = CrawlerRunConfig(
-        extraction_strategy=llm_strategy,
-        # markdown_generator=markdown_generator,
-        exclude_social_media_links=True,
-        keep_data_attributes=False,
-        process_iframes=False,
-        remove_overlay_elements=True,
-        excluded_tags=[
-            "form",
-            "header",
-            "footer",
-            "script",
-            "style",
-            "nav",
-            "img",
-            "a",
-        ],
-        verbose=True,
-    )
-
-    async with AsyncWebCrawler(config=browser_config) as crawler:
-        # Use a distinct name to avoid shadowing and help type-checkers
-        crawler_result = await crawler.arun(url=url, config=crawl_config)  # type: ignore[assignment]
-
-        if getattr(crawler_result, "success", False):
-            try:
-                extracted_content = getattr(crawler_result, "extracted_content", "")
-                logger.debug("Content extracted successfully.")
-                response = json.loads(extracted_content)
-
-                result = ""
-                for item in response:
-                    error = item.get("error", None)
-                    if error == "true":
-                        logger.debug(f"Error in item: {item.get('index')}")
-                        continue
-                    content = item.get("content", "")
-                    if isinstance(content, list):
-                        content = " ".join(content)
-                    elif isinstance(content, str):
-                        content = content.strip()
-                    if content:
-                        result += content + "\n"
-                    else:
-                        logger.debug(f"No content found in item: {item.get('index')}")
-                        continue
-
-                result = result.strip()
-                logger.debug("Content parsed successfully.")
-                logger.debug(f"Content length: {len(result)}")
-
-                logger.debug("---")
-                logger.debug("Filter Usage")
-                llm_filter.show_usage()
-                logger.debug("---")
-                logger.debug("Extraction Usage")
-                llm_strategy.show_usage()
-                logger.debug("---")
-
-                return result
-            except (json.JSONDecodeError, KeyError, IndexError) as e:
-                logger.error(f"Error parsing JSON response: {e}")
-                return "Could not parse the extracted content."
-        else:
-            logger.error(
-                f"Error in scraping: {getattr(crawler_result, 'error_message', 'Unknown error')}"
+        try:
+            response = completion(
+                base_url=SUBMODULAR_BASE_URL,
+                api_key=SUBMODULAR_API_KEY,
+                model=SUBMODULAR_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.8,  # Higher temperature for diversity
+                max_tokens=1000,
             )
-            return "Could not scrape the URL."
 
+            queries_text = str(response.choices[0].message.content).strip()  # type: ignore
 
-# Synchronous URL Scraper function
-def scrape_url(url: str, query: str) -> str:
-    """
-    Synchronous wrapper for async_scrape_url to maintain backward compatibility.
+            queries: list = json.loads(queries_text).get("queries", [])
 
-    Args:
-        url: The URL to scrape
-        query: The search query to filter content
+            # Clean and filter candidates
+            candidates = [q for q in queries if len(q.split()) >= 3][:num_candidates]
 
-    Returns:
-        str: Extracted content or error message
-    """
-    logger.debug(f"Starting synchronous scrape of URL: {url}")
-    try:
-        result = asyncio.run(async_scrape_url(url, query))
-        logger.debug("Synchronous scrape completed successfully")
-        return result
-    except Exception as e:
-        error_msg = f"Error in synchronous scrape: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return error_msg
+            logger.info(f"Generated {len(candidates)} candidate queries")
+            return candidates
 
+        except Exception as e:
+            logger.error(f"Error generating candidate queries: {e}")
+            return [original_query]
 
-# Web Search function
-SEARXNG_URL = "http://localhost:9090/search"
+    def compute_query_similarity_matrix(self, queries: List[str]) -> np.ndarray:
+        """
+        Compute pairwise similarity matrix between queries using OpenAI embeddings and cosine similarity
+        """
+        try:
+            # Generate embeddings for all queries
+            embeddings = self.get_embeddings(queries)
 
+            # Compute cosine similarity matrix
+            similarity_matrix = cosine_similarity(embeddings)  # type: ignore
 
-def webSearch(
-    query: str,
-    num_results: int = 10,
-    engines: list[str] = ["brave", "duckduckgo", "bing", "google"],
-    categories: Optional[list[str]] = None,
-) -> dict:
-    """
-    Perform a web search across multiple search engines.
+            # Ensure diagonal is 0 (no self-similarity)
+            np.fill_diagonal(similarity_matrix, 0)
 
-    Args:
-        query: The search query string
-        num_results: Number of results to return per engine
-        engines: List of search engines to use
-        categories: Optional list of search categories to filter by
+            return similarity_matrix
 
-    Returns:
-        dict: Search results or error information
-    """
-    logger.debug(f"Initiating web search for query: {query}")
-    logger.debug(
-        f"Search parameters - Results: {num_results}, Engines: {engines}, Categories: {categories}"
-    )
+        except Exception as e:
+            logger.error(f"Error computing similarity matrix: {e}")
+            # Return zero matrix as fallback
+            n = len(queries)
+            return np.zeros((n, n))
 
-    if not query or not isinstance(query, str):
-        error_msg = "Invalid search query provided"
-        logger.error(error_msg)
-        return {"error": error_msg, "status": "error"}
+    def facility_location_function(
+        self, selected: Set[int], similarity_matrix: np.ndarray
+    ) -> float:
+        """
+        Submodular facility location function for coverage maximization
+        """
+        if not selected:
+            return 0.0
 
-    if num_results < 1 or num_results > 20:
-        logger.warning(
-            f"num_results {num_results} is outside recommended range (1-20), using default 10"
+        coverage = 0.0
+        for i in range(len(similarity_matrix)):
+            if i not in selected:
+                # Maximum similarity to any selected query
+                max_sim = (
+                    max(similarity_matrix[i, j] for j in selected) if selected else 0
+                )
+                coverage += max_sim
+
+        return coverage
+
+    def graph_cut_function(
+        self, selected: Set[int], similarity_matrix: np.ndarray
+    ) -> float:
+        """
+        Submodular graph cut function for diversity maximization
+        """
+        if len(selected) <= 1:
+            return 0.0
+
+        total_similarity = 0.0
+        selected_list = list(selected)
+
+        # Sum similarities between all pairs in selected set
+        for i in range(len(selected_list)):
+            for j in range(i + 1, len(selected_list)):
+                total_similarity += similarity_matrix[
+                    selected_list[i], selected_list[j]
+                ]
+
+        return total_similarity
+
+    def combined_submodular_function(
+        self,
+        selected: Set[int],
+        similarity_matrix: np.ndarray,
+        alpha: float = 0.6,
+    ) -> float:
+        """
+        Combined submodular function balancing coverage and diversity
+        """
+        coverage_score = self.facility_location_function(selected, similarity_matrix)
+        diversity_score = self.graph_cut_function(selected, similarity_matrix)
+
+        # Normalize scores
+        max_coverage = np.sum(np.max(similarity_matrix, axis=1))
+        max_diversity = np.sum(similarity_matrix) / 2
+
+        normalized_coverage = coverage_score / max_coverage if max_coverage > 0 else 0
+        normalized_diversity = (
+            diversity_score / max_diversity if max_diversity > 0 else 0
         )
-        num_results = 10
 
-    if not engines:
-        engines = ["brave", "duckduckgo", "bing", "google"]
-    logger.debug(f"Proceeding with search using engines: {engines}")
+        # Combined score with weight alpha for coverage vs diversity
+        combined_score = (
+            alpha * normalized_coverage + (1 - alpha) * normalized_diversity
+        )
 
-    engines = ",".join(engines)  # type: ignore
+        return combined_score
 
-    params = {
-        "q": query,
-        "engines": engines,
-        "format": "json",
-        "language": "en",
-    }
+    def greedy_submodular_selection(
+        self, candidates: List[str], k: int = 5, alpha: float = 0.6
+    ) -> Tuple[List[str], float, float]:
+        """
+        Greedy algorithm for submodular function maximization
+        Returns selected queries, coverage score, and diversity score
+        """
+        if len(candidates) <= k:
+            return candidates, 1.0, 1.0
 
-    if categories:
-        params["categories"] = ",".join(categories)
+        # Compute similarity matrix
+        similarity_matrix = self.compute_query_similarity_matrix(candidates)
 
-    results = {"query": query, "results": []}
+        selected = set()
+        unselected = set(range(len(candidates)))
 
-    try:
-        logger.debug(f"Searching for: {query}")
-        response = requests.get(SEARXNG_URL, params=params, timeout=30)
-        response.raise_for_status()
-
-        data = response.json()
-        search_results = data.get("results", [])[:num_results]
-
-        # Log search metrics
-        logger.debug(f"Retrieved {len(search_results)} results")
-
-        results["results"].extend(search_results)
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error searching: {str(e)}", exc_info=True)
-    except (json.JSONDecodeError, KeyError) as e:
-        logger.error(f"Error parsing response: {str(e)}", exc_info=True)
-
-    total_results = len(results.get("results", []))
-    logger.debug(f"Search completed. Total results: {total_results}")
-    return results
-
-
-# Deep Search function
-NUMBER_OF_URLS_TO_SCRAPE = 10
-
-
-def deep_search(
-    query: str, category: str = "web", num_results: int = NUMBER_OF_URLS_TO_SCRAPE
-) -> str:
-    """
-    Perform search for query across multiple sources.
-
-    Args:
-        query: The query to search for.
-        category: The category to filter the search results (web, academic, news). Default is "web".
-        num_results: The number of search results to return. Default is 10.
-
-    Returns:
-        str: A detailed analysis on the query.
-    """
-
-    engines = []
-    match category.lower():
-        case "academic":
-            engines = ["arxiv", "google scholar", "pubmed", "springer", "wolframalpha"]
-        case "news":
-            engines = [
-                "bing news",
-                "duckduckgo news",
-                "google news",
-                "brave news",
-                "yahoo news",
-            ]
-        case _:
-            engines = ["brave", "duckduckgo", "google", "bing", "yahoo"]
-
-    # perform web search
-    results = webSearch(
-        query=query,
-        engines=engines,
-        num_results=num_results,
-    )
-    web_results: str = ""
-    num_res = 0
-
-    # Build list of items to scrape (preserve original order)
-    items_to_scrape: list[tuple[int, str, str, str]] = []
-    try:
-        idx = 1
-        for result in results.get("results", []):
-            if idx > num_results:
+        for _ in range(k):
+            if not unselected:
                 break
-            url = result.get("url", "")
-            if not url:
-                continue
-            if "arxiv" in url:
-                url = url.replace("/abs/", "/html/")
-            title = result.get("title", "")
-            category_val = result.get("category", "")
-            items_to_scrape.append((idx, url, title, category_val))
-            idx += 1
-    except Exception as e:
-        logger.error(f"Error preparing items to scrape: {e}")
-        return "An error occurred while preparing the web results."
 
-    # Concurrency control
-    try:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+            best_idx = None
+            best_score = -float("inf")
 
-        max_workers = max(1, min(SCRAPE_CONCURRENCY, len(items_to_scrape) or 1))
+            # Try adding each unselected query
+            for idx in unselected:
+                temp_selected = selected | {idx}
+                score = self.combined_submodular_function(
+                    temp_selected, similarity_matrix, alpha
+                )
+                if score > best_score:
+                    best_score = score
+                    best_idx = idx
 
-        logger.debug(f"Starting concurrent scraping with max_workers={max_workers}")
+            if best_idx is not None:
+                selected.add(best_idx)
+                unselected.remove(best_idx)
 
-        def _scrape_and_summarize(item: tuple[int, str, str, str]):
-            order, url, title, category_local = item
-            try:
-                content = scrape_url(url=url, query=query)
-                if not content.strip() or "error:" in content.lower():
-                    logger.error(f"No relevant content from: {url}")
-                    return order, None
+        # Get final scores
+        final_coverage = self.facility_location_function(selected, similarity_matrix)
+        final_diversity = self.graph_cut_function(selected, similarity_matrix)
 
-                logger.debug(f"[{order}] URL scraped: {url} (len={len(content)})")
+        selected_queries = [candidates[i] for i in selected]
 
-                if len(content) > 20000:
-                    try:
-                        client_local = OpenAI(
-                            base_url=LLM_BASE_URL, api_key=LLM_API_KEY
-                        )
-                        content = (
-                            client_local.chat.completions.create(
-                                model=LLM_MODEL,
-                                messages=[
-                                    {
-                                        "role": "system",
-                                        "content": (
-                                            f"Extract and summarise information from the given content which answers or completely fulfills the query: {query}. "
-                                            "Structure the output in a clean markdown format. Remove any unnecessary information."
-                                        ),
-                                    },
-                                    {"role": "user", "content": f"CONTENT: {content}"},
-                                ],
-                            )
-                            .choices[0]
-                            .message.content
-                        )
-                    except Exception as e_inner:
-                        logger.error(f"Summarization failed for {url}: {e_inner}")
+        return selected_queries, final_coverage, final_diversity
 
-                header = f"\n---\n{order}. {title}\n{url}\n"
-                safe_content = content if isinstance(content, str) else str(content)
-                return order, header + safe_content + "\n---\n"
-            except Exception as e_worker:
-                logger.error(f"Error scraping {url}: {e_worker}")
-                return order, None
-
-        results_by_order: dict[int, str] = {}
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_map = {
-                executor.submit(_scrape_and_summarize, item): item[0]
-                for item in items_to_scrape
-            }
-            for future in as_completed(future_map):
-                order, payload = future.result()
-                if payload:
-                    results_by_order[order] = payload
-
-        # Assemble results in original order
-        for order in sorted(results_by_order.keys()):
-            web_results += results_by_order[order]
-            num_res += 1
-    except Exception as e:
-        logger.error(f"Error in concurrent scraping: {e}")
-        return "An error occurred while browsing the web."
-
-    client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
-
-    deep_search_results = str(
-        client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Draft a professional article for the query using the web search results in markdown format. Cite the relevant sources at the end of the article. Use [1], [2], etc in the article to refer to the sources.",
-                },
-                {
-                    "role": "user",
-                    "content": f"QUERY: {query}\nWEB_RESULTS: {web_results}",
-                },
-            ],
+    def decompose_query(
+        self, original_query: str, num_queries: int = 5
+    ) -> ResearchQuery:
+        """
+        Main method to decompose query using submodular optimization
+        """
+        logger.info(
+            f"Decomposing query using submodular optimization: {original_query}"
         )
-        .choices[0]
-        .message.content
-    ).strip()
 
-    thinking = re.search(r"<think>(.*?)</think>", deep_search_results, re.DOTALL)
-    thinking = thinking.group(1).strip() if thinking else ""
-    if thinking:
-        logger.debug(f"\nREASONING\n---\n{thinking}\n---\n")
+        # Generate candidate queries
+        candidates = self.generate_candidate_queries(original_query, num_candidates=20)
 
-    # Remove reasoning from the deep search response
-    deep_search_results = re.sub(
-        r"<think>(.*?)</think>", "", deep_search_results, flags=re.DOTALL
-    ).strip()
+        if len(candidates) <= num_queries:
+            return ResearchQuery(
+                original_query=original_query,
+                sub_queries=candidates,
+                diversity_score=1.0,
+                coverage_score=1.0,
+            )
 
-    logger.debug(f"{num_res} Results found.\n==============\n\n")
-    return deep_search_results
+        # Apply submodular selection
+        selected_queries, coverage_score, diversity_score = (
+            self.greedy_submodular_selection(candidates, k=num_queries, alpha=0.6)
+        )
+
+        logger.info(
+            f"Selected {len(selected_queries)} diverse queries with coverage={coverage_score:.3f}, diversity={diversity_score:.3f}"
+        )
+
+        return ResearchQuery(
+            original_query=original_query,
+            sub_queries=selected_queries,
+            diversity_score=diversity_score,
+            coverage_score=coverage_score,
+        )
+
+    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for a list of texts using OpenAI embeddings
+        """
+        embeddings = []
+        for text in texts:
+            try:
+                response = embedding(
+                    model=EMBEDDING_MODEL,
+                    # dimensions=DIMENSIONS,
+                    input=text,
+                    api_key=EMBEDDING_API_KEY,
+                    api_base=EMBEDDING_BASE_URL,
+                )
+                embeddings.append(response.data[0].get("embedding", [0.0] * DIMENSIONS))  # type: ignore
+            except Exception as e:
+                logger.error(f"Error generating embedding for text: {text[:50]}... {e}")
+                # Use zero vector as fallback
+                embeddings.append(
+                    [0.0] * DIMENSIONS
+                )  # Assuming 768 dimensions for openai/embeddinggemma
+        return embeddings
+
+
+class DeepResearchSystem:
+    """
+    A comprehensive deep research system that:
+    1. Decomposes user queries into focused sub-queries using submodular optimization
+    2. Searches the web using SearxSearch
+    3. Scrapes and processes relevant content
+    4. Compiles detailed reports
+    5. Supports background execution
+    """
+
+    def __init__(self, output_dir: str = "research_reports"):
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(exist_ok=True)
+
+        # Configuration
+        self.max_sources_per_query = 5
+        self.max_concurrent_scrapes = CONCURRENCY
+
+        # Initialize submodular decomposer
+        self.query_decomposer = SubmodularQueryDecomposer()
+
+        # Background execution tracking
+        self.active_researches: Dict[str, Dict[str, Any]] = {}
+        self.executor = ThreadPoolExecutor(max_workers=CONCURRENCY)
+
+    def decompose_query(self, query: str) -> ResearchQuery:
+        """
+        Break down a complex query into multiple focused sub-queries using submodular optimization
+        """
+        return self.query_decomposer.decompose_query(query, num_queries=5)
+
+    def search_web(
+        self, query: str, filters: Optional[Filters] = None
+    ) -> SearchResults:
+        """
+        Perform web search using SearxSearch
+        """
+        logger.info(f"Searching web for: {query}")
+
+        try:
+            results = search(
+                query=query,
+                max_results=self.max_sources_per_query,
+                category="general",
+                language="en",
+                safe=1,
+                filters=filters,
+            )
+
+            logger.info(f"Found {len(results.results)} sources for query: {query}")
+            return results
+
+        except Exception as e:
+            logger.error(f"Error searching web for '{query}': {e}")
+            return SearchResults(query=query)
+
+    def scrape_content(self, url: str, query_context: str) -> Optional[PageResult]:
+        """
+        Scrape and process content from a URL
+        """
+        logger.info(f"Scraping content from: {url}")
+
+        try:
+            # Scrape the page with summarization
+            result = scrape_page(
+                url=url,
+                use_reader_lm=True,
+            )
+
+            if result.markdown:
+                logger.info(f"Successfully scraped content from: {url}")
+                return result
+            else:
+                logger.warning(f"No content extracted from: {url}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error scraping {url}: {e}")
+            return None
+
+    def filter_relevant_content(
+        self, search_results: SearchResults, query: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Filter search results to find the most relevant sources
+        """
+        logger.info(f"Filtering {len(search_results.results)} sources for relevance")
+
+        relevant_sources = []
+
+        for result in search_results.results:
+            # Basic relevance filtering based on title and description
+            combined_text = f"{result.title} {result.description}".lower()
+            query_terms = query.lower().split()
+
+            # Calculate relevance score
+            score = sum(1 for term in query_terms if term in combined_text)
+
+            if score > 0:  # At least one query term matches
+                relevant_sources.append(
+                    {
+                        "title": result.title,
+                        "url": result.link,
+                        "description": result.description,
+                        "score": score,
+                        "category": result.category,
+                    }
+                )
+
+        # Sort by relevance score
+        relevant_sources.sort(key=lambda x: x["score"], reverse=True)
+
+        logger.info(f"Filtered to {len(relevant_sources)} relevant sources")
+        return relevant_sources[: self.max_sources_per_query]
+
+    def compile_report(
+        self,
+        research_results: List[ResearchResult],
+        original_query: str,
+        decomposition_info: ResearchQuery,
+    ) -> str:
+        """
+        Compile all research results into a comprehensive report
+        """
+        logger.info("Compiling research report")
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        report = f"""# Deep Research Report
+**Original Query:** {original_query}
+**Generated:** {timestamp}
+
+## Executive Summary
+
+This report provides comprehensive research findings based on web sources and content analysis using submodular optimization for diverse query generation.
+
+## Research Methodology
+
+- **Query Decomposition**: Used submodular optimization to generate {len(research_results)} diverse sub-queries
+- **Diversity Score**: {decomposition_info.diversity_score:.3f}
+- **Coverage Score**: {decomposition_info.coverage_score:.3f}
+- **Web Search**: SearxNG search engine was used to find relevant sources
+- **Content Extraction**: Web pages were scraped and processed for relevant information
+- **Analysis**: Content was summarized and compiled into this report
+
+## Query Decomposition Analysis
+
+The original query was decomposed into the following diverse sub-queries using submodular optimization:
+
+"""
+
+        for i, sub_query in enumerate(decomposition_info.sub_queries, 1):
+            report += f"{i}. {sub_query}\n"
+
+        report += "\n## Detailed Findings\n"
+
+        for i, result in enumerate(research_results, 1):
+            report += f"""
+### {i}. Research Focus: {result.query}
+
+**Timestamp:** {result.timestamp}
+**Sources Analyzed:** {len(result.sources)}
+
+#### Key Sources:
+"""
+            for source in result.sources[:3]:  # Top 3 sources
+                report += f"""
+- **{source['title']}**
+  - URL: {source['url']}
+  - Relevance Score: {source['score']}
+  - Description: {source['description']}
+"""
+
+            report += f"""
+#### Content Summary:
+{result.summary}
+
+#### Detailed Content:
+{result.content}
+
+---
+"""
+
+        report += """
+## Conclusion
+
+This research provides a comprehensive overview of the topic based on current web sources. The findings are compiled from multiple diverse perspectives using submodular optimization to ensure maximum coverage while minimizing redundancy.
+
+## Methodology Notes
+
+The submodular optimization approach ensures:
+- **Coverage**: Maximum representation of different aspects of the topic
+- **Diversity**: Minimal redundancy between selected queries
+- **Relevance**: Each query targets specific, searchable aspects
+- **Balance**: Optimal trade-off between exploration and exploitation
+
+## Sources
+All information in this report is derived from publicly available web sources accessed during the research process.
+"""
+
+        return report
+
+    def save_report(self, report: str, filename: Optional[str] = None) -> str:
+        """
+        Save the research report to a file
+        """
+        if not filename:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"research_report_{timestamp}.md"
+
+        filepath = self.output_dir / filename
+
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(report)
+
+            logger.info(f"Report saved to: {filepath}")
+            return str(filepath)
+
+        except Exception as e:
+            logger.error(f"Error saving report: {e}")
+            return ""
+
+    def research_single_query(self, query: str) -> ResearchResult:
+        """
+        Perform complete research for a single query
+        """
+        logger.info(f"Starting research for: {query}")
+
+        # Search the web
+        search_results = self.search_web(query)
+
+        # Filter relevant sources
+        relevant_sources = self.filter_relevant_content(search_results, query)
+
+        # Scrape content from relevant sources
+        scraped_content = []
+        content_summaries = []
+
+        with ThreadPoolExecutor(max_workers=self.max_concurrent_scrapes) as executor:
+            future_to_url = {
+                executor.submit(self.scrape_content, source["url"], query): source
+                for source in relevant_sources
+            }
+
+            for future in as_completed(future_to_url):
+                source = future_to_url[future]
+                try:
+                    result = future.result()
+                    if result and result.markdown:
+                        scraped_content.append(result.markdown)
+                        if result.summary:
+                            content_summaries.append(result.summary)
+                except Exception as e:
+                    logger.error(f"Error processing {source['url']}: {e}")
+
+        # Compile content
+        combined_content = "\n\n".join(scraped_content)
+        combined_summary = "\n\n".join(content_summaries)
+
+        return ResearchResult(
+            query=query,
+            sources=relevant_sources,
+            content=combined_content,
+            summary=combined_summary,
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+
+    def perform_research(self, query: str, background: bool = False) -> Optional[str]:
+        """
+        Main research method - can run in background or foreground
+        """
+        if background:
+            return self._start_background_research(query)
+        else:
+            return self._perform_foreground_research(query)
+
+    def _perform_foreground_research(self, query: str) -> str:
+        """
+        Perform research in the foreground
+        """
+        logger.info(f"Starting foreground research for: {query}")
+
+        # Decompose query using submodular optimization
+        decomposed = self.decompose_query(query)
+
+        # Research each sub-query
+        research_results = []
+        for sub_query in decomposed.sub_queries:
+            result = self.research_single_query(sub_query)
+            research_results.append(result)
+
+        # Compile report with decomposition info
+        report = self.compile_report(research_results, query, decomposed)
+
+        # Save report
+        filepath = self.save_report(report)
+
+        logger.info(f"Research completed. Report saved to: {filepath}")
+        return filepath
+
+    def _start_background_research(self, query: str) -> str:
+        """
+        Start research in background thread
+        """
+        research_id = f"research_{int(time.time())}"
+
+        def background_task():
+            try:
+                filepath = self._perform_foreground_research(query)
+                self.active_researches[research_id]["status"] = "completed"
+                self.active_researches[research_id]["filepath"] = filepath
+                logger.info(f"Background research {research_id} completed")
+            except Exception as e:
+                self.active_researches[research_id]["status"] = "error"
+                self.active_researches[research_id]["error"] = str(e)
+                logger.error(f"Background research {research_id} failed: {e}")
+
+        # Start background thread
+        thread = threading.Thread(target=background_task, daemon=True)
+        thread.start()
+
+        # Track the research
+        self.active_researches[research_id] = {
+            "query": query,
+            "status": "running",
+            "start_time": datetime.now().isoformat(),
+            "thread": thread,
+        }
+
+        logger.info(f"Started background research with ID: {research_id}")
+        return research_id
+
+    def get_research_status(self, research_id: str) -> Dict[str, Any]:
+        """
+        Get the status of a background research task
+        """
+        if research_id in self.active_researches:
+            return self.active_researches[research_id]
+        else:
+            return {"status": "not_found"}
+
+    def list_active_researches(self) -> List[Dict[str, Any]]:
+        """
+        List all active background research tasks
+        """
+        return [
+            {
+                "id": rid,
+                "query": info["query"],
+                "status": info["status"],
+                "start_time": info["start_time"],
+            }
+            for rid, info in self.active_researches.items()
+        ]
+
+
+# Convenience functions for easy usage
+def research_topic(query: str, background: bool = False) -> str:
+    """
+    Convenience function to perform research on a topic
+    """
+    system = DeepResearchSystem()
+    return str(system.perform_research(query, background=background))
+
+
+def get_research_status(research_id: str) -> Dict[str, Any]:
+    """
+    Convenience function to check research status
+    """
+    system = DeepResearchSystem()
+    return system.get_research_status(research_id)
 
 
 if __name__ == "__main__":
-    output = deep_search("Samsung Galaxy S25 Ultra features", num_results=4)
-    print(f"Output:\n---\n{output}\n---")
-    with open("deep_search_output.md", "w", encoding="utf-8") as f:
-        f.write(output)
+    # Example usage
+    query = "What are the latest developments in quantum computing?"
+    result_path = research_topic(query, background=False)
+    print(f"Research report saved to: {result_path}")
