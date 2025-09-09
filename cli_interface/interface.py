@@ -30,12 +30,13 @@ def welcome_panel():
     """
     Create a welcome panel.
     """
+    console.clear()
     welcome_text = Text()
     welcome_text.append("🤖 Multi-Agent Assistant Ready!\n\n", style="bold cyan")
     welcome_text.append("I can help you with:\n", style="bold cyan")
-    welcome_text.append("  💡 Brainstorming and ideation\n", style="bold white")
     welcome_text.append("  🔍 Web searches\n", style="bold white")
     welcome_text.append("  📁 File operations\n", style="bold white")
+    welcome_text.append("  💡 Brainstorming and ideation\n", style="bold white")
     welcome_text.append("\nCommands:\n", style="bold cyan")
     welcome_text.append(
         "  /agents or /a - List and switch agents\n", style="bold white"
@@ -58,7 +59,7 @@ def choose_hierarchy_mode():
     """
     Prompt user to choose hierarchy mode.
     """
-    console.print("\n[bold cyan]Choose your preferred interaction mode:[/bold cyan]")
+    console.print("[bold cyan]Choose your preferred interaction mode:[/bold cyan]")
     console.print(
         "1. [bold green]Collaborative[/bold green] - Agents can handoff directly to each other"
     )
@@ -96,7 +97,7 @@ def handle_agents_command(user_msg, agents, display_names, agent, inputs):
         console.print("[bold cyan]Available Agents:[/bold cyan]")
         for key, name in display_names.items():
             console.print(f"  {key}: {name}")
-        console.print("\nUse /agents <name> to talk to a specific agent.")
+        console.print("\nUse /agents <name> OR /a <name> to talk to a specific agent.")
         return agent, inputs
     elif len(parts) == 2:
         agent_name = parts[1].lower()
@@ -168,9 +169,7 @@ async def stream_agent_response(agent, inputs, display_names, hierarchy_mode):
     Stream the agent's response and handle events.
     """
     result = Runner.run_streamed(
-        starting_agent=agent,
-        input=inputs,
-        max_turns=MAX_TURNS
+        starting_agent=agent, input=inputs, max_turns=MAX_TURNS
     )
 
     # Create a live display for streaming response
@@ -304,9 +303,9 @@ async def stream_agent_response(agent, inputs, display_names, hierarchy_mode):
 async def run_cli(agents, display_names, starting_agent):
     """Main conversation loop"""
 
-    welcome_panel()
-
     hierarchy_mode = choose_hierarchy_mode()
+
+    welcome_panel()
 
     agent = starting_agent
     inputs: List[TResponseInputItem] = []
@@ -348,4 +347,3 @@ async def run_cli(agents, display_names, starting_agent):
 
         # Update conversation state
         inputs = result.to_input_list()
-
