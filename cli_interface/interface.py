@@ -10,6 +10,7 @@ from agents import (
 from agents import (
     set_tracing_disabled,
 )
+from config.agent_config import MAX_TURNS
 
 set_tracing_disabled(disabled=True)
 
@@ -169,6 +170,7 @@ async def stream_agent_response(agent, inputs, display_names, hierarchy_mode):
     result = Runner.run_streamed(
         starting_agent=agent,
         input=inputs,
+        max_turns=MAX_TURNS
     )
 
     # Create a live display for streaming response
