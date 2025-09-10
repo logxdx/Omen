@@ -20,6 +20,8 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.live import Live
 from rich.markdown import Markdown
+import keyboard
+import threading
 
 
 console = Console(width=120)
@@ -146,28 +148,6 @@ async def generate_agent_intro(agent, display_names):
             "role": "user",
         }
     ]
-    intro_result = Runner.run_streamed(starting_agent=agent, input=inputs)
-    intro_response = ""
-
-    async for event in intro_result.stream_events():
-        if isinstance(event, RawResponsesStreamEvent):
-            data = event.data
-            if isinstance(data, ResponseTextDeltaEvent):
-                intro_response += data.delta
-
-    console.print(
-        Panel(
-            intro_response,
-            title=f"🤖 {display_names.get(agent.name.replace('_agent', ''), agent.name)}",
-            border_style="bold purple",
-        )
-    )
-
-
-async def stream_agent_response(agent, inputs, display_names, hierarchy_mode):
-    """
-    Stream the agent's response and handle events.
-    """
     result = Runner.run_streamed(
         starting_agent=agent, input=inputs, max_turns=MAX_TURNS
     )
@@ -176,11 +156,31 @@ async def stream_agent_response(agent, inputs, display_names, hierarchy_mode):
     full_response = ""
     markdown_obj = Markdown("")
     events_text = Text(style="dim")
+    thinking_text = Text("", style="dim")
+    thinking_content = ""
+    in_think = False
+
+    # Interrupt handling
+    stop_event = threading.Event()
+
+    def interrupt_listener():
+        try:
+            keyboard.wait("ctrl+x")
+            stop_event.set()
+        except:
+            pass
+
+    interrupt_thread = threading.Thread(target=interrupt_listener, daemon=True)
+    interrupt_thread.start()
 
     try:
         with Live(
             Group(
-                Panel(events_text, title="Events", border_style="dim"),
+                Panel(
+                    Group(events_text, thinking_text),
+                    title="Events",
+                    border_style="dim",
+                ),
                 Panel(
                     markdown_obj,
                     title=f"🤖 {display_names.get(agent.name.replace('_agent', ''), agent.name)}",
@@ -198,11 +198,176 @@ async def stream_agent_response(agent, inputs, display_names, hierarchy_mode):
                 if isinstance(event, RawResponsesStreamEvent):
                     data = event.data
                     if isinstance(data, ResponseTextDeltaEvent):
-                        full_response += data.delta
+                        delta = data.delta
+
+                        if in_think:
+                            thinking_content += delta
+                            if "</think>" in thinking_content:
+                                end_index = thinking_content.find("</think>")
+                                think_text = thinking_content[:end_index]
+                                events_text.append(f"\n🤔 Thinking: {think_text}\n")
+                                remaining = thinking_content[end_index + 8 :]
+                                full_response += remaining
+                                thinking_content = ""
+                                in_think = False
+                                thinking_text = Text("", style="dim")
+                            else:
+                                thinking_text = Text(
+                                    f"🤔 Thinking: {thinking_content}", style="dim"
+                                )
+                        else:
+                            if "<think>" in delta:
+                                start_index = delta.find("<think>")
+                                full_response += delta[:start_index]
+                                in_think = True
+                                thinking_content = delta[start_index + 7 :]
+                                if "</think>" in thinking_content:
+                                    end_index = thinking_content.find("</think>")
+                                    think_text = thinking_content[:end_index]
+                                    events_text.append(f"\n🤔 Thinking: {think_text}\n")
+                                    remaining = thinking_content[end_index + 8 :]
+                                    full_response += remaining
+                                    thinking_content = ""
+                                    in_think = False
+                                    thinking_text = Text("", style="dim")
+                                else:
+                                    thinking_text = Text(
+                                        f"🤔 Thinking: {thinking_content}", style="dim"
+                                    )
+                            else:
+                                full_response += delta
+                                thinking_text = Text("", style="dim")
+
                         markdown_obj = Markdown(full_response)
                         live.update(
                             Group(
-                                Panel(events_text, title="Events", border_style="dim"),
+                                Panel(
+                                    Group(events_text, thinking_text),
+                                    title="Events",
+                                    border_style="dim",
+                                ),
+                                Panel(
+                                    markdown_obj,
+                                    title=f"🤖 {display_names.get(agent.name.replace('_agent', ''), agent.name)}",
+                                    border_style="yellow",
+                                ),
+                            )
+                        )
+                    elif isinstance(data, ResponseContentPartDoneEvent):
+                        pass
+
+                if stop_event.is_set():
+                    console.print(
+                        "\n[bold red]⚠️ Response interrupted by user (Ctrl+X)[/bold red]"
+                    )
+                    break
+
+    except Exception as e:
+        console.print(f"\n[bold red]❌ Error occurred in {agent.name}: {e}[/bold red]")
+
+
+async def stream_agent_response(agent, inputs, display_names, hierarchy_mode):
+    """
+    Stream the agent's response and handle events.
+    """
+    result = Runner.run_streamed(
+        starting_agent=agent, input=inputs, max_turns=MAX_TURNS
+    )
+
+    # Create a live display for streaming response
+    full_response = ""
+    markdown_obj = Markdown("")
+    events_text = Text(style="dim")
+    thinking_text = Text("", style="dim")
+    thinking_content = ""
+    in_think = False
+
+    # Interrupt handling
+    stop_event = threading.Event()
+
+    def interrupt_listener():
+        try:
+            keyboard.wait("ctrl+x")
+            stop_event.set()
+        except:
+            pass
+
+    interrupt_thread = threading.Thread(target=interrupt_listener, daemon=True)
+    interrupt_thread.start()
+
+    try:
+        with Live(
+            Group(
+                Panel(
+                    Group(events_text, thinking_text),
+                    title="Events",
+                    border_style="dim",
+                ),
+                Panel(
+                    markdown_obj,
+                    title=f"🤖 {display_names.get(agent.name.replace('_agent', ''), agent.name)}",
+                    border_style="yellow",
+                ),
+            ),
+            console=console,
+            refresh_per_second=10,
+        ) as live:
+
+            # Stream the response
+            async for event in result.stream_events():
+
+                # Handle the streamed text output
+                if isinstance(event, RawResponsesStreamEvent):
+                    data = event.data
+                    if isinstance(data, ResponseTextDeltaEvent):
+                        delta = data.delta
+
+                        if in_think:
+                            thinking_content += delta
+                            if "</think>" in thinking_content:
+                                end_index = thinking_content.find("</think>")
+                                think_text = thinking_content[:end_index]
+                                events_text.append(f"\n🤔 Thinking: {think_text}\n")
+                                remaining = thinking_content[end_index + 8 :]
+                                full_response += remaining
+                                thinking_content = ""
+                                in_think = False
+                                thinking_text = Text("", style="dim")
+                            else:
+                                thinking_text = Text(
+                                    f"🤔 Thinking: {thinking_content}", style="dim"
+                                )
+                        else:
+                            if "<think>" in delta:
+                                start_index = delta.find("<think>")
+                                full_response += delta[:start_index]
+                                in_think = True
+                                thinking_content = delta[start_index + 7 :]
+                                if "</think>" in thinking_content:
+                                    end_index = thinking_content.find("</think>")
+                                    think_text = thinking_content[:end_index]
+                                    events_text.append(f"\n🤔 Thinking: {think_text}\n")
+                                    remaining = thinking_content[end_index + 8 :]
+                                    full_response += remaining
+                                    thinking_content = ""
+                                    in_think = False
+                                    thinking_text = Text("", style="dim")
+                                else:
+                                    thinking_text = Text(
+                                        f"🤔 Thinking: {thinking_content}", style="dim"
+                                    )
+                            else:
+                                full_response += delta
+                                thinking_text = Text("", style="dim")
+
+                        markdown_obj = Markdown(full_response)
+                        live.update(
+                            Group(
+                                Panel(
+                                    Group(events_text, thinking_text),
+                                    title="Events",
+                                    border_style="dim",
+                                ),
                                 Panel(
                                     markdown_obj,
                                     title=f"🤖 {display_names.get(agent.name.replace('_agent', ''), agent.name)}",
@@ -286,7 +451,11 @@ async def stream_agent_response(agent, inputs, display_names, hierarchy_mode):
                     # Update the live panel after appending
                     live.update(
                         Group(
-                            Panel(events_text, title="Events", border_style="dim"),
+                            Panel(
+                                Group(events_text, thinking_text),
+                                title="Events",
+                                border_style="dim",
+                            ),
                             Panel(
                                 markdown_obj,
                                 title=f"🤖 {display_names.get(agent.name.replace('_agent', ''), agent.name)}",
@@ -294,6 +463,12 @@ async def stream_agent_response(agent, inputs, display_names, hierarchy_mode):
                             ),
                         )
                     )
+
+                if stop_event.is_set():
+                    console.print(
+                        "\n[bold red]⚠️ Response interrupted by user (Ctrl+X)[/bold red]"
+                    )
+                    break
     except Exception as e:
         console.print(f"\n[bold red]❌ Error occurred in {agent.name}: {e}[/bold red]")
 

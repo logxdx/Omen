@@ -12,6 +12,7 @@ python-dotenv==1.1.1
 crawl4ai==0.7.0
 ddgs==9.4.3
 crewai==0.134.0
+keyboard==0.13.5
 
 
 # stt
