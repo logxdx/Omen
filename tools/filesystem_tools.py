@@ -23,7 +23,7 @@ def list_files(relative_path: str = "") -> list[str]:
     List files and directories in the filesystem at the given relative path.
 
     Args:
-        relative_path: Relative path within the filesystem (default: root)
+        relative_path: Relative path within the filesystem
 
     Returns:
         List of file and directory names

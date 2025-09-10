@@ -15,8 +15,8 @@ def duckduckgo_search(
     Perform a web search using DuckDuckGo.
 
     Args:
-        query: Search query string
-        max_results: Maximum number of results to return
+        query (str): Search query string
+        max_results (int): Maximum number of results to return (default: 5)
 
     Returns:
         List of search results
@@ -39,8 +39,8 @@ def searx_search(
     Perform a web search using Searxng.
 
     Args:
-        query: Search query string
-        max_results: Maximum number of results to return
+        query (str): Search query string
+        max_results (int): Maximum number of results to return (default: 5)
 
     Returns:
         List of search results
@@ -61,8 +61,8 @@ def search_youtube_videos(query: str, num_results: int = 5) -> list[dict]:
     Perform a web search for YouTube videos.
 
     Args:
-        query: Search query string
-        max_results: Maximum number of results to return
+        query (str): Search query string
+        max_results (int): Maximum number of results to return (default: 5)
 
     Returns:
         List of search results
