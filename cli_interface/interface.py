@@ -24,7 +24,7 @@ import keyboard
 import threading
 
 
-console = Console(width=120)
+console = Console()
 console.clear()
 
 
