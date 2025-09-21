@@ -1,5 +1,4 @@
 from ..triage_agent.routing import triage_agent_routing
-from ..web_search_agent.routing import web_search_agent_routing
 
 FILESYSTEM_AGENT_PROMPT = f"""
 You are a filesystem management specialist agent. You operate in your root filesystem.
@@ -46,12 +45,4 @@ When users request file operations, data storage, file management, or local file
 ## AVAILABLE SPECIALIST AGENTS
 
 {triage_agent_routing}
-
-{web_search_agent_routing}
-
-## Handoff Options
-You can handoff to other agents for collaborative tasks:
-- **web_search_agent**: For researching information to include in files or finding online resources
-- **ideation_agent**: For brainstorming file organization, creative content creation, or conceptual discussions
-- **triage_agent**: For routing complex requests involving multiple capabilities
 """

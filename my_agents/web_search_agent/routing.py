@@ -6,9 +6,8 @@ web_search_agent_routing = """
 - Search for information online or research topics
 - Find current events, news, or trending information  
 - Locate websites, online resources, or documentation
+- Scrape URLs for content
 - Search for YouTube videos or multimedia content
-- Get weather forecasts or current conditions
-- Scrape or analyze webpage content
 - Access real-time or frequently updated information
-- Verify facts or check online sources
+- Get weather forecasts
 """

@@ -1,6 +1,6 @@
-from ..web_search_agent.routing import web_search_agent_routing
-from ..filesystem_agent.routing import filesystem_agent_routing
 from ..triage_agent.routing import triage_agent_routing
+from ..web_search_agent.routing import web_search_agent_routing
+from ..memory_agent.routing import memory_agent_routing
 
 SKETCHPAD_FILEPATH = "sketchpad.md"  # Shared file in workspace root
 
@@ -40,15 +40,9 @@ When users want to brainstorm, discuss theories, or collaborate on ideas, use yo
 
 ## AVAILABLE SPECIALIST AGENTS
 
-{web_search_agent_routing}
-
-{filesystem_agent_routing}
-
 {triage_agent_routing}
 
-## Handoff Options
-You can handoff to other agents for enhanced collaboration:
-- **web_search_agent**: For researching facts, gathering information, or verifying ideas online
-- **filesystem_agent**: For saving ideas to files, organizing brainstorm sessions, or managing project documents
-- **triage_agent**: For routing requests that require multiple agent coordination
+{web_search_agent_routing}
+
+{memory_agent_routing}
 """

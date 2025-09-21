@@ -29,7 +29,7 @@ def create_filesystem_agent(handoffs=None):
     if handoffs is None:
         handoffs = []
     return Agent(
-        name="filesystem_agent",
+        name="Filesystem Agent",
         instructions=FILESYSTEM_AGENT_PROMPT,
         model=litellm_model,
         handoffs=handoffs,

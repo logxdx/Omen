@@ -17,7 +17,7 @@ def create_ideation_agent(handoffs=None):
     if handoffs is None:
         handoffs = []
     return Agent(
-        name="ideation_agent",
+        name="Ideation Agent",
         instructions=IDEATION_AGENT_PROMPT,
         model=litellm_model,
         handoffs=handoffs,

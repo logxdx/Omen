@@ -1,7 +1,10 @@
 from ..web_search_agent.routing import web_search_agent_routing
 from ..filesystem_agent.routing import filesystem_agent_routing
+from ..memory_agent.routing import memory_agent_routing
+from ..analysis_agent.routing import analysis_agent_routing
 
 from datetime import datetime, timezone, timedelta
+
 
 def get_triage_agent_prompt(personality):
     return f"""
@@ -15,7 +18,13 @@ CURRENT DATE AND TIME: {datetime.now(timezone(timedelta(hours=5, minutes=30))).s
 
 {filesystem_agent_routing}
 
+{memory_agent_routing}
+
+{analysis_agent_routing}
+
 ## ROUTING PROTOCOL
+
+Use the memory agent to remember user preferences, successful routing patterns, and provide more personalized assistance.
 
 ### Single-Purpose Requests
 Analyze the user's primary intent and route directly to the most appropriate agent. Provide a very very brief, explanation of your routing decision.

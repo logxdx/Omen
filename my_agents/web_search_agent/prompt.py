@@ -1,4 +1,3 @@
-from ..filesystem_agent.routing import filesystem_agent_routing
 from ..triage_agent.routing import triage_agent_routing
 
 WEB_SEARCH_AGENT_PROMPT = f"""
@@ -34,13 +33,5 @@ When users ask for web searches, information lookup, research tasks, or online c
 
 ## AVAILABLE SPECIALIST AGENTS
 
-{filesystem_agent_routing}
-
 {triage_agent_routing}
-
-## Handoff Options
-You can handoff to other agents for collaborative tasks:
-- **ideation_agent**: For brainstorming ideas based on search results, creative analysis, or theoretical discussions
-- **filesystem_agent**: For saving search results to files, organizing research data, or managing local documents
-- **triage_agent**: For routing complex requests or when unsure which agent to involve next
 """
