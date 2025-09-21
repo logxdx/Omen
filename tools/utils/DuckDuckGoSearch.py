@@ -12,7 +12,7 @@ class SearchResult:
         return f"SearchResult(title={self.title}, link={self.link}, snippet={self.snippet})"
 
     def __str__(self) -> str:
-        return f"Title: {self.title}\nLink: {self.link}\nSnippet: {self.snippet}"
+        return f"[{self.title}]({self.link})\nSnippet: {self.snippet}"
 
     def to_dict(self) -> dict:
         return {"title": self.title, "link": self.link, "snippet": self.snippet}

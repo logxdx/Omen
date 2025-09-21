@@ -145,6 +145,9 @@ class Filters(BaseModel):
         return " ".join([f for f in filters if f])
 
 
+# ===================================================
+
+
 """
 Searxng Search API
 """
@@ -193,7 +196,7 @@ def search(
     Returns:
         List of search results as dictionaries
     """
-    search_url = BASE_URL.rstrip("/")
+    search_url = str(BASE_URL.rstrip("/"))
     headers = HeaderGenerator(locale=["en-US", "en-GB"]).generate()
     max_results += 5
 
@@ -218,7 +221,9 @@ def search(
         response.raise_for_status()
         response = response.json()
 
-        search_results.answers = response.get("answers", [])
+        answers = response.get("answers", [])
+        if answers:
+            search_results.answers = [f"URL: {answer.get('url', '')}\nANSWER: {answer.get('answer', '')}" for answer in answers]
 
         for result in response["results"][:max_results]:
             search_results.results.append(
@@ -241,8 +246,16 @@ def search(
 # Example usage
 if __name__ == "__main__":
     # Synchronous usage
-    search_results = search("embed gemma", max_results=5)
+    search_results = search("OpenAI", max_results=5)
+    # print query
+    print(f"Search Query: {search_results.query}")
+    # print answers if any
+    if search_results.answers:
+        print("Answers:")
+        for answer in search_results.answers:
+            print(f"- {answer}")
+    # print results
     for i, result in enumerate(search_results.results, 1):
         print(
-            f"\n{i}. {result.title} - {result.category} \n {result.link} \n {result.description}\n"
+            f"\n{i}. [{result.title}]({result.link}) - {result.category}\n  {result.description}"
         )

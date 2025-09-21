@@ -1,0 +1,62 @@
+from agents import function_tool
+
+"""Tool wrappers exposing the shared mem0 memory layer to agents.
+Each tool is intentionally small and returns plain serializable data.
+"""
+from tools.utils.mem0_memory import (
+    add_memory,
+    search_memories,
+    get_all_memories,
+    summarize_user_memories,
+)
+
+
+@function_tool
+def memory_add(text: str, user_id: str = "logx") -> str:
+    """Add a new memory fact / message to the shared memory layer.
+
+    Args:
+        text: Memory content.
+        user_id: User identifier (default: "logx").
+    Returns:
+        Result dict from mem0 add call.
+    """
+    return add_memory(text, user_id=user_id)
+
+
+@function_tool
+def memory_search(query: str, user_id: str = "logx", limit: int = 5) -> str:
+    """Semantic search over stored memories.
+
+    Args:
+        query: Search query text.
+        user_id: User identifier (default: "logx").
+        limit: Max number of results.
+    Returns:
+        List of memory entries.
+    """
+    return search_memories(query, user_id=user_id, limit=limit)
+
+
+@function_tool
+def memory_get_all(user_id: str = "logx") -> str:
+    """Get all memories for a user (may be large).
+
+    Args:
+        user_id: User identifier (default: "logx").
+    Returns:
+        All memory entries for the user.
+    """
+    return get_all_memories(user_id=user_id)
+
+
+@function_tool
+def memory_summary(user_id: str = "logx") -> str:
+    """Return a simple textual summary of the user's stored memories.
+
+    Args:
+        user_id: User identifier (default: "logx").
+    Returns:
+        A summary of the user's stored memories.
+    """
+    return summarize_user_memories(user_id=user_id)

@@ -1,13 +1,5 @@
 import json
 import requests
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(lineno)d - %(message)s",
-)
-
-logger = logging.getLogger(__name__)
 
 
 # Get current weather
@@ -21,42 +13,24 @@ def get_weather(city: str) -> str:
     Returns:
         str: Formatted weather information or error message
     """
-    logger.info(f"Fetching weather for city: {city}")
-
     if not city or not isinstance(city, str):
         error_msg = "Invalid city name provided"
-        logger.error(error_msg)
         return error_msg
 
     try:
         city_encoded = city.replace(" ", "+")
         base_url = f"http://wttr.in/{city_encoded}?format=j1"
 
-        logger.info(f"Making API request to: {base_url}")
         response = requests.get(base_url, timeout=5)
         response.raise_for_status()
 
-        logger.info(f"Weather data received (status: {response.status_code})")
         data = response.json()
 
-        # Log successful data retrieval
-        if "current_condition" in data and data["current_condition"]:
-            temp = data["current_condition"][0].get("temp_C", "N/A")
-            desc = (
-                data["current_condition"][0]
-                .get("weatherDesc", [{}])[0]
-                .get("value", "N/A")
-            )
-            logger.info(f"Successfully retrieved weather for {city}: {temp}°C, {desc}")
-        else:
-            logger.warning(f"Unexpected weather data format received for {city}")
     except requests.exceptions.RequestException as e:
         error_msg = f"Error fetching weather data: {str(e)}"
-        logger.error(error_msg, exc_info=True)
         return f"Error: Could not retrieve weather data. {str(e)}"
     except (json.JSONDecodeError, KeyError) as e:
         error_msg = f"Error parsing weather data: {str(e)}"
-        logger.error(error_msg, exc_info=True)
         return "Error: Could not parse weather data."
 
     current_stats = {}

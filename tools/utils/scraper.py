@@ -50,10 +50,10 @@ class ColoredLogging(logging.Formatter):
 handler = logging.StreamHandler()
 handler.setFormatter(ColoredLogging())
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,
     handlers=[handler],
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 for logger_name in logging.root.manager.loggerDict:
@@ -62,8 +62,8 @@ for logger_name in logging.root.manager.loggerDict:
 
 # Set the summarization model
 BASE_URL = os.getenv("CEREBRAS_BASE_URL")
-API_KEY = os.getenv("SCRAPER_API_KEY")
-SUMMARIZATION_MODEL = "gpt-oss-120b"
+API_KEY = os.getenv("CEREBRAS_API_KEY")
+SUMMARIZATION_MODEL = "llama-3.3-70b"
 
 # These patterns will be used to filter out unwanted URLs
 EXCLUDE_PATTERNS = [
@@ -125,8 +125,8 @@ class PageResult(BaseModel):
         return f"PageResult(url={self.url}, raw_html={self.raw_html}, cleaned_html={self.cleaned_html}, markdown={self.markdown}, summary={self.summary}, links={self.links})"
 
     def __str__(self) -> str:
-        return f"URL: {self.url}\n\nMD:\n{self.markdown}" + (
-            f"\n\nSummary:\n{self.summary}" if self.summary else ""
+        return f"URL: {self.url}\n" + (
+            f"Summary:\n{self.summary}" if self.summary else f"MD:\n{self.markdown}"
         )
 
 
@@ -444,7 +444,9 @@ def html2md(html: str, instructions: Optional[str] = None) -> str:
 
     except Exception as e:
         logger.error(f"[html2md] ERROR: {e}")
-        return ""
+        logger.info(f"[html2md] FALLBACK TO html2text")
+        markdown = html2text(html=html, bodywidth=600).strip()
+        return markdown
 
 
 def filter_links(links: list[str], exclude_social_media: bool = True) -> list[str]:
@@ -587,8 +589,8 @@ def jina_reader_api(url: str) -> str:
 
 def scrape_page(
     url: str,
-    use_reader_lm: bool = False,
     summarise: bool = False,
+    use_reader_lm: bool = False,
     instructions: Optional[str] = None,
     subdomains: Optional[bool] = None,
     tld: Optional[bool] = None,
@@ -599,8 +601,8 @@ def scrape_page(
     Scrape URL for HTML, clean it, convert to markdown, and optionally summarise it.
     Args:
         url (str): The URL of the website to scrape
-        use_reader_lm (bool): Use the Reader-LM for HTML to Markdown (default: True)
         summarise (bool): Summarise markdown using an LLM (default: False)
+        use_reader_lm (bool): Use the Reader-LM for HTML to Markdown (default: False)
         instructions (str): Optional instructions to guide the summarisation
         subdomains (bool | None): Include subdomains in the search
         tld (bool | None): Search for different top-level domains (TLDs)
@@ -674,5 +676,6 @@ def scrape_page(
 
 if __name__ == "__main__":
     url = "https://news.ycombinator.com/"
-    result = scrape_page(url, summarise=True)
+    url = "https://spider.cloud/"
+    result: str = scrape_page(url, summarise=True)
     print(result)

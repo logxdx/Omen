@@ -66,15 +66,16 @@ from .utils.scraper import scrape_page
 
 
 @function_tool
-def scrape_url(url: str) -> str:
+def scrape_url(url: str, summarise: bool = False) -> str:
     """
     Scrape a webpage and return the content.
 
     Args:
         url (str): The URL of the webpage to scrape.
+        summarise (bool): Use LLM to summarise the converted markdown content. Defaults to False.
 
     Returns:
         The scraped content.
     """
-    result = scrape_page(url)
+    result = scrape_page(url, summarise=summarise)
     return str(result)
