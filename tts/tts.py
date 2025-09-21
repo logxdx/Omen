@@ -65,7 +65,7 @@ class tts():
             model="kokoro",
             voice=self.voice,
             input=text,
-            response_format=self.response_format,
+            response_format=self.response_format, # type: ignore
             speed=self.speed,
         ) as response:
             for chunk in response.iter_bytes(chunk_size=1024):

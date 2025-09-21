@@ -356,10 +356,6 @@ async def stream_agent_response(
                         )
                         events_text.append(switch_msg)
 
-                if stop_event.is_set():
-                    console.print("\n[bold red]⚠️ Interrupted by user[/bold red]")
-                    break
-
                 # Update the live display
                 live.update(
                     Group(
@@ -377,6 +373,10 @@ async def stream_agent_response(
                         ),
                     )
                 )
+
+                if stop_event.is_set():
+                    console.print("\n[bold red]⚠️ Interrupted by user[/bold red]")
+                    break
 
     except Exception as e:
         console.print(f"\n[bold red]❌ Error occurred in {agent.name}: {e}[/bold red]")
