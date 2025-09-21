@@ -1,4 +1,5 @@
 # agents
+openai-agents==0.3.0
 requests==2.32.4
 beautifulsoup4==4.13.5
 search-ai-core==1.0.0
@@ -13,6 +14,7 @@ crawl4ai==0.7.0
 ddgs==9.4.3
 crewai==0.134.0
 keyboard==0.13.5
+streamlit==1.43.2
 
 
 # stt
@@ -24,3 +26,4 @@ silero-vad==6.0.0a
 # tts
 pyaudio==0.2.14
 openai==1.106.1
+mem0==0.1.9
