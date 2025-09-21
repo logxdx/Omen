@@ -10,8 +10,8 @@ class TTS:
     def __init__(
         self,
         model_path="piper_voices/en_US-libritts_r-medium.onnx",
-        speaker_id: int = 36,
-        speed: float = 0.8,
+        speaker_id: int = 26,
+        speed: float = 1.0,
         volume: float = 1.2,
     ):
         self.syn_config = SynthesisConfig(
@@ -89,11 +89,15 @@ class TTS:
 if __name__ == "__main__":
     import time
 
+    text = "A transformer is an end-to-end neural architecture that uses attention instead of recurrence or convolution to relate all tokens in an input sequence at once."
+
     # for i in range(50):
-    for i in [7, 8, 10, 25, 26, 36]:
+    for i in [(7, 1.2), (25, 1.2), (26, 1.0)]:
         print(i)
         # 7, 8, 10, 25, 26, 36
-        tts = TTS(speaker_id=i, speed=0.7)
-        tts.play("Hello, how are you?\nWhat is your name?\nWhat do you do?")
-        time.sleep(5)
+        # 7, 25, 26
+        # 26 is good default
+        tts = TTS(speaker_id=i[0], speed=i[1])
+        tts.play(text=text)
+        time.sleep(10)
         tts.stop()
