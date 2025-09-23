@@ -222,7 +222,7 @@ def handle_special_commands(
     elif user_msg.lower() in ["/mode", "/hierarchy", "/hmode"]:
         hierarchy_mode = select_hierarchy_mode()
         return False, inputs, agent, agents, hierarchy_mode, True
-    elif user_msg.lower() in ["/agents", "/a"]:
+    elif user_msg.lower().split()[0] in ["/agents", "/a"]:
         agent = handle_agents_command(user_msg, agents, agent)
         return False, inputs, agent, agents, hierarchy_mode, True
     return False, inputs, agent, agents, hierarchy_mode, False
@@ -467,7 +467,7 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
                 tts_client.stop()
                 tts_client.shutdown()
             break
-        if not inputs or skip:
+        if (not inputs) or skip:
             continue
 
         # Stream the response

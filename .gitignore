@@ -5,16 +5,18 @@ __pycache__
 *.pyo
 *.pyd
 
-sandbox
+root
 logs/
 
-voices
-
-# ignore memory for now
-memory
+piper_voices/
+whisper_models/
+oww_models/
+silero_vad/
 
 *.md
 *.wav
 *test*
 
 api_key*
+agent_memory/
+memory/
