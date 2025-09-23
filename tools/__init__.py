@@ -31,4 +31,6 @@ from .web_tools import (
     open_url_in_browser,
     get_weather_info,
     scrape_url,
+    download_audio,
+    download_video,
 )

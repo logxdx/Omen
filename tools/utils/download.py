@@ -12,7 +12,7 @@ def download_video(
     output_path: str | Path = DOWNLOADS_DIR / "videos",
     quality: str = "1080p",
     format: str = "mp4/mkv",
-):
+) -> str:
     """
     Download video with the specified quality.
 
@@ -25,8 +25,12 @@ def download_video(
         "format": f"bv*[height<={quality}]+ba/bv*[height<={quality}]",  # e.g., "best", "worst", "bestvideo+bestaudio"
         "merge_output_format": format,  # ensure video+audio merged into specified format
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+            return f"Downloaded video to {output_path}"
+    except Exception as e:
+        return f"Error downloading video: {e}"
 
 
 def download_audio(
@@ -34,7 +38,7 @@ def download_audio(
     output_path: str | Path = DOWNLOADS_DIR / "audios",
     audio_format: str = "mp3",
     audio_quality: str = "192K",
-):
+) -> str:
     """
     Extract audio from video and save as given format.
 
@@ -54,5 +58,9 @@ def download_audio(
             }
         ],
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+            return f"Downloaded audio to {output_path}"
+    except Exception as e:
+        return f"Error downloading audio: {e}"

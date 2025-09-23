@@ -7,6 +7,7 @@ web_search_agent_routing = """
 - Find current events, news, or trending information  
 - Locate websites, online resources, or documentation
 - Scrape URLs for content
+- Download audio or video from URLs
 - Search for YouTube videos or multimedia content
 - Access real-time or frequently updated information
 - Get weather forecasts

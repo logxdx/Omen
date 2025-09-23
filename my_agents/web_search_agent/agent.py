@@ -3,7 +3,7 @@ from agents import Agent
 from agents.extensions.models.litellm_model import LitellmModel
 
 from tools.search_tools import searx_search, search_youtube_videos
-from tools.web_tools import open_url_in_browser, get_weather_info, scrape_url
+from tools.web_tools import open_url_in_browser, get_weather_info, scrape_url, download_audio, download_video
 from tools.misc_tools import get_current_datetime
 from .prompt import WEB_SEARCH_AGENT_PROMPT
 
@@ -27,6 +27,8 @@ def create_web_search_agent(handoffs=None):
             searx_search,
             scrape_url,
             search_youtube_videos,
+            download_video,
+            download_audio,
             open_url_in_browser,
             get_weather_info,
             get_current_datetime,

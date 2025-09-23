@@ -79,3 +79,34 @@ def scrape_url(url: str, summarise: bool = False) -> str:
     """
     result = scrape_page(url, summarise=summarise)
     return str(result)
+
+
+##########################
+# Audio & Video Download #
+##########################
+
+from .utils import download
+
+
+@function_tool
+def download_audio(url: str) -> str:
+    """
+    Download audio from a video.
+
+    Args:
+        url (str): URL of the video
+    """
+    out = download.download_audio(url)
+    return out
+
+
+@function_tool
+def download_video(url: str) -> str:
+    """
+    Download video from a video.
+
+    Args:
+        url (str): URL of the video
+    """
+    out = download.download_video(url)
+    return out
