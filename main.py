@@ -24,7 +24,7 @@ triage_agent = create_triage_agent(handoffs=[web_search_agent, filesystem_agent,
 filesystem_agent.handoffs.extend([triage_agent])
 web_search_agent.handoffs.extend([triage_agent])
 memory_agent.handoffs.extend([triage_agent])
-analysis_agent.handoffs.extend([triage_agent])
+analysis_agent.handoffs.extend([triage_agent, filesystem_agent])
 ideation_agent.handoffs.extend([triage_agent, web_search_agent, memory_agent])
 study_agent.handoffs.extend([triage_agent, web_search_agent, filesystem_agent, memory_agent, analysis_agent])
 

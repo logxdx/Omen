@@ -20,25 +20,25 @@ from scraper import scrape_page, PageResult
 
 load_dotenv()
 
-BASE_URL = os.getenv("GROQ_BASE_URL")
+BASE_URL = os.getenv("CEREBRAS_BASE_URL")
 
 RESEARCH_API_KEY = os.getenv("RESEARCH_API_KEY")
-RESEARCH_MODEL = "openai/openai/gpt-oss-120b"
+RESEARCH_MODEL = "openai/gpt-oss-120b"
 
-SUBMODULAR_BASE_URL = os.getenv("OLLAMA_BASE_URL")
-SUBMODULAR_API_KEY = os.getenv("OLLAMA_API_KEY")
-SUBMODULAR_MODEL = "openai/may"
+SUBMODULAR_BASE_URL = os.getenv("CEREBRAS_BASE_URL")
+SUBMODULAR_API_KEY = os.getenv("SUBMODULAR_API_KEY")
+SUBMODULAR_MODEL = "openai/llama-3.3-70b"
 
 EMBEDDING_BASE_URL = os.getenv("OLLAMA_BASE_URL")
 EMBEDDING_API_KEY = os.getenv("OLLAMA_API_KEY")
-EMBEDDING_MODEL = "openai/qwen3-embed:0.6b"
-DIMENSIONS = 1024
+EMBEDDING_MODEL = "openai/embeddinggemma"
+DIMENSIONS = 768
 
 CONCURRENCY = 5
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 class ResearchQuery(BaseModel):
@@ -97,9 +97,8 @@ class SubmodularQueryDecomposer:
                 base_url=SUBMODULAR_BASE_URL,
                 api_key=SUBMODULAR_API_KEY,
                 model=SUBMODULAR_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.8,  # Higher temperature for diversity
-                max_tokens=1000,
+                messages=[{"role": "user", "content": prompt}, {"role": "assistant", "content": "{{queries: [}}}],"}],
+                temperature=1,  # Higher temperature for diversity
             )
 
             queries_text = str(response.choices[0].message.content).strip()  # type: ignore
@@ -369,7 +368,7 @@ class DeepResearchSystem:
             logger.error(f"Error searching web for '{query}': {e}")
             return SearchResults(query=query)
 
-    def scrape_content(self, url: str, query_context: str) -> Optional[PageResult]:
+    def scrape_content(self, url: str) -> Optional[PageResult]:
         """
         Scrape and process content from a URL
         """
