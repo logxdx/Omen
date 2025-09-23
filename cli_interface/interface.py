@@ -6,20 +6,16 @@ from openai.types.responses import (
     ResponseReasoningSummaryTextDeltaEvent,
 )
 from agents import (
+    Agent,
     RawResponsesStreamEvent,
     Runner,
     RunResultStreaming,
     RunItemStreamEvent,
     TResponseInputItem,
     AgentUpdatedStreamEvent,
-)
-from agents import (
-    Agent,
     set_tracing_disabled,
 )
 from config.agent_config import MAX_TURNS
-
-set_tracing_disabled(disabled=True)
 
 from rich.console import Console, Group
 from rich.panel import Panel
@@ -30,9 +26,23 @@ from rich.prompt import Prompt
 import keyboard
 import threading
 
+from tts.piper_tts import TTS
+
+set_tracing_disabled(disabled=True)
+
+
 CONSOLE_WIDTH = 125
 console = Console(width=CONSOLE_WIDTH)
 console.clear()
+
+_tts = None
+
+
+def get_tts():
+    global _tts
+    if _tts is None:
+        _tts = TTS()
+    return _tts
 
 
 def welcome_panel():
@@ -119,6 +129,28 @@ def select_hierarchy_mode():
             console.print("[bold purple]Managerial mode[/bold purple]")
             break
     return hierarchy_mode
+
+
+def select_interaction_mode():
+    """
+    Prompt user to select interaction mode.
+    """
+    console.print("[bold white]\nChoose your preferred interaction mode:[/bold white]")
+    console.print("1. [purple]Text[/purple] [bold dim](default)[/bold dim]")
+    console.print("2. [purple]Voice[/purple] - STT (Whisper) + TTS (Piper)")
+    console.print()
+
+    while True:
+        mode_choice = Prompt.ask("Mode", choices=["1", "2"], default="1")
+        if mode_choice == "1":
+            interaction_mode = "text"
+            console.print("[bold purple]Text mode[/bold purple]")
+            break
+        else:
+            interaction_mode = "voice"
+            console.print("[bold purple]Voice mode[/bold purple]")
+            break
+    return interaction_mode
 
 
 def handle_agents_command(user_msg: str, agents: dict, agent: Agent) -> Agent:
@@ -392,7 +424,11 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
     :param starting_agent: The agent to start the conversation with
     """
 
+    tts_client: TTS = None  # type: ignore
     hierarchy_mode = select_hierarchy_mode()
+    interaction_mode = select_interaction_mode()
+    if interaction_mode == "voice":
+        tts_client = get_tts()
     agent = starting_agent
     handle_special_commands("/c", [], agent, agents, hierarchy_mode)
     inputs: List[TResponseInputItem] = [
@@ -404,6 +440,15 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
     agent, result = await stream_agent_response(agent, inputs, "managerial")
     inputs.clear()
     skip: bool = False
+
+    if interaction_mode == "voice":
+        try:
+            speech = tts_client.speak(str(result.final_output))
+            console.print(
+                Panel(speech, title="Speech", border_style="dim", style="dim")
+            )
+        except Exception as e:
+            console.print(f"\n[bold red]❌ TTS Error: {e}[/bold red]")
 
     while True:
 
@@ -418,12 +463,24 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
             handle_special_commands(user_msg, inputs, agent, agents, hierarchy_mode)
         )
         if quit_flag:
+            if tts_client:
+                tts_client.stop()
+                tts_client.shutdown()
             break
         if not inputs or skip:
             continue
 
         # Stream the response
         agent, result = await stream_agent_response(agent, inputs, hierarchy_mode)
+
+        if interaction_mode == "voice":
+            try:
+                speech = tts_client.speak(str(result.final_output), user_query=user_msg)
+                console.print(
+                    Panel(speech, title="Speech", border_style="dim", style="dim")
+                )
+            except Exception as e:
+                console.print(f"\n[bold red]❌ TTS Error: {e}[/bold red]")
 
         # Update conversation state
         inputs = result.to_input_list()
