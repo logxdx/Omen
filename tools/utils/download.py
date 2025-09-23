@@ -1,15 +1,21 @@
 import yt_dlp
 from pathlib import Path
 
-SANDBOX_DIR = Path(__file__).resolve().parent.parent.parent.parent / "root"
+SANDBOX_DIR = Path(__file__).resolve().parent.parent.parent / "root"
 
 DOWNLOADS_DIR = SANDBOX_DIR / "downloads"
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
+VIDEO_DIR = DOWNLOADS_DIR / "video"
+VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+
+AUDIO_DIR = DOWNLOADS_DIR / "audio"
+AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def download_video(
     url: str,
-    output_path: str | Path = DOWNLOADS_DIR / "videos",
+    output_path: str | Path = VIDEO_DIR,
     quality: str = "1080p",
     format: str = "mp4/mkv",
 ) -> str:
@@ -22,8 +28,8 @@ def download_video(
     """
     ydl_opts: yt_dlp._Params = {
         "outtmpl": f"{output_path}/%(title)s.%(ext)s",
-        "format": f"bv*[height<={quality}]+ba/bv*[height<={quality}]",  # e.g., "best", "worst", "bestvideo+bestaudio"
-        "merge_output_format": format,  # ensure video+audio merged into specified format
+        "format": f"bv*[height<={quality}]+ba/bv*[height<={quality}]",
+        "merge_output_format": format,
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -35,9 +41,8 @@ def download_video(
 
 def download_audio(
     url: str,
-    output_path: str | Path = DOWNLOADS_DIR / "audios",
+    output_path: str | Path = AUDIO_DIR,
     audio_format: str = "mp3",
-    audio_quality: str = "192K",
 ) -> str:
     """
     Extract audio from video and save as given format.
@@ -54,7 +59,6 @@ def download_audio(
             {
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": audio_format,
-                "preferredquality": audio_quality,
             }
         ],
     }
