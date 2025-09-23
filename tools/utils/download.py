@@ -1,0 +1,58 @@
+import yt_dlp
+from pathlib import Path
+
+SANDBOX_DIR = Path(__file__).resolve().parent.parent.parent.parent / "root"
+
+DOWNLOADS_DIR = SANDBOX_DIR / "downloads"
+DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def download_video(
+    url: str,
+    output_path: str | Path = DOWNLOADS_DIR / "videos",
+    quality: str = "1080p",
+    format: str = "mp4/mkv",
+):
+    """
+    Download video with the specified quality.
+
+    :param url: Video URL
+    :param output_path: Directory or filename template for saving
+    :param quality: Format string (default "best")
+    """
+    ydl_opts: yt_dlp._Params = {
+        "outtmpl": f"{output_path}/%(title)s.%(ext)s",
+        "format": f"bv*[height<={quality}]+ba/bv*[height<={quality}]",  # e.g., "best", "worst", "bestvideo+bestaudio"
+        "merge_output_format": format,  # ensure video+audio merged into specified format
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+
+
+def download_audio(
+    url: str,
+    output_path: str | Path = DOWNLOADS_DIR / "audios",
+    audio_format: str = "mp3",
+    audio_quality: str = "192K",
+):
+    """
+    Extract audio from video and save as given format.
+
+    :param url: Video URL
+    :param output_path: Directory or filename template for saving
+    :param audio_format: Desired audio format (e.g., mp3, flac, wav)
+    :param audio_quality: Bitrate/quality (e.g., "128K", "192K")
+    """
+    ydl_opts: yt_dlp._Params = {
+        "outtmpl": f"{output_path}/%(title)s.%(ext)s",
+        "format": "bestaudio/best",
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": audio_format,
+                "preferredquality": audio_quality,
+            }
+        ],
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
