@@ -24,38 +24,39 @@ Features:
 
 """
 
-import base64
-import collections
-import copy
-import datetime
-import gc
-import logging
-import os
-import platform
-import queue
 import re
-import signal as system_signal
-import struct
-import threading
+import gc
+import os
+import copy
 import time
+import queue
+import struct
+import base64
+import logging
+import datetime
+import platform
 import traceback
+import threading
+import collections
+from pathlib import Path
 from ctypes import c_bool
+import signal as system_signal
 from typing import Iterable, List, Optional, Union
 
-import faster_whisper
 import halo
-import numpy as np
 import torch
+import numpy as np
+import faster_whisper
+from scipy import signal
+from scipy.signal import resample
 import torch.multiprocessing as mp
 from faster_whisper import BatchedInferencePipeline
 from openwakeword.model import Model as OpenWakewordModel
-from scipy import signal
-from scipy.signal import resample
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "FALSE"
 
-INIT_MODEL_TRANSCRIPTION = "tiny"
-INIT_MODEL_TRANSCRIPTION_REALTIME = "tiny"
+INIT_MODEL_TRANSCRIPTION = "small.en"
+INIT_MODEL_TRANSCRIPTION_REALTIME = "tiny.en"
 INIT_REALTIME_PROCESSING_PAUSE = 0.5
 INIT_REALTIME_INITIAL_PAUSE = 0.5
 INIT_SILERO_SENSITIVITY = 0.5
@@ -66,7 +67,7 @@ INIT_WAKE_WORDS_SENSITIVITY = 0.5
 INIT_PRE_RECORDING_BUFFER_DURATION = 0.5
 INIT_WAKE_WORD_ACTIVATION_DELAY = 0.0
 INIT_WAKE_WORD_TIMEOUT = 5.0
-INIT_WAKE_WORD_BUFFER_DURATION = 0.0
+INIT_WAKE_WORD_BUFFER_DURATION = 0.5
 ALLOWED_LATENCY_LIMIT = 100
 
 TIME_SLEEP = 0.02
@@ -74,12 +75,17 @@ SAMPLE_RATE = 16000
 BUFFER_SIZE = 512
 INT16_MAX_ABS_VALUE = 32768.0
 
+WHISPER_MODEL_PATH = Path(__file__).parent / "whisper_models"
+OWW_MODEL_PATH = Path(__file__).parent / "oww_models"
+SILERO_MODEL_PATH = Path(__file__).parent / "silero_vad"
+
 INIT_HANDLE_BUFFER_OVERFLOW = False
 if platform.system() != "Darwin":
     INIT_HANDLE_BUFFER_OVERFLOW = True
 
+
 class TranscriptionWorker:
-    
+
     def __init__(
         self,
         conn,
@@ -121,6 +127,8 @@ class TranscriptionWorker:
             pass
 
     def poll_connection(self):
+        """Polls the connection for incoming data and puts it into the queue."""
+
         while not self.shutdown_event.is_set():
             if self.conn.poll(0.01):
                 try:
@@ -184,7 +192,7 @@ class TranscriptionWorker:
                                 beam_size=self.beam_size,
                                 initial_prompt=self.initial_prompt,
                                 suppress_tokens=self.suppress_tokens,
-                                batch_size=self.batch_size,
+                                batch_size=self.batch_size,  # type: ignore
                             )
                         else:
                             segments, info = model.transcribe(
@@ -227,7 +235,7 @@ class bcolors:
     ENDC = "\033[0m"  # Reset to default color
 
 
-class stt:
+class STT:
     """
     A class responsible for capturing audio from the microphone, detecting
     voice activity, and then transcribing the captured audio using the
@@ -237,9 +245,9 @@ class stt:
     def __init__(
         self,
         model: str = INIT_MODEL_TRANSCRIPTION,
-        download_root: str | None = "./stt/systran", # Path to systran whisper models
+        download_root: Optional[str | Path] = WHISPER_MODEL_PATH,
         language: str = "en",
-        compute_type: str = "default",
+        compute_type: str = "int8",
         input_device_index: int = 0,
         gpu_device_index: Union[int, List[int]] = 0,
         device: str = "cuda",
@@ -249,10 +257,9 @@ class stt:
         ensure_sentence_starting_uppercase=True,
         ensure_sentence_ends_with_period=True,
         use_microphone=True,
-        spinner=True,
-        level=logging.WARNING,
-        batch_size: int = 16,
-
+        spinner=False,
+        level=logging.ERROR,
+        batch_size: int = 8,
         # Realtime transcription parameters
         enable_realtime_transcription=False,
         use_main_model_for_realtime=False,
@@ -262,7 +269,6 @@ class stt:
         on_realtime_transcription_update=None,
         on_realtime_transcription_stabilized=None,
         realtime_batch_size: int = 16,
-
         # Voice activation parameters
         silero_sensitivity: float = INIT_SILERO_SENSITIVITY,
         silero_use_onnx: bool = True,
@@ -272,12 +278,11 @@ class stt:
         pre_recording_buffer_duration: float = (INIT_PRE_RECORDING_BUFFER_DURATION),
         on_vad_detect_start=None,
         on_vad_detect_stop=None,
-
         # Wake word parameters
-        wakeword_backend: str = "",
-        openwakeword_model_paths: List[str] = ["C:/Code/AI/assistant/models/oww/hey_jarvis.onnx"],
+        wakeword_backend: str = "oww",
+        openwakeword_model_paths: List[str] = ["hey_kratos"],
         openwakeword_inference_framework: str = "onnx",
-        wake_word: str = "hey jarvis",
+        wake_word: str = "Kratos",
         wake_words_sensitivity: float = INIT_WAKE_WORDS_SENSITIVITY,
         wake_word_activation_delay: float = (INIT_WAKE_WORD_ACTIVATION_DELAY),
         wake_word_timeout: float = INIT_WAKE_WORD_TIMEOUT,
@@ -314,7 +319,7 @@ class stt:
             'large-v2'.
             If a specific size is provided, the model is downloaded
             from the Hugging Face Hub.
-        - download_root (str, default=None): Specifies the root path were the Whisper models
+        - download_root (str | Path): Specifies the root path were the Whisper models
           are downloaded to. When empty, the default is used.
         - language (str, default="en"): Language code for speech-to-text engine.
             If not specified, the model will attempt to detect the language
@@ -347,7 +352,7 @@ class stt:
             microphone as the audio input source. If set to False, the
             audio input source will be the audio data sent through the
             feed_audio() method.
-        - spinner (bool, default=True): Show spinner animation with current
+        - spinner (bool, default=False): Show spinner animation with current
             state.
         - level (int, default=logging.WARNING): Logging level.
         - batch_size (int, default=16): Batch size for the main transcription
@@ -407,7 +412,7 @@ class stt:
         - pre_recording_buffer_duration (float, default=0.5): Duration in
             seconds for the audio buffer to maintain pre-roll audio
             (compensates speech activity detection latency)
-            
+
         - on_vad_detect_start (callable, default=None): Callback function to
             be called when the system listens for voice activity.
         - on_vad_detect_stop (callable, default=None): Callback function to be
@@ -416,17 +421,19 @@ class stt:
         - wakeword_backend (str, default=""): Specifies the backend
             library to use for wake word detection. Supported options include
             'oww' for the OpenWakeWord engine.
-        - openwakeword_model_paths (List[str], default=None): Comma-separated paths
-            to model files for the openwakeword library. These paths point to
-            custom models that can be used for wake word detection when the
-            openwakeword library is selected as the wakeword_backend.
+        - openwakeword_model_paths (List[str], default=None): List of folder names
+            containing OpenWakeWord models within the OWW_MODEL_PATH directory.
+            Each folder should contain ONNX or TFLite model files for wake word detection.
+            For example: ["alexa", "hey_jarvis"] will look for models in
+            OWW_MODEL_PATH/alexa/ and OWW_MODEL_PATH/hey_jarvis/ directories.
+            If empty, all available models in OWW_MODEL_PATH will be loaded.
         - openwakeword_inference_framework (str, default="onnx"): Specifies
             the inference framework to use with the openwakeword library.
             Can be either 'onnx' for Open Neural Network Exchange format
             or 'tflite' for TensorFlow Lite.
-        - wake_word (str, default=""): wake word to initiate recording. 
-            When using the 'openwakeword' backend, wake words are automatically 
-            extracted from the provided model files, so specifying them here 
+        - wake_word (str, default=""): wake word to initiate recording.
+            When using the 'openwakeword' backend, wake words are automatically
+            extracted from the provided model files, so specifying them here
             is not necessary.
         - wake_words_sensitivity (float, default=0.5): Sensitivity for wake
             word detection, ranging from 0 (least sensitive) to 1 (most
@@ -456,7 +463,7 @@ class stt:
         - on_wakeword_detection_end (callable, default=None): Callback
             function to be called when the system stops to listen for
             wake words (e.g. because of timeout or wake word detected)
-            
+
         - on_recorded_chunk (callable, default=None): Callback function to be
             called when a chunk of audio is recorded. The function is called
             with the recorded audio chunk as its argument.
@@ -513,6 +520,7 @@ class stt:
         self.wake_word_activation_delay = wake_word_activation_delay
         self.wake_word_timeout = wake_word_timeout
         self.wake_word_buffer_duration = wake_word_buffer_duration
+        self.openwakeword_inference_framework = openwakeword_inference_framework
         self.ensure_sentence_starting_uppercase = ensure_sentence_starting_uppercase
         self.ensure_sentence_ends_with_period = ensure_sentence_ends_with_period
         self.use_microphone = mp.Value(c_bool, use_microphone)
@@ -657,7 +665,7 @@ class stt:
 
         # Start transcription process
         self.transcript_process = self._start_thread(
-            target=stt._transcription_worker,
+            target=STT._transcription_worker,
             args=(
                 child_transcription_pipe,
                 child_stdout_pipe,
@@ -685,7 +693,7 @@ class stt:
                 f" buffer size: {self.buffer_size}"
             )
             self.reader_process = self._start_thread(
-                target=stt._audio_data_worker,
+                target=STT._audio_data_worker,
                 args=(
                     self.audio_queue,
                     self.sample_rate,
@@ -713,7 +721,7 @@ class stt:
                     device=self.device,
                     compute_type=self.compute_type,
                     device_index=self.gpu_device_index,
-                    download_root=self.download_root,
+                    download_root=str(self.download_root),
                 )
                 if self.realtime_batch_size > 0:
                     self.realtime_model_type = BatchedInferencePipeline(
@@ -746,18 +754,23 @@ class stt:
                 download_models()
 
                 try:
-                    if openwakeword_model_paths:
+                    # Convert folder names to actual model file paths
+                    model_file_paths = self._get_oww_model_paths(
+                        openwakeword_model_paths
+                    )
+
+                    if model_file_paths:
                         self.owwModel = OpenWakewordModel(
-                            wakeword_models=openwakeword_model_paths,
+                            wakeword_models=model_file_paths,
                             inference_framework=openwakeword_inference_framework,
                         )
                         logging.info(
                             "Successfully loaded wakeword model(s): "
-                            f"{openwakeword_model_paths}"
+                            f"{model_file_paths}"
                         )
                     else:
                         self.owwModel = OpenWakewordModel(
-                            inference_framework=openwakeword_inference_framework
+                            inference_framework=openwakeword_inference_framework,
                         )
 
                     self.oww_n_models = len(self.owwModel.models.keys())
@@ -790,6 +803,7 @@ class stt:
             self.silero_vad_model = None
             try:
                 from silero_vad import load_silero_vad
+
                 self.silero_vad_model = load_silero_vad(onnx=silero_use_onnx)
                 logging.info("Loaded Silero VAD model from the `silero_vad` module.")
             except ImportError:
@@ -797,12 +811,13 @@ class stt:
 
             # Download from torch.hub if not found locally
             if self.silero_vad_model is None:
+                torch.hub.set_dir(str(SILERO_MODEL_PATH))
                 self.silero_vad_model, _ = torch.hub.load(
                     repo_or_dir="snakers4/silero-vad",
                     model="silero_vad",
                     verbose=False,
                     onnx=silero_use_onnx,
-                ) # type: ignore
+                )  # type: ignore
 
         except Exception as e:
             logging.exception(
@@ -865,6 +880,9 @@ class stt:
               the run() method. Defaults to None, meaning nothing is called.
             args (tuple): is a list or tuple of arguments for the target
               invocation. Defaults to ().
+
+        Returns:
+            The started thread or process.
         """
         if platform.system() == "Linux":
             thread = threading.Thread(target=target, args=args)
@@ -1074,7 +1092,7 @@ class stt:
                     chunk = signal.resample(chunk, num_samples)
 
                 # Ensure data type is int16
-                chunk = chunk.astype(np.int16) # type: ignore
+                chunk = chunk.astype(np.int16)  # type: ignore
             else:
                 # If chunk is bytes, convert to numpy array
                 chunk = np.frombuffer(chunk, dtype=np.int16)
@@ -1085,7 +1103,7 @@ class stt:
                         len(chunk) * target_sample_rate / original_sample_rate
                     )
                     chunk = signal.resample(chunk, num_samples)
-                    chunk = chunk.astype(np.int16)
+                    chunk = chunk.astype(np.int16)  # type: ignore
 
             return chunk.tobytes()
 
@@ -1156,7 +1174,7 @@ class stt:
         try:
             while not shutdown_event.is_set():
                 try:
-                    data = stream.read(chunk_size, exception_on_overflow=False)
+                    data = stream.read(chunk_size, exception_on_overflow=False)  # type: ignore
 
                     if use_microphone.value:
                         processed_data = preprocess_audio(
@@ -1366,6 +1384,8 @@ class stt:
                     self.parent_transcription_pipe.send((audio_copy, self.language))
                     self.transcribe_count += 1
 
+                status = None
+                result = None
                 while self.transcribe_count > 0:
                     logging.debug(
                         f"Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: {self.transcribe_count}"
@@ -1376,14 +1396,14 @@ class stt:
                 self.allowed_to_early_transcribe = True
                 self._set_state("inactive")
                 if status == "success":
-                    segments, info = result
+                    segments, info = result  # type: ignore
                     self.detected_language = (
                         info.language if info.language_probability > 0 else None
                     )
                     self.detected_language_probability = info.language_probability
                     self.last_transcription_bytes = copy.deepcopy(audio_copy)
                     self.last_transcription_bytes_b64 = base64.b64encode(
-                        self.last_transcription_bytes.tobytes()
+                        self.last_transcription_bytes.tobytes()  # type: ignore
                     ).decode("utf-8")
                     transcription = self._preprocess_output(segments)
                     end_time = time.time()  # End timing
@@ -1440,7 +1460,7 @@ class stt:
 
         return -1
 
-    def text(self,on_transcription_finished=None):
+    def text(self, on_transcription_finished=None):
         """
         Transcribes audio captured by this class instance
         using the `faster_whisper` model.
@@ -1570,7 +1590,7 @@ class stt:
                 chunk = resample(chunk, num_samples)
 
             # Ensure data type is int16
-            chunk = chunk.astype(np.int16)
+            chunk = chunk.astype(np.int16)  # type: ignore
 
             # Convert the NumPy array to bytes
             chunk = chunk.tobytes()
@@ -1632,7 +1652,7 @@ class stt:
                         "Reader process did not terminate "
                         "in time. Terminating forcefully."
                     )
-                    self.reader_process.terminate()
+                    self.reader_process.terminate()  # type: ignore
 
             logging.debug("Terminating transcription process")
             self.transcript_process.join(timeout=10)
@@ -1642,7 +1662,7 @@ class stt:
                     "Transcript process did not terminate "
                     "in time. Terminating forcefully."
                 )
-                self.transcript_process.terminate()
+                self.transcript_process.terminate()  # type: ignore
 
             self.parent_transcription_pipe.close()
 
@@ -1676,7 +1696,7 @@ class stt:
 
             if self.use_extended_logging:
                 logging.debug("Debug: Starting main loop")
-            
+
             # Continuously monitor audio for voice activity
             while self.is_running:
 
@@ -1745,7 +1765,7 @@ class stt:
 
                 if self.use_extended_logging:
                     logging.debug("Debug: Updating time_since_last_buffer_message")
-                
+
                 # Feed the extracted data to the audio_queue
                 if time_since_last_buffer_message:
                     time_passed = time.time() - time_since_last_buffer_message
@@ -1829,7 +1849,7 @@ class stt:
 
                         if self.use_extended_logging:
                             logging.debug("Debug: Checking if wake word detected")
-                        
+
                         # If a wake word is detected
                         if wakeword_index >= 0:
                             if self.use_extended_logging:
@@ -1837,7 +1857,9 @@ class stt:
                                     "Debug: Wake word detected, updating variables"
                                 )
                             self.wake_word_detect_time = time.time()
-                            wakeword_samples_to_remove = int(self.sample_rate * self.wake_word_buffer_duration)
+                            wakeword_samples_to_remove = int(
+                                self.sample_rate * self.wake_word_buffer_duration
+                            )
                             self.wakeword_detected = True
                             self._set_state("listening")
                             if self.on_wakeword_detected:
@@ -1881,7 +1903,7 @@ class stt:
                                 logging.debug(
                                     "Debug: Resetting Silero VAD model states"
                                 )
-                            self.silero_vad_model.reset_states()
+                            self.silero_vad_model.reset_states()  # type: ignore
                         else:
                             if self.use_extended_logging:
                                 logging.debug("Debug: Checking voice activity")
@@ -2074,8 +2096,8 @@ class stt:
 
                 if self.use_extended_logging:
                     logging.debug("Debug: Handling wake word timeout")
-                
-                # Handle wake word timeout (waited too long before 
+
+                # Handle wake word timeout (waited too long before
                 # initiating speech after wake word detection)
                 if (
                     self.wake_word_detect_time
@@ -2203,16 +2225,16 @@ class stt:
                     else:
                         # Perform transcription and assemble the text
                         if self.realtime_batch_size > 0:
-                            segments, info = self.realtime_model_type.transcribe(
+                            segments, info = self.realtime_model_type.transcribe(  # type: ignore
                                 audio_array,
                                 language=self.language if self.language else None,
                                 beam_size=self.beam_size_realtime,
                                 initial_prompt=self.initial_prompt_realtime,
                                 suppress_tokens=self.suppress_tokens,
-                                batch_size=self.realtime_batch_size,
+                                batch_size=self.realtime_batch_size,  # type: ignore
                             )
                         else:
-                            segments, info = self.realtime_model_type.transcribe(
+                            segments, info = self.realtime_model_type.transcribe(  # type: ignore
                                 audio_array,
                                 language=self.language if self.language else None,
                                 beam_size=self.beam_size_realtime,
@@ -2333,7 +2355,9 @@ class stt:
         self.silero_working = True
         audio_chunk = np.frombuffer(chunk, dtype=np.int16)
         audio_chunk = audio_chunk.astype(np.float32) / INT16_MAX_ABS_VALUE
-        vad_prob = self.silero_vad_model(torch.from_numpy(audio_chunk), SAMPLE_RATE).item()
+        vad_prob = self.silero_vad_model(
+            torch.from_numpy(audio_chunk), SAMPLE_RATE
+        ).item()  # type: ignore
         is_silero_speech_active = vad_prob > (1 - self.silero_sensitivity)
         if is_silero_speech_active:
             if not self.is_silero_speech_active and self.use_extended_logging:
@@ -2422,15 +2446,15 @@ class stt:
         elif new_state == "wakeword":
             if self.on_wakeword_detection_start:
                 self.on_wakeword_detection_start()
-            self._set_spinner(f"say \"{self.wake_word}\"")
+            self._set_spinner(f'say "{self.wake_word}"')
             if self.spinner and self.halo:
                 self.halo._interval = 500
-        # elif new_state == "transcribing":
-        #     if self.on_transcription_start:
-        #         self.on_transcription_start()
-        #     self._set_spinner("transcribing")
-        #     if self.spinner and self.halo:
-        #         self.halo._interval = 50
+        elif new_state == "transcribing":
+            if self.on_transcription_start:
+                self.on_transcription_start()
+            self._set_spinner("transcribing")
+            if self.spinner and self.halo:
+                self.halo._interval = 50
         elif new_state == "recording":
             self._set_spinner("recording")
             if self.spinner and self.halo:
@@ -2596,13 +2620,58 @@ class stt:
         """
         self.shutdown()
 
+    def _get_oww_model_paths(self, folder_names: List[str]) -> List[str]:
+        """
+        Convert folder names to actual OpenWakeWord model file paths.
+
+        Args:
+            folder_names (List[str]): List of folder names containing OWW models
+
+        Returns:
+            List[str]: List of actual model file paths, or empty list if none found
+        """
+        if not folder_names or (len(folder_names) == 1 and not folder_names[0]):
+            # If no folder names specified, return empty list to use default models
+            return []
+
+        model_paths = []
+        base_path = Path(OWW_MODEL_PATH)
+
+        for folder_name in folder_names:
+            if not folder_name.strip():
+                continue
+
+            folder_path = base_path / folder_name.strip()
+
+            if not folder_path.exists() or not folder_path.is_dir():
+                logging.warning(f"OpenWakeWord model folder not found: {folder_path}")
+                continue
+
+            # Look for ONNX and TFLite files in the folder
+            model_files = []
+            extension = "onnx" if self.openwakeword_inference_framework else "tflite"
+            model_files.extend(folder_path.glob(f"*.{extension}"))
+
+            if not model_files:
+                logging.warning(
+                    f"No ONNX or TFLite files found in folder: {folder_path}"
+                )
+                continue
+
+            # Add all found model files to the list
+            for model_file in model_files:
+                model_paths.append(str(model_file))
+                logging.info(f"Found OpenWakeWord model file: {model_file}")
+
+        return model_paths
+
 
 if __name__ == "__main__":
-    
+
     RESET_CURSOR = "\033[H"
     CLEAR_LINE = "\033[2K"
 
-    recorder = stt(
+    recorder = STT(
         enable_realtime_transcription=True,
         no_log_file=True,
     )
