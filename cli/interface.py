@@ -26,7 +26,7 @@ from rich.prompt import Prompt
 import keyboard
 import threading
 
-from tts.piper_tts import TTS
+from tts.tts import TTS
 
 set_tracing_disabled(disabled=True)
 
@@ -111,22 +111,22 @@ def select_hierarchy_mode():
     """
     console.print("[bold white]\nChoose your preferred interaction mode:[/bold white]")
     console.print(
-        "1. [purple]Collaborative[/purple] - Agents can handoff directly to each other"
+        "1. [purple]Managerial[/purple] - Triage agent manages all interactions behind the scenes [bold dim](default)[/bold dim]"
     )
     console.print(
-        "2. [purple]Managerial[/purple] - Triage agent manages all interactions behind the scenes [bold dim](default)[/bold dim]"
+        "2. [purple]Collaborative[/purple] - Agents can handoff directly to each other"
     )
     console.print()
 
     while True:
-        mode_choice = Prompt.ask("Mode", choices=["1", "2"], default="2")
+        mode_choice = Prompt.ask("Mode", choices=["1", "2"], default="1")
         if mode_choice == "1":
-            hierarchy_mode = "collaborative"
-            console.print("[bold purple]Collaborative mode[/bold purple]")
-            break
-        else:
             hierarchy_mode = "managerial"
             console.print("[bold purple]Managerial mode[/bold purple]")
+            break
+        else:
+            hierarchy_mode = "collaborative"
+            console.print("[bold purple]Collaborative mode[/bold purple]")
             break
     return hierarchy_mode
 
@@ -425,8 +425,11 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
     """
 
     tts_client: TTS = None  # type: ignore
-    hierarchy_mode = select_hierarchy_mode()
-    interaction_mode = select_interaction_mode()
+    try:
+        hierarchy_mode = select_hierarchy_mode()
+        interaction_mode = select_interaction_mode()
+    except Exception as e:
+        raise Exception(f"Error selecting modes")
     if interaction_mode == "voice":
         tts_client = get_tts()
     agent = starting_agent
@@ -464,7 +467,6 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
         )
         if quit_flag:
             if tts_client:
-                tts_client.stop()
                 tts_client.shutdown()
             break
         if (not inputs) or skip:

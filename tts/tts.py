@@ -4,13 +4,74 @@ import pyaudio
 import threading
 import io
 import time
+import random
+import keyboard
+import markdown
+from bs4 import BeautifulSoup
+
+from openai import OpenAI
+from config.agent_config import AGENT_CONFIGS
+import config.agent_personality as personality
+
+config = AGENT_CONFIGS["triage_agent"]
+BASE_URL = config["BASE_URL"]
+API_KEY = config["API_KEY"]
+MODEL_NAME: str = config["MODEL_NAME"]
+PERSONALITY, _ = personality.get_personality()
+
+# Select personality based on config
+if PERSONALITY == "RANDOM":
+    selected_personality = random.choice(personality.PERSONALITIES)
+else:
+    selected_personality = personality.PERSONALITY_DICT[PERSONALITY]
+
+
+# Convert Markdown to plain text using BeautifulSoup
+def markdown_to_plaintext(md_text):
+    # Convert Markdown to HTML
+    html_content = markdown.markdown(md_text)
+    # Remove HTML tags to get plain text
+    soup = BeautifulSoup(html_content, "html.parser")
+    plaintext = soup.get_text()
+    return plaintext
+
+
+def summarise_response(query: str | None, response_text: str) -> str:
+    """
+    Summarise the response text using OpenAI API.
+    """
+    client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+    instructions = f"{selected_personality}\n\n You are the only point of contact of the user with the agent. You are to communicate with the user. Given the final response (and optionally the user query too), talk to the user about it in very brief like an assistant to their boss. You do not need to explain every detail, just the key points. Use simple language and avoid technical jargon. If the response is already very short, you can say it as is."
+    try:
+        output = str(
+            client.chat.completions.create(
+                model=MODEL_NAME.lstrip("openai/"),
+                messages=[
+                    {
+                        "role": "system",
+                        "content": instructions,
+                    },
+                    {
+                        "role": "user",
+                        "content": f"QUERY: {query}\n\nRESPONSE: {response_text}",
+                    },
+                ],
+            )
+            .choices[0]
+            .message.content
+        )
+    except Exception as e:
+        print(f"Error during summarization: {e}")
+        output = "The output is on your screen."  # Fallback to original response if error occurs
+
+    return markdown_to_plaintext(output)
 
 
 class TTS:
     def __init__(
         self,
-        voice: str = "af_sarah",
-        speed: float = 1.0,
+        voice: str = "am_michael(1)+am_fenrir(1)+am_echo(1)",
+        speed: float = 1.3,
         response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = "pcm",
         base_url: str = "http://localhost:8880/v1",
         api_key: str = "not-needed",
@@ -54,6 +115,11 @@ class TTS:
         self.stop_requested = False
         self.audio_buffer = io.BytesIO()
         self.current_position = 0
+
+        # Add hotkeys for control
+        keyboard.add_hotkey("ctrl+p", self.pause)
+        keyboard.add_hotkey("ctrl+r", self.play)
+        keyboard.add_hotkey("ctrl+s", self.stop)
 
         # Start playback in a new thread
         self.playback_thread = threading.Thread(
@@ -112,6 +178,13 @@ class TTS:
             # Reset state
             self.current_position = 0
 
+        try:
+            keyboard.remove_hotkey("ctrl+p")
+            keyboard.remove_hotkey("ctrl+r")
+            keyboard.remove_hotkey("ctrl+s")
+        except KeyError:
+            pass
+
     def pause(self):
         """Pause tts playback"""
         if self.is_playing and not self.is_paused:
@@ -122,22 +195,17 @@ class TTS:
         if self.is_playing and self.is_paused:
             self.is_paused = False
 
-    def speak(self, text: str):
+    def speak(self, text: str, user_query: str | None = None) -> str:
         """Speak the given text"""
+
+        text = summarise_response(user_query, text)
         self.start(text)
+
+        return text
 
     def shutdown(self):
         """Shutdown the tts system"""
         self.stop()
-
-        # Close the stream
-        if self._stream:
-            try:
-                self._stream.stop_stream()
-                self._stream.close()
-            except Exception:
-                pass
-            self._stream = None
 
         # Terminate PyAudio
         if self._pyaudio:
