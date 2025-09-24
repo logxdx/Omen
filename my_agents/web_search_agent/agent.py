@@ -1,4 +1,4 @@
-from base_agent import agent_config, my_agent
+from my_agents.base_agent import agent_config, my_agent
 from config.agent_config import AGENT_CONFIGS
 from tools.search_tools import searx_search, search_youtube_videos
 from tools.web_tools import (

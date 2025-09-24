@@ -71,7 +71,7 @@ def welcome_panel():
         Panel(
             welcome_text,
             title=Text("🤖 AI Multi-Agent CLI Interface", style="bold white"),
-            subtitle=Text("Version 1.1.0", style="bold white"),
+            subtitle=Text("Version 1.2.0", style="bold white"),
             border_style="purple",
             highlight=True,
             width=CONSOLE_WIDTH,

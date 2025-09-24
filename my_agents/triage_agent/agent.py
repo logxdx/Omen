@@ -1,4 +1,4 @@
-from base_agent import agent_config, my_agent
+from my_agents.base_agent import agent_config, my_agent
 from config.agent_config import AGENT_CONFIGS
 from tools.misc_tools import get_current_datetime
 from config.agent_personality import get_personality
@@ -17,5 +17,3 @@ triage_agent = my_agent(
         get_current_datetime,
     ],
 )
-
-__all__ = ["triage_agent"]

@@ -1,4 +1,4 @@
-from base_agent import agent_config, my_agent
+from my_agents.base_agent import agent_config, my_agent
 from config.agent_config import AGENT_CONFIGS
 from tools.python_tools import execute_code
 from tools.misc_tools import get_current_datetime

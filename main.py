@@ -1,5 +1,5 @@
 import asyncio
-from cli_interface.interface import run_cli
+from cli.interface import run_cli
 
 # Agent Definitions
 from my_agents import triage_agent
