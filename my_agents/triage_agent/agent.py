@@ -1,33 +1,21 @@
+from base_agent import agent_config, my_agent
 from config.agent_config import AGENT_CONFIGS
-from agents import Agent
-from agents.extensions.models.litellm_model import LitellmModel
 from tools.misc_tools import get_current_datetime
-import config.agent_personality as personality
-import random
-from .prompt import get_triage_agent_prompt
+from config.agent_personality import get_personality
+from .prompt import TRIAGE_AGENT_SYSTEM_PROMPT, TRIAGE_HANDOFF_INSTRUCTIONS
 
 config = AGENT_CONFIGS["triage_agent"]
-BASE_URL = config["BASE_URL"]
-API_KEY = config["API_KEY"]
-MODEL_NAME = config["MODEL_NAME"]
-PERSONALITY = str(config.get("PERSONALITY", "random")).upper()
+name, personality = get_personality()
+instructions: str = personality + "\n\n" + TRIAGE_AGENT_SYSTEM_PROMPT
 
-# Select personality based on config
-if PERSONALITY == "RANDOM":
-    selected_personality = random.choice(personality.PERSONALITIES)
-else:
-    selected_personality = personality.PERSONALITY_DICT[PERSONALITY]
+triage_agent = my_agent(
+    agent_name=name.capitalize() + " (Orchestrator)",
+    config=agent_config(**config),
+    instructions=instructions,
+    handoff_instructions=TRIAGE_HANDOFF_INSTRUCTIONS,
+    tools=[
+        get_current_datetime,
+    ],
+)
 
-litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
-
-
-def create_triage_agent(handoffs: list):
-    return Agent(
-        name=PERSONALITY.capitalize() + " (Orchestrator)",
-        instructions=get_triage_agent_prompt(selected_personality),
-        model=litellm_model,
-        handoffs=handoffs,
-        tools=[
-            get_current_datetime,
-        ],
-    )
+__all__ = ["triage_agent"]

@@ -355,8 +355,8 @@ async def stream_agent_response(
                         tool_name = getattr(event.item.raw_item, "name", "unknown tool")
                         tool_args = getattr(event.item.raw_item, "arguments", {})
                         tool_msg = f"\n🛠️ Tool: {tool_name} |"
-                        if tool_args:
-                            tool_msg += f" Args: {tool_args}\n"
+                        # if tool_args:
+                        #     tool_msg += f" Args: {tool_args}\n"
                         events_text.append(tool_msg)
 
                     # Handle tool outputs
@@ -365,7 +365,7 @@ async def stream_agent_response(
                             event.item.raw_item, "content", "No output"
                         )
                         tool_output_msg = f"\n📤 Tool output: {tool_output}\n"
-                        events_text.append(tool_output_msg)
+                        # events_text.append(tool_output_msg)
 
                     # Handle reasoning items
                     elif event.name == "reasoning_item_created":

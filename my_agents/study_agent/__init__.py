@@ -1,1 +1,1 @@
-from .agent import create_study_agent
+from .agent import study_agent

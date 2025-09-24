@@ -9,7 +9,7 @@ class AccessDeniedError(Exception):
     pass
 
 
-SANDBOX_PATH = Path(__file__).resolve().parent.parent.parent / "root" / "files"
+SANDBOX_PATH = Path(__file__).resolve().parent.parent.parent / "root"
 SANDBOX_PATH.mkdir(parents=True, exist_ok=True)
 
 

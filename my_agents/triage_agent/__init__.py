@@ -1,1 +1,1 @@
-from .agent import create_triage_agent
+from .agent import triage_agent

@@ -1,26 +1,45 @@
+# from config.agent_config import AGENT_CONFIGS
+# from agents import Agent
+# from agents.extensions.models.litellm_model import LitellmModel
+# from tools.misc_tools import get_current_datetime
+# from .prompt import STUDY_AGENT_PROMPT
+
+# config = AGENT_CONFIGS["study_agent"]
+# BASE_URL = config["BASE_URL"]
+# API_KEY = config["API_KEY"]
+# MODEL_NAME = config["MODEL_NAME"]
+
+# litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
+
+
+# def create_study_agent(handoffs=None):
+#     if handoffs is None:
+#         handoffs = []
+#     return Agent(
+#         name="Study Agent",
+#         instructions=STUDY_AGENT_PROMPT,
+#         model=litellm_model,
+#         handoffs=handoffs,
+#         tools=[
+#             get_current_datetime,
+#         ],
+#     )
+
+from base_agent import agent_config, my_agent
 from config.agent_config import AGENT_CONFIGS
-from agents import Agent
-from agents.extensions.models.litellm_model import LitellmModel
 from tools.misc_tools import get_current_datetime
-from .prompt import STUDY_AGENT_PROMPT
+from .prompt import STUDY_AGENT_SYSTEM_PROMPT, STUDY_AGENT_HANDOFF_INSTRUCTIONS
+
 
 config = AGENT_CONFIGS["study_agent"]
-BASE_URL = config["BASE_URL"]
-API_KEY = config["API_KEY"]
-MODEL_NAME = config["MODEL_NAME"]
+instructions: str = STUDY_AGENT_SYSTEM_PROMPT
 
-litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
-
-
-def create_study_agent(handoffs=None):
-    if handoffs is None:
-        handoffs = []
-    return Agent(
-        name="Study Agent",
-        instructions=STUDY_AGENT_PROMPT,
-        model=litellm_model,
-        handoffs=handoffs,
-        tools=[
-            get_current_datetime,
-        ],
-    )
+study_agent = my_agent(
+    agent_name="Study Agent",
+    config=agent_config(**config),
+    instructions=instructions,
+    handoff_instructions=STUDY_AGENT_HANDOFF_INSTRUCTIONS,
+    tools=[
+        get_current_datetime,
+    ],
+)

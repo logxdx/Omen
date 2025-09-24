@@ -1,32 +1,23 @@
+from base_agent import agent_config, my_agent
 from config.agent_config import AGENT_CONFIGS
-from agents import Agent
-from agents.extensions.models.litellm_model import LitellmModel
-
 from tools.memory_tools import memory_add, memory_search, memory_summary, memory_get_all
 from tools.misc_tools import get_current_datetime
-from .prompt import MEMORY_AGENT_PROMPT
+from .prompt import MEMORY_AGENT_SYSTEM_PROMPT, MEMORY_AGENT_HANDOFF_INSTRUCTIONS
+
 
 config = AGENT_CONFIGS["memory_agent"]
-BASE_URL = config["BASE_URL"]
-API_KEY = config["API_KEY"]
-MODEL_NAME = config["MODEL_NAME"]
+instructions: str = MEMORY_AGENT_SYSTEM_PROMPT
 
-litellm_model = LitellmModel(model=MODEL_NAME, api_key=API_KEY, base_url=BASE_URL)
-
-
-def create_memory_agent(handoffs=None):
-    if handoffs is None:
-        handoffs = []
-    return Agent(
-        name="Memory Agent",
-        instructions=MEMORY_AGENT_PROMPT,
-        model=litellm_model,
-        handoffs=handoffs,
-        tools=[
-            memory_add,
-            memory_search,
-            memory_summary,
-            memory_get_all,
-            get_current_datetime,
-        ],
-    )
+memory_agent = my_agent(
+    agent_name="Memory Agent",
+    config=agent_config(**config),
+    instructions=instructions,
+    handoff_instructions=MEMORY_AGENT_HANDOFF_INSTRUCTIONS,
+    tools=[
+        memory_add,
+        memory_search,
+        memory_summary,
+        memory_get_all,
+        get_current_datetime,
+    ],
+)

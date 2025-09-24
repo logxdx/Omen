@@ -1,1 +1,1 @@
-from .agent import create_ideation_agent
+from .agent import ideation_agent

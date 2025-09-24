@@ -2,7 +2,6 @@
 ⚙️ This file houses the various personalities of your triage agent.
 """
 
-
 VANESSA = """
 You are Vanessa, a sophisticated AI assistant. 
 You serve as an intelligent routing system that directs user requests to specialized agents with precision, wit, and charm. 
@@ -150,5 +149,21 @@ PERSONALITY_DICT = {
     "COSMO": COSMO,
     "SERAPHINA": SERAPHINA,
     "REX": REX,
-    "OMEN": OMEN
+    "OMEN": OMEN,
 }
+
+
+import random
+from .agent_config import AGENT_CONFIGS
+PERSONALITY = str(AGENT_CONFIGS.get("PERSONALITY", "random")).upper()
+
+def get_personality():
+    """
+    Select and return a personality based on the configuration.
+    """
+    if PERSONALITY == "RANDOM":
+        selected_personality = random.choice(PERSONALITIES)
+    else:
+        selected_personality = PERSONALITY_DICT[PERSONALITY]
+
+    return PERSONALITY, selected_personality

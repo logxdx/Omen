@@ -1,50 +1,39 @@
 import asyncio
+from cli_interface.interface import run_cli
 
 # Agent Definitions
-from my_agents.ideation_agent import create_ideation_agent
-from my_agents.web_search_agent import create_web_search_agent
-from my_agents.filesystem_agent import create_filesystem_agent
-from my_agents.triage_agent import create_triage_agent
-from my_agents.study_agent import create_study_agent
-from my_agents.memory_agent import create_memory_agent
-from my_agents.analysis_agent import create_analysis_agent
+from my_agents import triage_agent
+from my_agents import web_search_agent
+from my_agents import filesystem_agent
+from my_agents import ideation_agent
+from my_agents import study_agent
+from my_agents import memory_agent
+from my_agents import analysis_agent
 
-# Create agents
-ideation_agent = create_ideation_agent()
-web_search_agent = create_web_search_agent()
-filesystem_agent = create_filesystem_agent()
-study_agent = create_study_agent()
-memory_agent = create_memory_agent()
-analysis_agent = create_analysis_agent()
-
-# triage agent with handoffs to necessary agents
-triage_agent = create_triage_agent(handoffs=[web_search_agent, filesystem_agent, memory_agent, analysis_agent])
-
-# Add handoffs to all other agents
-filesystem_agent.handoffs.extend([triage_agent])
-web_search_agent.handoffs.extend([triage_agent])
-memory_agent.handoffs.extend([triage_agent])
-analysis_agent.handoffs.extend([triage_agent, filesystem_agent])
-ideation_agent.handoffs.extend([triage_agent, web_search_agent, memory_agent])
-study_agent.handoffs.extend([triage_agent, web_search_agent, filesystem_agent, memory_agent, analysis_agent])
+# Agent handoffs
+triage_agent.add_handoffs([web_search_agent, filesystem_agent, memory_agent, analysis_agent])
+web_search_agent.add_handoffs([triage_agent])
+filesystem_agent.add_handoffs([triage_agent])
+memory_agent.add_handoffs([triage_agent])
+analysis_agent.add_handoffs([triage_agent, web_search_agent, filesystem_agent])
+ideation_agent.add_handoffs([web_search_agent, memory_agent])
+study_agent.add_handoffs([web_search_agent, filesystem_agent, memory_agent, analysis_agent])
 
 # Agent registry
 agents = {
-    "triage": triage_agent,
-    "web": web_search_agent,
-    "fs": filesystem_agent,
-    "idea": ideation_agent,
-    "study": study_agent,
-    "memory": memory_agent,
-    "analysis": analysis_agent,
+    "triage": triage_agent.agent,
+    "web": web_search_agent.agent,
+    "fs": filesystem_agent.agent,
+    "idea": ideation_agent.agent,
+    "study": study_agent.agent,
+    "memory": memory_agent.agent,
+    "analysis": analysis_agent.agent,
 }
+
 
 async def main():
     """Main conversation loop"""
-
-    from cli_interface.interface import run_cli
-
-    await run_cli(agents, triage_agent)
+    await run_cli(agents, triage_agent.agent)
 
 
 if __name__ == "__main__":

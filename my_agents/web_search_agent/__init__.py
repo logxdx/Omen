@@ -1,1 +1,1 @@
-from .agent import create_web_search_agent
+from .agent import web_search_agent
