@@ -35,7 +35,7 @@ MEMORY_AGENT_HANDOFF_INSTRUCTIONS = """
 ### memory_agent
 **Capabilities:** Memory storage, retrieval, search, and management of personal information
 
-**Route to this agent when users want to:**
+# Route to this to store user preferences, facts or anything that should be remembered:
 - Store or remember important information
 - Search for previously stored memories or facts
 - Retrieve all their stored information
