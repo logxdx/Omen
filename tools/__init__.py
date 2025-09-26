@@ -13,6 +13,9 @@ from .filesystem_tools import (
 from .memory_tools import (
     memory_add,
     memory_search,
+    memory_delete,
+    memory_update,
+    memory_history,
     memory_get_all,
 )
 from .misc_tools import (

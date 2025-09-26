@@ -6,6 +6,11 @@ Provides a singleton mem0 Memory instance plus helper functions.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import json
 from threading import Lock
 from typing import Any, Dict, Optional
@@ -42,7 +47,10 @@ def add_memory(
         Result dict from mem0 add.
     """
     m = get_memory()
-    add_result = m.add(messages=text, user_id=user_id, metadata=metadata)
+    try:
+        add_result = m.add(messages=text, user_id=user_id, metadata=metadata)
+    except Exception as e:
+        return f"Error adding memory: {str(e)}"
 
     print(f"\n===\n{json.dumps(add_result, indent=2)}\n===\n")
 
@@ -64,11 +72,16 @@ def add_memory(
     return formated_output if formated_output else "No changes made."
 
 
-def search_memories(query: str, user_id: str = "logx", limit: int = 5, use_graph: bool = False) -> str:
+def search_memories(
+    query: str, user_id: str = "logx", limit: int = 5, use_graph: bool = False
+) -> str:
     """Search memories relevant to query (simple wrapper) ensuring list[dict] return."""
 
     m = get_memory()
-    search_results = m.search(query, user_id=user_id)
+    try:
+        search_results = m.search(query, user_id=user_id)
+    except Exception as e:
+        return f"Error searching memories: {str(e)}"
 
     print(f"\n===\n{json.dumps(search_results, indent=2)}\n===\n")
 
@@ -88,9 +101,78 @@ def search_memories(query: str, user_id: str = "logx", limit: int = 5, use_graph
     return formatted_output if formatted_output else "No relevant memories found."
 
 
+def delete_memory(memory_id: str) -> str:
+    """Delete a memory entry by ID.
+
+    Args:
+        memory_id: The ID of the memory to delete.
+    Returns:
+        Result dict from mem0 delete.
+    """
+    m = get_memory()
+    try:
+        delete_result = m.delete(memory_id=memory_id)
+        return f"ID: {memory_id} {delete_result.get('message', '')}"
+    except Exception as e:
+        return f"Error deleting memory ID {memory_id}: {str(e)}"
+
+
+def update_memory(memory_id: str, data: str) -> str:
+    """Update a memory entry by ID.
+
+    Args:
+        memory_id: The ID of the memory to update.
+        data: The new data to update the memory with.
+    """
+    m = get_memory()
+    try:
+        update_result = m.update(memory_id=memory_id, data=data)
+        return f"ID: {memory_id} {update_result.get('message', '')}"
+    except Exception as e:
+        return f"Error updating memory ID {memory_id}: {str(e)}"
+
+
+def history_memory(memory_id: str) -> str:
+    """Retrieve the history of a memory entry by ID.
+    Args:
+        memory_id: The ID of the memory to retrieve history for.
+    """
+    m = get_memory()
+    try:
+        history_result = m.history(memory_id=memory_id)
+    except Exception as e:
+        return f"Error retrieving history for memory ID {memory_id}: {str(e)}"
+
+    print(f"\n===\n{json.dumps(history_result, indent=2)}\n===\n")
+
+    formatted_output = ""
+    for history in history_result:
+        if history.get("id"):
+            formatted_output += f"ID: {history.get("id")}\n"
+        if history.get("old_memory"):
+            formatted_output += f"Old Memory: {history.get("old_memory")}\n"
+        if history.get("new_memory"):
+            formatted_output += f"New Memory: {history.get("new_memory")}\n"
+        if history.get("created_at"):
+            formatted_output += f"Created At: {history.get("created_at")}\n"
+        if history.get("updated_at"):
+            formatted_output += f"Updated At: {history.get("updated_at")}\n"
+        if history.get("is_deleted") is not None:
+            formatted_output += f"Deleted: {history.get("is_deleted")}\n"
+
+    return (
+        formatted_output
+        if formatted_output
+        else "No history found for the specified memory ID."
+    )
+
+
 def get_all_memories(user_id: str = "logx", use_graph: bool = False) -> str:
     m = get_memory()
-    all_memories = m.get_all(user_id=user_id)
+    try:
+        all_memories = m.get_all(user_id=user_id)
+    except Exception as e:
+        return f"Error retrieving memories: {str(e)}"
 
     print(f"\n===\n{json.dumps(all_memories, indent=2)}\n===\n")
 
@@ -113,3 +195,34 @@ def get_all_memories(user_id: str = "logx", use_graph: bool = False) -> str:
 
     return formatted_output if formatted_output else "No memories found."
 
+
+if __name__ == "__main__":
+
+    print("🧪 Testing Mem0 setup...")
+
+    memory = get_memory()
+    print("Memory instance:", memory.api_version)
+
+    test_messages = [
+        {"role": "user", "content": "I prefer luxury hotels with spa services."},
+        {
+            "role": "assistant",
+            "content": "I'll remember you prefer luxury hotels with spa services for future recommendations.",
+        },
+    ]
+
+    # results = add_memory(
+    #     test_messages, user_id="test_user", metadata={"category": "preferences"}
+    # )
+    # print(f"Added memories:\n---\n{results}")
+
+    search_mems = search_memories(
+        "What kind of hotels do I like?", user_id="test_user", limit=3
+    )
+    print(f"Searched memories:\n---\n{search_mems}")
+
+    test_memories = get_all_memories(user_id="test_user")
+    print(f"Retrieved memories:\n---\n{test_memories}")
+
+    history = history_memory("4521a84f-0ca5-4568-806d-e756fb85bb1d")
+    print(f"Memory history:\n---\n{history}")
