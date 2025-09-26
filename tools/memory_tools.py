@@ -24,26 +24,28 @@ def memory_add(text: str, user_id: str = "logx") -> str:
 
 
 @function_tool
-def memory_search(query: str, user_id: str = "logx", limit: int = 5) -> str:
+def memory_search(query: str, user_id: str = "logx", limit: int = 5, use_graph: bool = False) -> str:
     """Semantic search over stored memories.
 
     Args:
         query: Search query text.
         user_id: User identifier (default: "logx").
         limit: Max number of results.
+        use_graph: Whether to include graph relations in the output.
     Returns:
         List of memory entries.
     """
-    return search_memories(query, user_id=user_id, limit=limit)
+    return search_memories(query, user_id=user_id, limit=limit, use_graph=use_graph)
 
 
 @function_tool
-def memory_get_all(user_id: str = "logx") -> str:
+def memory_get_all(user_id: str = "logx", use_graph: bool = False) -> str:
     """Get all memories for a user (may be large).
 
     Args:
         user_id: User identifier (default: "logx").
+        use_graph: Whether to include graph relations in the output.
     Returns:
         All memory entries for the user.
     """
-    return get_all_memories(user_id=user_id)
+    return get_all_memories(user_id=user_id, use_graph=use_graph)

@@ -44,9 +44,13 @@ def add_memory(
     m = get_memory()
     add_result = m.add(messages=text, user_id=user_id, metadata=metadata)
 
+    print(f"\n===\n{json.dumps(add_result, indent=2)}\n===\n")
+
     formated_output = ""
-    for result in add_result.get("results", []):
-        formated_output += f"{result.get("event", "")}: {result.get("memory", "")}\n"
+    results = add_result.get("results", [])
+    if results:
+        for result in results:
+            formated_output += f"ID: {result.get("id", "")} | {result.get("event", "")}: {result.get("memory", "")}\n"
 
     relations: dict = add_result.get("relations", {})  # type: ignore
     if relations:
@@ -60,43 +64,52 @@ def add_memory(
     return formated_output if formated_output else "No changes made."
 
 
-def search_memories(query: str, user_id: str = "logx", limit: int = 20) -> str:
+def search_memories(query: str, user_id: str = "logx", limit: int = 5, use_graph: bool = False) -> str:
     """Search memories relevant to query (simple wrapper) ensuring list[dict] return."""
 
     m = get_memory()
     search_results = m.search(query, user_id=user_id)
+
+    print(f"\n===\n{json.dumps(search_results, indent=2)}\n===\n")
+
     formatted_output = ""
     results = search_results.get("results", [])
     if results:
         formatted_output += "MEMORIES:\n"
         for idx, res in enumerate(results[:limit], 1):
-            formatted_output += f"{idx}. {res['memory']} | Created: {res['created_at']} | Updated: {res['updated_at']}\n"
+            formatted_output += f"ID: {res['id']}\nMemory: {res['memory']}\nCreated: {res['created_at']}\nUpdated: {res['updated_at']}\nMetadata: {json.dumps(res.get('metadata', {}))}\n\n"
 
     relations: list[dict] = search_results.get("relations", [])
-    if relations:
+    if relations and use_graph:
         formatted_output += "\nRELATIONS:\n"
         for idx, relation in enumerate(relations[:limit], 1):
             formatted_output += f"{idx}. {relation['source']} ->  {relation['relationship']} -> {relation['destination']}\n"
 
-    return formatted_output
+    return formatted_output if formatted_output else "No relevant memories found."
 
 
-def get_all_memories(user_id: str = "logx") -> str:
+def get_all_memories(user_id: str = "logx", use_graph: bool = False) -> str:
     m = get_memory()
-    result = m.get_all(user_id=user_id)
-    formatted_output = ""
-    for res in result.get("results", []):
-        if res.get("memory"):
-            formatted_output += f"Memory: {res.get("memory")} "
-        if res.get("created_at"):
-            formatted_output += f"| Created: {res.get("created_at")} "
-        if res.get("updated_at"):
-            formatted_output += f"| Updated: {res.get("updated_at")} "
-        if res.get("metadata"):
-            formatted_output += f"| Metadata: {json.dumps(res.get("metadata"))}\n"
+    all_memories = m.get_all(user_id=user_id)
 
-    for res in result.get("relations", []):
-        formatted_output += f"Relation: {res.get("source", "")} -> {res.get("relationship", "")} -> {res.get("target", "")}\n"
+    print(f"\n===\n{json.dumps(all_memories, indent=2)}\n===\n")
+
+    formatted_output = ""
+    for res in all_memories.get("results", []):
+        if res.get("id"):
+            formatted_output += f"ID: {res.get("id")}\n"
+        if res.get("memory"):
+            formatted_output += f"Memory: {res.get("memory")}\n"
+        if res.get("created_at"):
+            formatted_output += f"Created: {res.get("created_at")}\n"
+        if res.get("updated_at"):
+            formatted_output += f"Updated: {res.get("updated_at")}\n"
+        if res.get("metadata"):
+            formatted_output += f"Metadata: {json.dumps(res.get("metadata"))}\n\n"
+
+    if use_graph:
+        for res in all_memories.get("relations", []):
+            formatted_output += f"Relation: {res.get("source", "")} -> {res.get("relationship", "")} -> {res.get("target", "")}\n"
 
     return formatted_output if formatted_output else "No memories found."
 

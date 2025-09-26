@@ -127,3 +127,23 @@ class YoutubeSearch:
 
         return self._search(search_terms, max_results, start)
 
+
+# Example usage:
+if __name__ == "__main__":
+    import json
+
+    search = YoutubeSearch()
+    query = "gabriela"
+    results = search.search(query, max_results=5)
+    formatted_output = f"QUERY: {query}\n\n"
+
+    for i, video in enumerate(results, start=1):
+        formatted_output += (
+            f"{i}. Title: {video['title']}\n"
+            f"   URL: https://www.youtube.com/watch?v={video['id']}\n"
+            f"   Channel: {video['channel']}\n"
+            f"   Duration: {video['duration']}\n"
+            f"   Views: {video['views']}\n"
+            f"   Published: {video['publish_time']}\n\n")
+
+    print(formatted_output.strip())

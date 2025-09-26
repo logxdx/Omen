@@ -365,7 +365,7 @@ async def stream_agent_response(
                         tool_args = getattr(event.item.raw_item, "arguments", {})
                         tool_msg = f"\n🛠️ Tool: {tool_name} |"
                         if tool_args:
-                            tool_msg += f" Args: {str(tool_args)[:50]}\n"
+                            tool_msg += f" Args: {str(tool_args)[:100]}\n"
                         events_text.append(tool_msg)
 
                     # Handle tool outputs
