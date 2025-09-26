@@ -1,6 +1,6 @@
 from my_agents.base_agent import agent_config, my_agent
 from config.agent_config import AGENT_CONFIGS
-from tools.memory_tools import memory_add, memory_search, memory_summary, memory_get_all
+from tools.memory_tools import memory_add, memory_search, memory_get_all
 from tools.misc_tools import get_current_datetime
 from .prompt import MEMORY_AGENT_SYSTEM_PROMPT, MEMORY_AGENT_HANDOFF_INSTRUCTIONS
 
@@ -16,7 +16,6 @@ memory_agent = my_agent(
     tools=[
         memory_add,
         memory_search,
-        memory_summary,
         memory_get_all,
         get_current_datetime,
     ],

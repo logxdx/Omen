@@ -42,8 +42,22 @@ def add_memory(
         Result dict from mem0 add.
     """
     m = get_memory()
-    result = m.add(messages=text, user_id=user_id, metadata=metadata)
-    return json.dumps(result, indent=2)
+    add_result = m.add(messages=text, user_id=user_id, metadata=metadata)
+
+    formated_output = ""
+    for result in add_result.get("results", []):
+        formated_output += f"{result.get("event", "")}: {result.get("memory", "")}\n"
+
+    relations: dict = add_result.get("relations", {})  # type: ignore
+    if relations:
+        for relation in relations.get("added_entities", []):
+            relation = relation[0]
+            formated_output += f"Relation added: {relation.get("source", "")} -> {relation.get("relationship", "")} -> {relation.get("target", "")}\n"
+        for relation in relations.get("deleted_relations", []):
+            relation = relation[0]
+            formated_output += f"Relation deleted: {relation.get("source", "")} -> {relation.get("relationship", "")} -> {relation.get("target", "")}\n"
+
+    return formated_output if formated_output else "No changes made."
 
 
 def search_memories(query: str, user_id: str = "logx", limit: int = 20) -> str:
@@ -56,9 +70,9 @@ def search_memories(query: str, user_id: str = "logx", limit: int = 20) -> str:
     if results:
         formatted_output += "MEMORIES:\n"
         for idx, res in enumerate(results[:limit], 1):
-            formatted_output += f"{idx}. {res['memory']} | Score: {res['score']} | Created: {res['created_at']} | Updated: {res['updated_at']}\n"
+            formatted_output += f"{idx}. {res['memory']} | Created: {res['created_at']} | Updated: {res['updated_at']}\n"
 
-    relations = search_results.get("relations", [])
+    relations: list[dict] = search_results.get("relations", [])
     if relations:
         formatted_output += "\nRELATIONS:\n"
         for idx, relation in enumerate(relations[:limit], 1):
@@ -70,45 +84,19 @@ def search_memories(query: str, user_id: str = "logx", limit: int = 20) -> str:
 def get_all_memories(user_id: str = "logx") -> str:
     m = get_memory()
     result = m.get_all(user_id=user_id)
-    return json.dumps(result, indent=2)
+    formatted_output = ""
+    for res in result.get("results", []):
+        if res.get("memory"):
+            formatted_output += f"Memory: {res.get("memory")} "
+        if res.get("created_at"):
+            formatted_output += f"| Created: {res.get("created_at")} "
+        if res.get("updated_at"):
+            formatted_output += f"| Updated: {res.get("updated_at")} "
+        if res.get("metadata"):
+            formatted_output += f"| Metadata: {json.dumps(res.get("metadata"))}\n"
 
+    for res in result.get("relations", []):
+        formatted_output += f"Relation: {res.get("source", "")} -> {res.get("relationship", "")} -> {res.get("target", "")}\n"
 
-def summarize_user_memories(user_id: str = "logx") -> str:
-    """Return a textual summary of stored memories (simple heuristic)."""
-    results = get_all_memories(user_id=user_id)
-    if not results:
-        return "No memories stored yet."
-    lines = ["Stored memories summary:"]
-    return "\n".join(lines)
+    return formatted_output if formatted_output else "No memories found."
 
-
-if __name__ == "__main__":
-    # Simple test / demo
-    mem = get_memory()
-    print("Memory instance:", mem.api_version)
-
-    print("Adding memory...")
-    res = add_memory(
-        [
-            {
-                "role": "user",
-                "content": "I like pizzas, burgers, hot salad, green veggies and fruits too.",
-            }
-        ],
-        user_id="testuser",
-    )
-    print("Add result:", res)
-
-    print("Searching memories...")
-    search_res = search_memories(
-        "What healthy snacks should I have right now?", user_id="testuser", limit=3
-    )
-    print("Search results:", search_res)
-
-    print("All memories:")
-    all_mem = get_all_memories(user_id="testuser")
-    print(all_mem)
-
-    print("Memory summary:")
-    summary = summarize_user_memories(user_id="testuser")
-    print(summary)

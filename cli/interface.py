@@ -88,7 +88,10 @@ def help_panel():
     help_text.append("\n")
     help_text.append("  /help or /h - Show this help message\n", style="white")
     help_text.append("  /agents or /a - List and switch agents\n", style="white")
-    help_text.append("  /mode or /hierarchy - Change hierarchy mode\n", style="white")
+    help_text.append("  /hmode or /hierarchy - Change hierarchy mode\n", style="white")
+    help_text.append(
+        "  /imode or /interaction - Change interaction mode\n", style="white"
+    )
     help_text.append("  /clear or /c - Clear conversation\n", style="white")
     help_text.append("  /quit or /q - Exit the application\n", style="dim")
     help_text.append("  Use Ctrl+X to interrupt responses\n", style="purple")
@@ -200,14 +203,17 @@ def handle_special_commands(
     agent: Agent,
     agents: dict,
     hierarchy_mode: str,
-) -> tuple[bool, list[TResponseInputItem], Agent, dict, str, bool]:
+    interaction_mode: str,
+) -> tuple[bool, bool, list[TResponseInputItem], Agent, dict, str, str]:
     """
     Handle special commands like quit and clear.
+
+
     """
     if user_msg.lower() in ["quit", "exit", "/q", "/quit", "/bye", "/exit"]:
         console.clear()
         console.print("[bold green]👋 Goodbye![/bold green]")
-        return True, inputs, agent, agents, hierarchy_mode, True  # True to quit
+        return True, True, inputs, agent, agents, hierarchy_mode, interaction_mode
     elif user_msg.lower() in ["/clear", "/c"]:
         inputs = []
         console.clear()
@@ -215,17 +221,20 @@ def handle_special_commands(
         welcome_panel()
         current_display = str(agent.name).capitalize()
         console.print(f"[dim]Current agent: {current_display}[/dim]")
-        return False, inputs, agent, agents, hierarchy_mode, True
+        return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
     elif user_msg.lower() in ["/help", "/h"]:
         help_panel()
-        return False, inputs, agent, agents, hierarchy_mode, True
-    elif user_msg.lower() in ["/mode", "/hierarchy", "/hmode"]:
+        return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
+    elif user_msg.lower() in ["/hierarchy", "/hmode"]:
         hierarchy_mode = select_hierarchy_mode()
-        return False, inputs, agent, agents, hierarchy_mode, True
+        return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
     elif user_msg.lower().split()[0] in ["/agents", "/a"]:
         agent = handle_agents_command(user_msg, agents, agent)
-        return False, inputs, agent, agents, hierarchy_mode, True
-    return False, inputs, agent, agents, hierarchy_mode, False
+        return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
+    elif user_msg.lower() in ["/interaction", "/imode"]:
+        interaction_mode = select_interaction_mode()
+        return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
+    return False, False, inputs, agent, agents, hierarchy_mode, interaction_mode
 
 
 async def stream_agent_response(
@@ -355,8 +364,8 @@ async def stream_agent_response(
                         tool_name = getattr(event.item.raw_item, "name", "unknown tool")
                         tool_args = getattr(event.item.raw_item, "arguments", {})
                         tool_msg = f"\n🛠️ Tool: {tool_name} |"
-                        # if tool_args:
-                        #     tool_msg += f" Args: {tool_args}\n"
+                        if tool_args:
+                            tool_msg += f" Args: {str(tool_args)[:50]}\n"
                         events_text.append(tool_msg)
 
                     # Handle tool outputs
@@ -364,8 +373,9 @@ async def stream_agent_response(
                         tool_output = getattr(
                             event.item.raw_item, "content", "No output"
                         )
-                        tool_output_msg = f"\n📤 Tool output: {tool_output}\n"
-                        # events_text.append(tool_output_msg)
+                        if tool_output:
+                            tool_output_msg = f"\n📤 Tool output: {tool_output}\n"
+                            events_text.append(tool_output_msg)
 
                     # Handle reasoning items
                     elif event.name == "reasoning_item_created":
@@ -433,7 +443,7 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
     if interaction_mode == "voice":
         tts_client = get_tts()
     agent = starting_agent
-    handle_special_commands("/c", [], agent, agents, hierarchy_mode)
+    handle_special_commands("/c", [], agent, agents, hierarchy_mode, interaction_mode)
     inputs: List[TResponseInputItem] = [
         {
             "content": "Short Intro. State your capabilities and ask how you can assist.",
@@ -445,6 +455,8 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
     skip: bool = False
 
     if interaction_mode == "voice":
+        if not tts_client:
+            tts_client = get_tts()
         try:
             speech = tts_client.speak(str(result.final_output))
             console.print(
@@ -462,8 +474,10 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
         inputs.append({"content": user_msg, "role": "user"})
 
         # Handle special commands
-        quit_flag, inputs, agent, agents, hierarchy_mode, skip = (
-            handle_special_commands(user_msg, inputs, agent, agents, hierarchy_mode)
+        quit_flag, skip, inputs, agent, agents, hierarchy_mode, interaction_mode = (
+            handle_special_commands(
+                user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode
+            )
         )
         if quit_flag:
             if tts_client:

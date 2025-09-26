@@ -11,13 +11,17 @@ from my_agents import memory_agent
 from my_agents import analysis_agent
 
 # Agent handoffs
-triage_agent.add_handoffs([web_search_agent, filesystem_agent, memory_agent, analysis_agent])
+triage_agent.add_handoffs(
+    [memory_agent, web_search_agent, filesystem_agent, analysis_agent]
+)
 web_search_agent.add_handoffs([triage_agent])
 filesystem_agent.add_handoffs([triage_agent])
 memory_agent.add_handoffs([triage_agent])
 analysis_agent.add_handoffs([triage_agent, web_search_agent, filesystem_agent])
 ideation_agent.add_handoffs([web_search_agent, memory_agent])
-study_agent.add_handoffs([web_search_agent, filesystem_agent, memory_agent, analysis_agent])
+study_agent.add_handoffs(
+    [web_search_agent, filesystem_agent, memory_agent, analysis_agent]
+)
 
 # Agent registry
 agents = {

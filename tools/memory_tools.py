@@ -7,7 +7,6 @@ from tools.utils.mem0_memory import (
     add_memory,
     search_memories,
     get_all_memories,
-    summarize_user_memories,
 )
 
 
@@ -48,15 +47,3 @@ def memory_get_all(user_id: str = "logx") -> str:
         All memory entries for the user.
     """
     return get_all_memories(user_id=user_id)
-
-
-@function_tool
-def memory_summary(user_id: str = "logx") -> str:
-    """Return a simple textual summary of the user's stored memories.
-
-    Args:
-        user_id: User identifier (default: "logx").
-    Returns:
-        A summary of the user's stored memories.
-    """
-    return summarize_user_memories(user_id=user_id)

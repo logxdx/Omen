@@ -41,7 +41,7 @@ def summarise_response(query: str | None, response_text: str) -> str:
     Summarise the response text using OpenAI API.
     """
     client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-    instructions = f"{selected_personality}\n\n You are the only point of contact of the user with the agent. You are to communicate with the user. Given the final response (and optionally the user query too), talk to the user about it in very brief like an assistant to their boss. You do not need to explain every detail, just the key points. Use simple language and avoid technical jargon. If the response is already very short, you can say it as is."
+    instructions = f"{selected_personality}\n\n You are the only point of contact of the user with the agent. You are to communicate with the user. Given the final response (and optionally the user query too), talk to the user about it in very brief like an assistant to their boss. You do not need to explain every detail, just the key points. Use simple language and avoid technical jargon. If the response is already very short, you can say it as is. Make sure the response is in plaintext with no emojis, artifacts (URLs, etc) or shortforms (e.g. -> example, i.e. -> that is)."
     try:
         output = str(
             client.chat.completions.create(

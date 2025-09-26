@@ -15,9 +15,11 @@ MEM0_CONFIG = {
     "llm": {
         "provider": "groq",
         "config": {
-            "model": "openai/gpt-oss-20b",
+            "model": "openai/gpt-oss-120b",
             "api_key": os.getenv("GROQ_API_KEY"),
             # "openai_base_url": os.getenv("GROQ_BASE_URL"),
+            "max_tokens": 2048,
+            "temperature": 0.2,
         },
     },
     "embedder": {

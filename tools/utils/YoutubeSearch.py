@@ -127,18 +127,3 @@ class YoutubeSearch:
 
         return self._search(search_terms, max_results, start)
 
-
-# Example usage:
-if __name__ == "__main__":
-    import json
-
-    search = YoutubeSearch()
-    results = search.search("embed gemma", max_results=10)
-    for result in results:
-        print(f"Title: {result['title']}")
-        print(f"URL: {result['url']}")
-        print(f"Channel: {result['channel']}")
-        print(f"Duration: {result['duration']}")
-        print(f"Views: {result['views']}")
-        print(f"Publish Time: {result['publish_time']}")
-        print("-" * 40)

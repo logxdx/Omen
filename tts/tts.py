@@ -41,7 +41,8 @@ def summarise_response(query: str | None, response_text: str) -> str:
     Summarise the response text using OpenAI API.
     """
     client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-    instructions = f"{selected_personality}\n\n You are the only point of contact of the user with the agent. You are to communicate with the user. Given the final response (and optionally the user query too), talk to the user about it in very brief like an assistant to their boss. You do not need to explain every detail, just the key points. Use simple language and avoid technical jargon. If the response is already very short, you can say it as is."
+    instructions = f"{selected_personality}\n\n You are the only point of contact of the user with the agent. You are to communicate with the user. Given the final response (and optionally the user query too), talk to the user about it in very brief like an assistant to their boss. You do not need to explain every detail, just the key points. Use simple language and avoid technical jargon. If the response is already very short, you can say it as is. Make sure the response is in plaintext with no emojis, artifacts (URLs, etc) or shortforms (e.g. -> example, i.e. -> that is)."
+
     try:
         output = str(
             client.chat.completions.create(
@@ -71,7 +72,7 @@ class TTS:
     def __init__(
         self,
         voice: str = "am_michael(1)+am_fenrir(1)+am_echo(1)",
-        speed: float = 1.3,
+        speed: float = 1.2,
         response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = "pcm",
         base_url: str = "http://localhost:8880/v1",
         api_key: str = "not-needed",
@@ -197,10 +198,12 @@ class TTS:
 
     def speak(self, text: str, user_query: str | None = None) -> str:
         """Speak the given text"""
-
-        text = summarise_response(user_query, text)
+        if len(text.strip()) > 200:
+            try:
+                text = summarise_response(user_query, text)
+            except Exception:
+                text = text[:200] + "..."
         self.start(text)
-
         return text
 
     def shutdown(self):

@@ -96,6 +96,6 @@ def search_youtube_videos(query: str, num_results: int = 5) -> str:
             f"   Channel: {video['channel']}\n"
             f"   Duration: {video['duration']}\n"
             f"   Views: {video['views']}\n"
-            f"   Uploaded: {video['uploaded']}\n\n"
+            f"   Published: {video['publish_time']}\n\n"
         )
     return formatted_output.strip()
