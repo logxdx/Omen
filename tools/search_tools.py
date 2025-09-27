@@ -21,7 +21,7 @@ def duckduckgo_search(
     Returns:
         List of search results
     """
-    formatted_output = f"QUERY: {query}\n\nRESULTS:\n---\n"
+    formatted_output = f"QUERY: {query}\n\n"
     for i, result in enumerate(
         DuckDuckGoSearch.search(query, max_results=max_results), 1
     ):
@@ -52,14 +52,12 @@ def searx_search(
     """
 
     search_results = SearxSearch.search(query=query, max_results=num_results)
-    formatted_output = f"QUERY: {search_results.query}\\n"
+    formatted_output = f"QUERY: {search_results.query}\n\n"
 
     if search_results.answers:
-        formatted_output += "ANSWERS:\n---\n"
         for answer in search_results.answers:
             formatted_output += f"{answer}\n\n"
 
-    formatted_output += "RESULTS:\n---\n"
     for i, result in enumerate(search_results.results, 1):
         formatted_output += (
             f"{i}. [{result.title}]({result.link})\nSnippet: {result.description}\n\n"
