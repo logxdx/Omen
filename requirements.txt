@@ -2,7 +2,6 @@
 openai-agents==0.3.0
 requests==2.32.4
 beautifulsoup4==4.13.5
-search-ai-core==1.0.0
 spider_rs==0.0.57
 pydantic==2.11.7
 html2text==2025.4.15
@@ -12,6 +11,7 @@ litellm==1.72.0
 python-dotenv==1.1.1
 crawl4ai==0.7.0
 ddgs==9.4.3
+chroma==1.1.0
 mem0ai==0.1.118
 yt-dlp==2025.9.5
 
@@ -19,8 +19,8 @@ yt-dlp==2025.9.5
 # stt
 faster_whisper==1.2.0
 halo==0.0.31
-openwakeword==0.6.0
-silero-vad==6.0.0a
+openwakeword>=0.4.0
+silero-vad==6.0.0
 
 # tts
 markdown==3.8.2

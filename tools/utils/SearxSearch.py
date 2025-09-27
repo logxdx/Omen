@@ -5,16 +5,13 @@ Search Operator Filters
 from datetime import date
 from typing import Annotated
 
-from pydantic import BaseModel, Field, AfterValidator
+from pydantic import BaseModel, Field
 from pydantic.types import StringConstraints
-from publicsuffix2 import PublicSuffixList
 
 
 FileType = Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9]{2,10}$")]
 Keyword = Annotated[str, StringConstraints(pattern=r"^[^\s]+$")]
 StockTicker = Annotated[str, StringConstraints(pattern=r"^[A-Z]{1,5}(\.[A-Z])?$")]
-
-psl = PublicSuffixList()
 
 
 def to_list(val: str | list[str] | None) -> list[str]:
@@ -42,31 +39,14 @@ def group_excludes(op: str, values: list[str]) -> list[str]:
     return [f"-{op}:{v}" for v in values]
 
 
-def validate_tld(v: str | list[str] | None):
-    # TODO: make type a generic type
-    if not v:
-        return v
-
-    tlds = v if isinstance(v, list) else [v]
-    for tld in tlds:
-        if not psl.get_tld(tld, strict=True):
-            raise ValueError(
-                f"{tld!r} is an invalid top-level domain according to https://publicsuffix.org"
-            )
-
-    return v
-
-
 class Filters(BaseModel):
     # fmt: off
     sites: str | list[str] | None = Field(None, description='Only show results from specific domains')
-    tlds: Annotated[str | list[str] | None, AfterValidator(validate_tld)] = Field(None, description='Only show results from specific top-level domains (e.g., .gov, .edu)')
     filetype: FileType | None = Field(None, description='Only show documents that are a specific file type. Note: Google only supports one filetype per search.')
     https_only: bool = Field(False, description='Only show websites that support HTTPS')
     stock: StockTicker | None = Field(None, description='Get results for a specific stock ticker')
 
     exclude_sites: str | list[str] | None = Field(None, description='Exclude results from specific domains')
-    exclude_tlds: Annotated[str | list[str] | None, AfterValidator(validate_tld)] = Field(None, description='Exclude results from specific top-level domains')
     exclude_filetypes: FileType | list[FileType] | None = Field(None, description='Exclude documents with specific file types')
     exclude_https: bool = Field(False, description='Exclude HTTPS pages')
 
@@ -93,7 +73,6 @@ class Filters(BaseModel):
         filters = []
 
         filters.append(group_includes(to_list(self.sites), "site"))
-        filters.append(group_includes(to_list(self.tlds), "site"))
         filters.append(group_includes(to_list(self.stock), "stock"))
 
         filters.append(group_includes(to_list(self.filetype), "filetype"))
@@ -130,7 +109,6 @@ class Filters(BaseModel):
             filters.extend([f'-"{phrase}"' for phrase in phrase_list])
 
         filters.extend(group_excludes("site", to_list(self.exclude_sites)))
-        filters.extend(group_excludes("site", to_list(self.exclude_tlds)))
 
         if self.exclude_https:
             filters.append("-inurl:https")
@@ -143,9 +121,6 @@ class Filters(BaseModel):
         filters.extend([f"-intext:{w}" for w in to_list(self.not_in_text)])
 
         return " ".join([f for f in filters if f])
-
-
-# ===================================================
 
 
 """
@@ -223,7 +198,10 @@ def search(
 
         answers = response.get("answers", [])
         if answers:
-            search_results.answers = [f"URL: {answer.get('url', '')}\nANSWER: {answer.get('answer', '')}" for answer in answers]
+            search_results.answers = [
+                f"URL: {answer.get('url', '')}\nANSWER: {answer.get('answer', '')}"
+                for answer in answers
+            ]
 
         for result in response["results"][:max_results]:
             search_results.results.append(

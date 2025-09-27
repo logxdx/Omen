@@ -52,8 +52,6 @@ def add_memory(
     except Exception as e:
         return f"Error adding memory: {str(e)}"
 
-    print(f"\n===\n{json.dumps(add_result, indent=2)}\n===\n")
-
     formated_output = ""
     results = add_result.get("results", [])
     if results:
@@ -72,9 +70,7 @@ def add_memory(
     return formated_output if formated_output else "No changes made."
 
 
-def search_memories(
-    query: str, user_id: str = "logx", limit: int = 5, use_graph: bool = False
-) -> str:
+def search_memories(query: str, user_id: str = "logx", limit: int = 5) -> str:
     """Search memories relevant to query (simple wrapper) ensuring list[dict] return."""
 
     m = get_memory()
@@ -82,8 +78,6 @@ def search_memories(
         search_results = m.search(query, user_id=user_id)
     except Exception as e:
         return f"Error searching memories: {str(e)}"
-
-    print(f"\n===\n{json.dumps(search_results, indent=2)}\n===\n")
 
     formatted_output = ""
     results = search_results.get("results", [])
@@ -93,7 +87,7 @@ def search_memories(
             formatted_output += f"ID: {res['id']}\nMemory: {res['memory']}\nCreated: {res['created_at']}\nUpdated: {res['updated_at']}\nMetadata: {json.dumps(res.get('metadata', {}))}\n\n"
 
     relations: list[dict] = search_results.get("relations", [])
-    if relations and use_graph:
+    if relations:
         formatted_output += "\nRELATIONS:\n"
         for idx, relation in enumerate(relations[:limit], 1):
             formatted_output += f"{idx}. {relation['source']} ->  {relation['relationship']} -> {relation['destination']}\n"
@@ -143,8 +137,6 @@ def history_memory(memory_id: str) -> str:
     except Exception as e:
         return f"Error retrieving history for memory ID {memory_id}: {str(e)}"
 
-    print(f"\n===\n{json.dumps(history_result, indent=2)}\n===\n")
-
     formatted_output = ""
     for history in history_result:
         if history.get("id"):
@@ -167,14 +159,12 @@ def history_memory(memory_id: str) -> str:
     )
 
 
-def get_all_memories(user_id: str = "logx", use_graph: bool = False) -> str:
+def get_all_memories(user_id: str = "logx") -> str:
     m = get_memory()
     try:
         all_memories = m.get_all(user_id=user_id)
     except Exception as e:
         return f"Error retrieving memories: {str(e)}"
-
-    print(f"\n===\n{json.dumps(all_memories, indent=2)}\n===\n")
 
     formatted_output = ""
     for res in all_memories.get("results", []):
@@ -189,9 +179,8 @@ def get_all_memories(user_id: str = "logx", use_graph: bool = False) -> str:
         if res.get("metadata"):
             formatted_output += f"Metadata: {json.dumps(res.get("metadata"))}\n\n"
 
-    if use_graph:
-        for res in all_memories.get("relations", []):
-            formatted_output += f"Relation: {res.get("source", "")} -> {res.get("relationship", "")} -> {res.get("target", "")}\n"
+    for res in all_memories.get("relations", []):
+        formatted_output += f"Relation: {res.get("source", "")} -> {res.get("relationship", "")} -> {res.get("target", "")}\n"
 
     return formatted_output if formatted_output else "No memories found."
 
