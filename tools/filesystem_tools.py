@@ -18,108 +18,130 @@ from .utils.filesystem import (
 
 
 @function_tool
-def list_files(relative_path: str = "") -> list[str]:
+def list_files(relative_path: str = "") -> str:
     """
-    List files and directories in the filesystem at the given relative path.
+    List files and directories.
 
     Args:
         relative_path: Relative path within the filesystem
 
     Returns:
-        List of file and directory names
+        String containing newline-separated list of file and directory names, or error message
     """
-    return list_files_in_sandbox(relative_path)
+    try:
+        files = list_files_in_sandbox(relative_path)
+        return "\n".join(files)
+    except Exception as e:
+        return f"Error listing files in '{relative_path}': {str(e)}"
 
 
 @function_tool
 def read_file(relative_path: str) -> str:
     """
-    Read the content of a file in the filesystem.
+    Read the content of a file.
 
     Args:
-        relative_path: Relative path to the file within the filesystem
+        relative_path: file path relative to root
 
     Returns:
-        Content of the file as a string
+        Content of the file as a string, or error message
     """
-    return read_file_in_sandbox(relative_path)
+    try:
+        return read_file_in_sandbox(relative_path)
+    except Exception as e:
+        return f"Error reading file '{relative_path}': {str(e)}"
 
 
 @function_tool
 def write_file(relative_path: str, content: str) -> str:
     """
-    Write content to a file in the filesystem.
+    Write content to a file.
 
     Args:
-        relative_path: Relative path to the file within the filesystem
+        relative_path: file path relative to root
         content: Content to write to the file
 
     Returns:
-        Success message
+        Success message or error message
     """
-    write_file_in_sandbox(relative_path, content)
-    return f"Successfully wrote to {relative_path}"
+    try:
+        write_file_in_sandbox(relative_path, content)
+        return f"Successfully wrote to {relative_path}"
+    except Exception as e:
+        return f"Error writing to file '{relative_path}': {str(e)}"
 
 
 @function_tool
 def create_directory(relative_path: str) -> str:
     """
-    Create a directory in the filesystem.
+    Create a directory.
 
     Args:
         relative_path: Relative path to the directory within the filesystem
 
     Returns:
-        Success message
+        Success message or error message
     """
-    create_directory_in_sandbox(relative_path)
-    return f"Successfully created directory {relative_path}"
+    try:
+        create_directory_in_sandbox(relative_path)
+        return f"Successfully created directory {relative_path}"
+    except Exception as e:
+        return f"Error creating directory '{relative_path}': {str(e)}"
 
 
 @function_tool
 def delete_file(relative_path: str) -> str:
     """
-    Delete a file in the filesystem.
+    Delete a file.
 
     Args:
-        relative_path: Relative path to the file within the filesystem
+        relative_path: file path relative to root
 
     Returns:
-        Success message
+        Success message or error message
     """
-    delete_file_in_sandbox(relative_path)
-    return f"Successfully deleted file {relative_path}"
+    try:
+        delete_file_in_sandbox(relative_path)
+        return f"Successfully deleted file {relative_path}"
+    except Exception as e:
+        return f"Error deleting file '{relative_path}': {str(e)}"
 
 
 @function_tool
 def delete_directory(relative_path: str) -> str:
     """
-    Delete a directory in the filesystem (must be empty).
+    Delete a directory (must be empty).
 
     Args:
-        relative_path: Relative path to the directory within the filesystem
+        relative_path: Directory path relative to root
 
     Returns:
-        Success message
+        Success message or error message
     """
-    delete_directory_in_sandbox(relative_path)
-    return f"Successfully deleted directory {relative_path}"
+    try:
+        delete_directory_in_sandbox(relative_path)
+        return f"Successfully deleted directory {relative_path}"
+    except Exception as e:
+        return f"Error deleting directory '{relative_path}': {str(e)}"
 
 
 @function_tool
 def move_file(src_relative_path: str, dst_relative_path: str) -> str:
     """
-    Move a file within the filesystem.
+    Move a file.
 
     Args:
-        src_relative_path: Relative path to the source file
-        dst_relative_path: Relative path to the destination
+        src_relative_path: source file path relative to root
+        dst_relative_path: destination file path relative to root
 
     Returns:
-        Success message
+        Success message or error message
     """
-    move_file_in_sandbox(src_relative_path, dst_relative_path)
-    return f"Successfully moved {src_relative_path} to {dst_relative_path}"
+    try:
+        move_file_in_sandbox(src_relative_path, dst_relative_path)
+        return f"Successfully moved {src_relative_path} to {dst_relative_path}"
+    except Exception as e:
+        return f"Error moving file from '{src_relative_path}' to '{dst_relative_path}': {str(e)}"
 
 
 @function_tool
@@ -128,14 +150,17 @@ def copy_file(src_relative_path: str, dst_relative_path: str) -> str:
     Copy a file within the filesystem.
 
     Args:
-        src_relative_path: Relative path to the source file
-        dst_relative_path: Relative path to the destination
+        src_relative_path: source file path relative to root
+        dst_relative_path: destination file path relative to root
 
     Returns:
-        Success message
+        Success message or error message
     """
-    copy_file_in_sandbox(src_relative_path, dst_relative_path)
-    return f"Successfully copied {src_relative_path} to {dst_relative_path}"
+    try:
+        copy_file_in_sandbox(src_relative_path, dst_relative_path)
+        return f"Successfully copied {src_relative_path} to {dst_relative_path}"
+    except Exception as e:
+        return f"Error copying file from '{src_relative_path}' to '{dst_relative_path}': {str(e)}"
 
 
 @function_tool
@@ -143,31 +168,37 @@ def edit_file_section(
     relative_path: str, original_section: str, new_content: str
 ) -> str:
     """
-    Edit a specific section of a file in the filesystem by replacing the original_section with new_content.
+    Edit a specific section of a file by replacing the original_section with new_content.
 
     Args:
-        relative_path: Relative path to the file within the filesystem
+        relative_path: file path relative to root
         original_section: The exact text section to replace
         new_content: The new content to replace the original section with
 
     Returns:
-        Success message
+        Success message or error message
     """
-    edit_file_section_in_sandbox(relative_path, original_section, new_content)
-    return f"Successfully edited section in {relative_path}"
+    try:
+        edit_file_section_in_sandbox(relative_path, original_section, new_content)
+        return f"Successfully edited section in {relative_path}"
+    except Exception as e:
+        return f"Error editing section in file '{relative_path}': {str(e)}"
 
 
 @function_tool
 def append_to_file(relative_path: str, content: str) -> str:
     """
-    Append content to a file in the filesystem without overwriting existing content.
+    Append content to a file without overwriting existing content.
 
     Args:
-        relative_path: Relative path to the file within the filesystem
+        relative_path: file path relative to root
         content: Content to append to the file
 
     Returns:
-        Success message
+        Success message or error message
     """
-    append_to_file_in_sandbox(relative_path, content)
-    return f"Successfully appended to {relative_path}"
+    try:
+        append_to_file_in_sandbox(relative_path, content)
+        return f"Successfully appended to {relative_path}"
+    except Exception as e:
+        return f"Error appending to file '{relative_path}': {str(e)}"
