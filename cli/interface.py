@@ -289,7 +289,7 @@ async def stream_agent_response(
                 ),
             ),
             console=console,
-            refresh_per_second=10,
+            refresh_per_second=1,
         ) as live:
 
             # Stream the response
@@ -302,8 +302,6 @@ async def stream_agent_response(
                     if isinstance(data, ResponseTextDeltaEvent):
                         delta = data.delta
                         full_response += delta
-                        thinking_text = Text("", style="dim")
-
                         markdown_obj = Markdown(full_response, style="bold white")
 
                     elif isinstance(data, ResponseReasoningTextDeltaEvent):
@@ -317,32 +315,11 @@ async def stream_agent_response(
                 # Handle tool calls and handoffs
                 elif isinstance(event, RunItemStreamEvent):
 
-                    # Handle handoffs
-                    if event.name == "handoff_requested":
-                        target_name = (
-                            event.item.raw_item.name  # type: ignore
-                            if hasattr(event.item.raw_item, "name")
-                            else "another agent"
-                        )
-                        display_target = (
-                            str(target_name).capitalize()
-                            if target_name != "another agent"
-                            else target_name
-                        )
-                        if hierarchy_mode == "collaborative":
-                            handoff_msg = (
-                                f"\n➡️ Handoff requested to {display_target}.\n"
-                            )
-                        else:
-                            handoff_msg = (
-                                f"\n🔄 Delegation Request to {display_target}.\n"
-                            )
-                        events_text.append(handoff_msg)
-
+                    # Handle handoff
                     ###############
                     # This here decides if you actually want to handoff to a new agent or let the orchestrator talk to it behind the scenes and return to you with the result.
                     ###############
-                    elif (
+                    if (
                         event.name == "handoff_occured"
                     ):  # Note: This is misspelled in the library
 
@@ -363,28 +340,17 @@ async def stream_agent_response(
                     elif event.name == "tool_called":
                         tool_name = getattr(event.item.raw_item, "name", "unknown tool")
                         tool_args = getattr(event.item.raw_item, "arguments", {})
-                        tool_msg = f"\n🛠️ Tool: {tool_name} |"
+                        tool_msg = f"\n⚙️ Tool: {tool_name} |"
                         if tool_args:
                             tool_msg += f" Args: {str(tool_args)[:100]}\n"
                         events_text.append(tool_msg)
 
                     # Handle tool outputs
                     elif event.name == "tool_output":
-                        tool_output = getattr(
-                            event.item.raw_item, "content", "No output"
-                        )
+                        tool_output = str(event.item.output).strip()  # type: ignore
                         if tool_output:
-                            tool_output_msg = f"\n📤 Tool output: {tool_output}\n"
-                            events_text.append(tool_output_msg)
-
-                    # Handle reasoning items
-                    elif event.name == "reasoning_item_created":
-                        console.print(event)
-                        reasoning = getattr(
-                            event.item.raw_item, "content", "No reasoning"
-                        )
-                        reasoning_msg = f"\n🤔 Reasoning: {reasoning}\n"
-                        events_text.append(reasoning_msg)
+                            tool_output_msg = f"\n📤 Tool output: {tool_output[:100]}\n"
+                            # events_text.append(tool_output_msg)
 
                 # Handle agent switch events
                 elif isinstance(event, AgentUpdatedStreamEvent):
