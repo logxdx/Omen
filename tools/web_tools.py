@@ -42,7 +42,7 @@ def open_url_in_browser(link: str) -> str:
 ###########
 # Weather #
 ###########
-from .utils.weather import get_weather
+from tools.utils.weather import get_weather
 
 
 @function_tool
@@ -62,7 +62,7 @@ def get_weather_info(location: str) -> str:
 ###############
 # URL Scraper #
 ###############
-from .utils.scraper import scrape_page
+from tools.utils.scraper import scrape_page
 
 
 @function_tool
@@ -85,7 +85,7 @@ def scrape_url(url: str, summarise: bool = False) -> str:
 # Audio & Video Download #
 ##########################
 
-from .utils import download
+from tools.utils import download
 
 
 @function_tool

@@ -3,7 +3,7 @@ from agents import function_tool
 #####################
 # DuckDuckGo Search #
 #####################
-from .utils import DuckDuckGoSearch
+from tools.utils import DuckDuckGoSearch
 
 
 @function_tool
@@ -32,7 +32,7 @@ def duckduckgo_search(
 ##################
 # Searxng Search #
 ##################
-from .utils import SearxSearch
+from tools.utils import SearxSearch
 
 
 @function_tool
@@ -68,7 +68,7 @@ def searx_search(
 ##################
 # Youtube Search #
 ##################
-from .utils import YoutubeSearch
+from tools.utils import YoutubeSearch
 
 
 @function_tool

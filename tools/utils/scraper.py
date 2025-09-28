@@ -114,6 +114,7 @@ class PageResult(BaseModel):
     Contains the URL, raw HTML, cleaned HTML, markdown, summary (if requested), and links
     """
 
+    title: str = ""
     url: str = ""
     raw_html: str = ""
     cleaned_html: str = ""
@@ -122,11 +123,13 @@ class PageResult(BaseModel):
     links: list[str] = []
 
     def __repr__(self) -> str:
-        return f"PageResult(url={self.url}, raw_html={self.raw_html}, cleaned_html={self.cleaned_html}, markdown={self.markdown}, summary={self.summary}, links={self.links})"
+        return f"PageResult(title={self.title}, url={self.url}, raw_html={self.raw_html}, cleaned_html={self.cleaned_html}, markdown={self.markdown}, summary={self.summary}, links={self.links})"
 
     def __str__(self) -> str:
-        return f"URL: {self.url}\n" + (
-            f"Summary:\n{self.summary}" if self.summary else f"MD:\n{self.markdown}"
+        return (
+            f"URL: {self.url}\n"
+            + (f"Title:\n{self.title}" if self.title else "")
+            + (f"Summary:\n{self.summary}" if self.summary else f"MD:\n{self.markdown}")
         )
 
 
@@ -196,7 +199,7 @@ def get_page_content(
         return PageResult(url=url)
 
 
-def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, list[str]]:
+def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[str]]:
     """
     HTML Cleanup Magic 🪄
 
@@ -249,6 +252,9 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, list[str]]
             ]
         ):
             tag.decompose()
+
+        # Get title before further processing
+        title = soup.title.string.strip() if soup.title and soup.title.string else ""
 
         # Structural tags
         # These tags are essential for the structure of the document and should not be removed
@@ -385,7 +391,7 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, list[str]]
         logger.error(f"[soup_html] ERROR: {e}")
         return "", []
 
-    return soup.strip(), list(links)
+    return title, soup.strip(), list(links)
 
 
 def html2md(html: str, instructions: Optional[str] = None) -> str:
@@ -638,7 +644,9 @@ def scrape_page(
             )
 
             # get cleaned html
-            page.cleaned_html, links = soup_html(html=page.raw_html, baseurl=url)
+            page.title, page.cleaned_html, links = soup_html(
+                html=page.raw_html, baseurl=url
+            )
 
             # ensure links are unique
             page.links = list(set(links + page.links))

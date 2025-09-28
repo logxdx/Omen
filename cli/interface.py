@@ -207,14 +207,12 @@ def handle_special_commands(
 ) -> tuple[bool, bool, list[TResponseInputItem], Agent, dict, str, str]:
     """
     Handle special commands like quit and clear.
-
-
     """
-    if user_msg.lower() in ["quit", "exit", "/q", "/quit", "/bye", "/exit"]:
+    if any(cmd in user_msg.lower() for cmd in ["quit", "exit", "/q", "/quit", "/exit"]):
         console.clear()
         console.print("[bold green]👋 Goodbye![/bold green]")
         return True, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif user_msg.lower() in ["/clear", "/c"]:
+    elif any(cmd in user_msg.lower() for cmd in ["/c", "/clear"]):
         inputs = []
         console.clear()
         console.print("[bold purple]🔄 Conversation cleared![/bold purple]\n\n")
@@ -222,16 +220,16 @@ def handle_special_commands(
         current_display = str(agent.name).capitalize()
         console.print(f"[dim]Current agent: {current_display}[/dim]")
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif user_msg.lower() in ["/help", "/h"]:
+    elif any(cmd in user_msg.lower() for cmd in ["/h", "/help"]):
         help_panel()
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif user_msg.lower() in ["/hierarchy", "/hmode"]:
+    elif any(cmd in user_msg.lower() for cmd in ["/hmode", "/hierarchy"]):
         hierarchy_mode = select_hierarchy_mode()
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif user_msg.lower().split()[0] in ["/agents", "/a"]:
+    elif any(cmd in user_msg.lower() for cmd in ["/a", "/agents"]):
         agent = handle_agents_command(user_msg, agents, agent)
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif user_msg.lower() in ["/interaction", "/imode"]:
+    elif any(cmd in user_msg.lower() for cmd in ["/interaction", "/imode"]):
         interaction_mode = select_interaction_mode()
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
     return False, False, inputs, agent, agents, hierarchy_mode, interaction_mode
