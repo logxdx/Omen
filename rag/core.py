@@ -171,7 +171,7 @@ class RAG(BaseModel):
         except Exception as e:
             logger.error(f"Failed to add documents to ChromaDB: {e}")
 
-    def query(self, question: str, where: Optional[Dict[str, Any]] = None) -> str:
+    def query(self, question: str, where: Optional[Dict[str, Any]] = None, similarity_threshold: float = 0.0, limit: Optional[int] = None) -> str:
         try:
             question_embedding = self._embedding_service.embed_text(question)
 
@@ -196,7 +196,15 @@ class RAG(BaseModel):
                 distance = distances[i] if i < len(distances) else 1.0
                 source = metadata.get("source", "unknown") if metadata else "unknown"
                 score = 1 - distance if distance is not None else 0  # Convert distance to similarity
-                formatted_results.append(f"[Source: {source}, Relevance: {score:.3f}]\n{doc}")
+                if score >= similarity_threshold:
+                    formatted_results.append(f"[Source: {source}, Relevance: {score:.3f}]\n{doc}")
+
+            # Limit the results
+            if limit:
+                formatted_results = formatted_results[:limit]
+
+            if not formatted_results:
+                return "No relevant content found."
 
             return "\n\n".join(formatted_results)
         except Exception as e:
