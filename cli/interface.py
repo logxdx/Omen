@@ -27,6 +27,7 @@ import keyboard
 import threading
 
 from tts.tts import TTS
+from my_agents import context_agent
 
 set_tracing_disabled(disabled=True)
 
@@ -87,6 +88,7 @@ def help_panel():
     help_text = Text()
     help_text.append("\n")
     help_text.append("  /help or /h - Show this help message\n", style="white")
+    help_text.append("  /history or /hist - Show conversation history\n", style="white")
     help_text.append("  /agents or /a - List and switch agents\n", style="white")
     help_text.append("  /hmode or /hierarchy - Change hierarchy mode\n", style="white")
     help_text.append(
@@ -197,7 +199,33 @@ def handle_agents_command(user_msg: str, agents: dict, agent: Agent) -> Agent:
     return agent
 
 
-def handle_special_commands(
+def display_history(inputs: List[TResponseInputItem]):
+    """
+    Display the conversation history.
+    """
+    if not inputs:
+        console.print("[bold dim]No conversation history available.[/bold dim]")
+        return
+    history_text = Text()
+    history_text.append("\nConversation History:\n", style="bold purple")
+    for item in inputs:
+        role = item.get("role", "unknown").capitalize()
+        content = item.get("content", "")
+        history_text.append(f"\n[{role}]:\n", style="bold white")
+        history_text.append(f"{content}\n", style="white")
+    console.print(
+        Panel(
+            history_text,
+            title=Text("Conversation History", style="bold white"),
+            border_style="purple",
+            highlight=True,
+            width=CONSOLE_WIDTH,
+        ),
+        justify="center",
+    )
+
+
+def slash_commands(
     user_msg: str,
     inputs: list[TResponseInputItem],
     agent: Agent,
@@ -208,11 +236,11 @@ def handle_special_commands(
     """
     Handle special commands like quit and clear.
     """
-    if any(cmd in user_msg.lower() for cmd in ["quit", "exit", "/q", "/quit", "/exit"]):
+    if user_msg in ["quit", "exit", "/q", "/quit", "/exit"]:
         console.clear()
         console.print("[bold green]👋 Goodbye![/bold green]")
         return True, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif any(cmd in user_msg.lower() for cmd in ["/c", "/clear"]):
+    elif user_msg.lower() in ["/c", "/clear"]:
         inputs = []
         console.clear()
         console.print("[bold purple]🔄 Conversation cleared![/bold purple]\n\n")
@@ -220,16 +248,19 @@ def handle_special_commands(
         current_display = str(agent.name).capitalize()
         console.print(f"[dim]Current agent: {current_display}[/dim]")
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif any(cmd in user_msg.lower() for cmd in ["/h", "/help"]):
-        help_panel()
+    elif user_msg.lower() in ["/history", "/hist"]:
+        display_history(inputs[:-1])
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif any(cmd in user_msg.lower() for cmd in ["/hmode", "/hierarchy"]):
+    elif user_msg.lower() in ["/hmode", "/hierarchy"]:
         hierarchy_mode = select_hierarchy_mode()
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif any(cmd in user_msg.lower() for cmd in ["/a", "/agents"]):
+    elif user_msg.lower() in ["/h", "/help"]:
+        help_panel()
+        return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
+    elif user_msg.lower() in ["/a", "/agents"]:
         agent = handle_agents_command(user_msg, agents, agent)
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
-    elif any(cmd in user_msg.lower() for cmd in ["/interaction", "/imode"]):
+    elif user_msg.lower() in ["/interaction", "/imode"]:
         interaction_mode = select_interaction_mode()
         return False, True, inputs, agent, agents, hierarchy_mode, interaction_mode
     return False, False, inputs, agent, agents, hierarchy_mode, interaction_mode
@@ -340,7 +371,7 @@ async def stream_agent_response(
                         tool_args = getattr(event.item.raw_item, "arguments", {})
                         tool_msg = f"\n⚙️ Tool: {tool_name} |"
                         if tool_args:
-                            tool_msg += f" Args: {str(tool_args)[:100]}\n"
+                            tool_msg += f" Args: {str(tool_args)[:200]}\n"
                         events_text.append(tool_msg)
 
                     # Handle tool outputs
@@ -358,7 +389,7 @@ async def stream_agent_response(
                         pass
                         # agent = new_agent
                         switch_msg = (
-                            f"\n🔄 Switched to {str(agent.name).capitalize()}.\n"
+                            f"\n🔄 Switched to {str(agent.name).capitalize()}\n"
                         )
                         events_text.append(switch_msg)
 
@@ -399,15 +430,14 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
     """
 
     tts_client: TTS = None  # type: ignore
+    session_context: str = ""
     try:
         hierarchy_mode = select_hierarchy_mode()
         interaction_mode = select_interaction_mode()
     except Exception as e:
         raise Exception(f"Error selecting modes")
-    if interaction_mode == "voice":
-        tts_client = get_tts()
     agent = starting_agent
-    handle_special_commands("/c", [], agent, agents, hierarchy_mode, interaction_mode)
+    welcome_panel()
     inputs: List[TResponseInputItem] = [
         {
             "content": "Short Intro. State your capabilities and ask how you can assist.",
@@ -431,16 +461,24 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
 
     while True:
 
-        user_msg = Prompt.ask("\n[dim]You[/dim]")
+        user_msg = Prompt.ask("\n[dim]You[/dim]").strip()
         if not user_msg.strip():
             continue
+
+        if session_context:
+            inputs.append({"content": session_context, "role": "assistant"})
 
         inputs.append({"content": user_msg, "role": "user"})
 
         # Handle special commands
         quit_flag, skip, inputs, agent, agents, hierarchy_mode, interaction_mode = (
-            handle_special_commands(
-                user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode
+            slash_commands(
+                user_msg.lower(),
+                inputs,
+                agent,
+                agents,
+                hierarchy_mode,
+                interaction_mode,
             )
         )
         if quit_flag:
@@ -448,12 +486,39 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
                 tts_client.shutdown()
             break
         if (not inputs) or skip:
+            if inputs:
+                inputs.pop()
             continue
+
+        _, context_result = await stream_agent_response(
+            context_agent.agent, inputs, hierarchy_mode
+        )
+
+        if context_result.final_output:
+            console.print(f"[dim]Context updated by Context Manager Agent.[/dim]")
+            session_context = str(context_result.final_output).strip()
+            inputs.clear()
+        else:
+            console.print(f"[dim]No context update from Context Manager Agent.[/dim]")
+
+        if session_context:
+            inputs = [
+                {
+                    "content": session_context,
+                    "role": "assistant",
+                },
+                {
+                    "content": user_msg,
+                    "role": "user",
+                },
+            ]
 
         # Stream the response
         agent, result = await stream_agent_response(agent, inputs, hierarchy_mode)
 
         if interaction_mode == "voice":
+            if not tts_client:
+                tts_client = get_tts()
             try:
                 speech = tts_client.speak(str(result.final_output), user_query=user_msg)
                 console.print(
@@ -462,5 +527,4 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
             except Exception as e:
                 console.print(f"\n[bold red]❌ TTS Error: {e}[/bold red]")
 
-        # Update conversation state
         inputs = result.to_input_list()

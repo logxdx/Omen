@@ -19,6 +19,7 @@ class my_agent:
     instructions: str
     agent: Agent = None # type: ignore
     handoff_instructions: str = ""
+    handoffs: list[my_agent] = field(default_factory=list)
     tools: list[Tool] = field(default_factory=list)
 
     def __post_init__(self):
@@ -52,7 +53,8 @@ class my_agent:
             raise ValueError("Agent not created yet. Call create_agent() first.")
         if isinstance(tools, Tool):
             tools = [tools]
-        for tool in tools:
+        self.tools.extend(tools)
+        for tool in self.tools:
             if tool not in self.agent.tools:
                 self.agent.tools.append(tool)
 
@@ -67,8 +69,9 @@ class my_agent:
         if isinstance(handoffs, my_agent):
             handoffs = [handoffs]
         if handoffs:
+            self.handoffs.extend(handoffs)
             self.instructions += "\n\n## AVAILABLE SPECIALIST AGENTS\n"
-            for handoff_agent in handoffs:
+            for handoff_agent in self.handoffs:
                 if (
                     handoff_agent.agent
                     and handoff_agent.agent not in self.agent.handoffs

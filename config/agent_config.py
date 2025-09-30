@@ -44,4 +44,9 @@ AGENT_CONFIGS = {
         "API_KEY": os.getenv("ANALYSIS_API_KEY"),
         "MODEL_NAME": "openai/gpt-oss-120b",
     },
+    "context_manager_agent": {
+        "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
+        "API_KEY": os.getenv("CONTEXT_API_KEY"),
+        "MODEL_NAME": "openai/gpt-oss-120b",
+    }
 }

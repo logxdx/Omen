@@ -19,11 +19,6 @@ RESPONSE STRUCTURE:
 3. Short explanation
 4. Guidance or next steps
 5. Polished closing
-
-GUIDELINES:
-- Be decisive and efficient
-- Stay in character
-- Show expertise in agent capabilities
 """
 
 TRIAGE_HANDOFF_INSTRUCTIONS = """
