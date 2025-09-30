@@ -220,7 +220,7 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
     """
     if not html:
         logger.warning("soup_html: HTML EMPTY")
-        return "", []
+        return "", "Empty HTML", []
     try:
         logger.info(f"[soup_html] CLEANING HTML")
 
@@ -372,24 +372,11 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
         # Unescape html entities
         soup = unescape(soup)
 
-        # # Collapse newlines with surrounding whitespace
-        # soup = re.sub(r"\s*\n\s*", "\n", soup)
-
-        # # Convert multiple spaces/tabs to a single space
-        # soup = re.sub(r"[ \t]+", " ", soup)
-
-        # Remove leading/trailing spaces inside tags (but NOT between tags)
-        # soup = re.sub(r">\s+", ">", soup)
-        # soup = re.sub(r"\s+<", "<", soup)
-
-        # # Rename aria-label to label
-        # soup = re.sub(r'aria-label\s*=\s*"', 'label="', soup)
-
         logger.info(f"[soup_html] CLEANED")
 
     except Exception as e:
         logger.error(f"[soup_html] ERROR: {e}")
-        return "", []
+        return "", f"Error: {e}", []
 
     return title, soup.strip(), list(links)
 
@@ -658,13 +645,8 @@ def scrape_page(
             else:
                 page.markdown = html2text(html=page.cleaned_html, bodywidth=600).strip()
 
-            # get markdown using Jina Reader API if markdown is empty or less than 40% of cleaned HTML
-            if (
-                not page.raw_html
-                or not page.cleaned_html
-                or not page.markdown
-                or len(page.markdown) < len(page.cleaned_html) * 0.1
-            ):
+            # get markdown using Jina Reader API if markdown is empty
+            if not page.raw_html or not page.cleaned_html or not page.markdown:
                 page.markdown = jina_reader_api(url=url)
 
         # summarise content using LLM if summarise is True and markdown is not empty
@@ -685,5 +667,6 @@ def scrape_page(
 if __name__ == "__main__":
     url = "https://news.ycombinator.com/"
     url = "https://spider.cloud/"
-    result: str = scrape_page(url, summarise=True)
+    url = "https://openai.com/index/introducing-gpt-oss/"
+    result: str = scrape_page(url)
     print(result)
