@@ -97,3 +97,6 @@ def search_youtube_videos(query: str, num_results: int = 5) -> str:
             f"   Published: {video['publish_time']}\n\n"
         )
     return formatted_output.strip()
+
+
+SEARCH_TOOLS = [searx_search, search_youtube_videos]

@@ -1,5 +1,6 @@
 import os
 import shutil
+import textwrap
 from pathlib import Path
 
 
@@ -13,19 +14,40 @@ SANDBOX_PATH = Path(__file__).resolve().parent.parent.parent / "root"
 SANDBOX_PATH.mkdir(parents=True, exist_ok=True)
 
 
-def list_files_in_sandbox(relative_path: str = ""):
+def list_files_in_sandbox(relative_path: str = "") -> str:
     """List files and directories in the sandbox at the given relative path."""
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
+    full_path = full_path.resolve()
     if str(SANDBOX_PATH) not in str(full_path):
         raise AccessDeniedError(f"Access Denied")
     if not os.path.exists(full_path):
         raise FileNotFoundError(f"Path does not exist: {relative_path}")
     if not os.path.isdir(full_path):
         raise NotADirectoryError(f"Path is not a directory: {relative_path}")
-    return os.listdir(full_path)
+    files = os.listdir(full_path)
+    display_files = []
+    for f in files:
+        item_path = full_path / f
+        if item_path.is_dir():
+            display_files.append(f + "/")
+        else:
+            display_files.append(f)
+    if display_files:
+        max_len = max(len(df) for df in display_files)
+    else:
+        max_len = 0
+    line_num_width = len(str(len(display_files))) + 2 if display_files else 2
+    top_border = "─" * line_num_width + "┬" + "─" * max_len
+    dir_header = " " * line_num_width + "│ Directory: " + relative_path + "/"
+    middle_border = "─" * line_num_width + "┼" + "─" * max_len
+    numbered_files = [f"{i+1:>{line_num_width-2}}  │ {df}" for i, df in enumerate(display_files)]
+    bottom_border = "─" * line_num_width + "┴" + "─" * max_len
+    return "\n".join(
+        [top_border, dir_header, middle_border] + numbered_files + [bottom_border]
+    )
 
 
-def read_file_in_sandbox(relative_path: str):
+def read_file_in_sandbox(relative_path: str) -> str:
     """Read the content of a file in the sandbox."""
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(full_path):
@@ -33,7 +55,38 @@ def read_file_in_sandbox(relative_path: str):
     if not full_path.is_file():
         raise FileNotFoundError(f"File does not exist: {relative_path}")
     with open(full_path, "r", encoding="utf-8") as f:
-        return f.read()
+        lines = f.readlines()
+        wrap_width = 100
+        all_display_lines = []
+        for i, line in enumerate(lines):
+            content = line.rstrip("\n\r")
+            if content:
+                wrapped = textwrap.wrap(content, width=wrap_width)
+            else:
+                wrapped = [""]
+            for j, part in enumerate(wrapped):
+                if j == 0:
+                    all_display_lines.append((i + 1, part))
+                else:
+                    all_display_lines.append((None, part))
+        if all_display_lines:
+            max_line_len = max(len(part) for _, part in all_display_lines)
+        else:
+            max_line_len = 0
+        line_num_width = len(str(len(lines))) + 2 if lines else 2
+        top_border = "─" * line_num_width + "┬" + "─" * max_line_len
+        file_header = " " * line_num_width + "│ File: " + relative_path
+        middle_border = "─" * line_num_width + "┼" + "─" * max_line_len
+        numbered_lines = []
+        for num, part in all_display_lines:
+            if num is not None:
+                numbered_lines.append(f"{num:>{line_num_width-2}}  │ {part}")
+            else:
+                numbered_lines.append(" " * (line_num_width - 2) + "  │ " + part)
+        bottom_border = "─" * line_num_width + "┴" + "─" * max_line_len
+        return "\n".join(
+            [top_border, file_header, middle_border] + numbered_lines + [bottom_border]
+        )
 
 
 def write_file_in_sandbox(relative_path: str, content: str):
@@ -137,3 +190,12 @@ def append_to_file_in_sandbox(relative_path: str, content: str):
     full_path.parent.mkdir(parents=True, exist_ok=True)
     with open(full_path, "a", encoding="utf-8") as f:
         f.write(content)
+
+
+if __name__ == "__main__":
+    # Example usage
+    print("Sandbox path:", SANDBOX_PATH)
+    # out = read_file_in_sandbox("files/gpt-oss.md")
+    # print(out)
+    out = list_files_in_sandbox("files")
+    print(out)

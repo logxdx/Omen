@@ -128,8 +128,9 @@ class PageResult(BaseModel):
     def __str__(self) -> str:
         return (
             f"URL: {self.url}\n"
-            + (f"Title:\n{self.title}" if self.title else "")
-            + (f"Summary:\n{self.summary}" if self.summary else f"MD:\n{self.markdown}")
+            + (f"Title: {self.title}\n" if self.title else "")
+            + "Content:\n"
+            + (f"{self.summary}" if self.summary else f"{self.markdown}")
         )
 
 
@@ -643,7 +644,7 @@ def scrape_page(
             if use_reader_lm:
                 page.markdown = html2md(html=page.cleaned_html)
             else:
-                page.markdown = html2text(html=page.cleaned_html, bodywidth=600).strip()
+                page.markdown = html2text(html=page.cleaned_html, bodywidth=0).strip()
 
             # get markdown using Jina Reader API if markdown is empty
             if not page.raw_html or not page.cleaned_html or not page.markdown:

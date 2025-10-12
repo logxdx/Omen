@@ -18,19 +18,14 @@ from .filesystem_tools import (
     append_to_file,
 )
 from .mem0_tools import (
-    memory_add,
-    memory_search,
-    memory_delete,
-    memory_update,
+    add_memory,
+    search_memory,
+    delete_memory,
+    update_memory,
     memory_history,
-    memory_get_all,
+    get_all_memories,
 )
-from .misc_tools import (
-    get_current_datetime,
-)
-from .python_tools import (
-    execute_python_code,
-)
+from .misc_tools import get_current_datetime, execute_code
 from .search_tools import (
     duckduckgo_search,
     searx_search,
@@ -64,16 +59,15 @@ __all__ = [
     "edit_file_section",
     "append_to_file",
     # Mem0 Tools
-    "memory_add",
-    "memory_search",
-    "memory_delete",
-    "memory_update",
+    "add_memory",
+    "search_memory",
+    "delete_memory",
+    "update_memory",
     "memory_history",
-    "memory_get_all",
+    "get_all_memories",
     # Misc Tools
     "get_current_datetime",
-    # Python Tools
-    "execute_python_code",
+    "execute_code",
     # Search Tools
     "duckduckgo_search",
     "searx_search",

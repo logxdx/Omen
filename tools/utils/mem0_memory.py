@@ -1,5 +1,4 @@
 """Shared mem0 memory layer for all agents.
-
 Located in tools/ so it can be treated like other tool infrastructure.
 Provides a singleton mem0 Memory instance plus helper functions.
 """
@@ -32,7 +31,7 @@ def get_memory() -> Memory:
     return _memory_instance
 
 
-def add_memory(
+def memory_add(
     text: str | list[dict[str, str]],
     user_id: str = "logx",
     metadata: Optional[Dict[str, Any]] = None,
@@ -70,7 +69,7 @@ def add_memory(
     return formated_output if formated_output else "No changes made."
 
 
-def search_memories(query: str, user_id: str = "logx", limit: int = 5) -> str:
+def memory_search(query: str, user_id: str = "logx", limit: int = 5) -> str:
     """Search memories relevant to query (simple wrapper) ensuring list[dict] return."""
 
     m = get_memory()
@@ -82,20 +81,20 @@ def search_memories(query: str, user_id: str = "logx", limit: int = 5) -> str:
     formatted_output = ""
     results = search_results.get("results", [])
     if results:
-        formatted_output += "MEMORIES:\n"
+        formatted_output += "MEMORIES:\n---\n"
         for idx, res in enumerate(results[:limit], 1):
-            formatted_output += f"ID: {res['id']}\nMemory: {res['memory']}\nCreated: {res['created_at']}\nUpdated: {res['updated_at']}\nMetadata: {json.dumps(res.get('metadata', {}))}\n\n"
+            formatted_output += f"{str(idx).rjust(3)}. ID: {res['id']}\n     Memory: {res['memory']}\n     Created: {res['created_at']}\n     Updated: {res['updated_at']}\n     Metadata: {json.dumps(res.get('metadata', {}))}\n\n"
 
     relations: list[dict] = search_results.get("relations", [])
     if relations:
-        formatted_output += "\nRELATIONS:\n"
+        formatted_output += "\nRELATIONS:\n---\n"
         for idx, relation in enumerate(relations[:limit], 1):
-            formatted_output += f"{idx}. {relation['source']} ->  {relation['relationship']} -> {relation['destination']}\n"
+            formatted_output += f"{str(idx).rjust(3)}. {relation['source']} ->  {relation['relationship']} -> {relation['destination']}\n"
 
     return formatted_output if formatted_output else "No relevant memories found."
 
 
-def delete_memory(memory_id: str) -> str:
+def memory_delete(memory_id: str) -> str:
     """Delete a memory entry by ID.
 
     Args:
@@ -111,7 +110,7 @@ def delete_memory(memory_id: str) -> str:
         return f"Error deleting memory ID {memory_id}: {str(e)}"
 
 
-def update_memory(memory_id: str, data: str) -> str:
+def memory_update(memory_id: str, data: str) -> str:
     """Update a memory entry by ID.
 
     Args:
@@ -126,7 +125,7 @@ def update_memory(memory_id: str, data: str) -> str:
         return f"Error updating memory ID {memory_id}: {str(e)}"
 
 
-def history_memory(memory_id: str) -> str:
+def get_memory_history(memory_id: str) -> str:
     """Retrieve the history of a memory entry by ID.
     Args:
         memory_id: The ID of the memory to retrieve history for.
@@ -159,7 +158,7 @@ def history_memory(memory_id: str) -> str:
     )
 
 
-def get_all_memories(user_id: str = "logx") -> str:
+def memory_all(user_id: str = "logx") -> str:
     m = get_memory()
     try:
         all_memories = m.get_all(user_id=user_id)
@@ -200,18 +199,18 @@ if __name__ == "__main__":
         },
     ]
 
-    # results = add_memory(
-    #     test_messages, user_id="test_user", metadata={"category": "preferences"}
-    # )
-    # print(f"Added memories:\n---\n{results}")
+    results = memory_add(
+        test_messages, user_id="test_user", metadata={"category": "preferences"}
+    )
+    print(f"Added memories:\n---\n{results}")
 
-    search_mems = search_memories(
+    search_mems = memory_search(
         "What kind of hotels do I like?", user_id="test_user", limit=3
     )
     print(f"Searched memories:\n---\n{search_mems}")
 
-    test_memories = get_all_memories(user_id="test_user")
+    test_memories = memory_all(user_id="test_user")
     print(f"Retrieved memories:\n---\n{test_memories}")
 
-    history = history_memory("4521a84f-0ca5-4568-806d-e756fb85bb1d")
+    history = get_memory_history("4521a84f-0ca5-4568-806d-e756fb85bb1d")
     print(f"Memory history:\n---\n{history}")

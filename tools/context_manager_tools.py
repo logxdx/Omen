@@ -3,10 +3,8 @@ import pathlib
 from tools.utils.context_manager import MemoryToolHandler
 
 # Initialize memory handler for context storage
-context_path = (
-    pathlib.Path(__file__).parent.parent / "agent_memory"
-)
-context_path = context_path.resolve()
+context_path = pathlib.Path(__file__).parent.parent
+context_path = context_path.resolve() / "memory_store"
 context_path.mkdir(parents=True, exist_ok=True)
 context_memory_handler = MemoryToolHandler(str(context_path))
 
@@ -133,3 +131,12 @@ def delete_context_topic(topic_name: str) -> str:
         return result.get("success", result.get("error", "Unknown error"))
     except Exception as e:
         return f"Error deleting context: {e}"
+
+
+CONTEXT_TOOLS = [
+    save_context_topic,
+    load_context_topic,
+    list_context_topics,
+    update_context_content,
+    delete_context_topic,
+]

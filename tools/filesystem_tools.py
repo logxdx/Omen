@@ -23,14 +23,14 @@ def list_files(relative_path: str = "") -> str:
     List files and directories.
 
     Args:
-        relative_path: Relative path within the filesystem
+        relative_path: path relative to root
 
     Returns:
         String containing newline-separated list of file and directory names, or error message
     """
     try:
         files = list_files_in_sandbox(relative_path)
-        return "\n".join(files)
+        return files
     except Exception as e:
         return f"Error listing files in '{relative_path}': {str(e)}"
 
@@ -77,7 +77,7 @@ def create_directory(relative_path: str) -> str:
     Create a directory.
 
     Args:
-        relative_path: Relative path to the directory within the filesystem
+        relative_path: path to the directory relative to root
 
     Returns:
         Success message or error message
@@ -147,7 +147,7 @@ def move_file(src_relative_path: str, dst_relative_path: str) -> str:
 @function_tool
 def copy_file(src_relative_path: str, dst_relative_path: str) -> str:
     """
-    Copy a file within the filesystem.
+    Copy a file.
 
     Args:
         src_relative_path: source file path relative to root
@@ -202,3 +202,17 @@ def append_to_file(relative_path: str, content: str) -> str:
         return f"Successfully appended to {relative_path}"
     except Exception as e:
         return f"Error appending to file '{relative_path}': {str(e)}"
+
+
+FILESYSTEM_TOOLS = [
+    list_files,
+    read_file,
+    write_file,
+    create_directory,
+    delete_file,
+    delete_directory,
+    move_file,
+    copy_file,
+    edit_file_section,
+    append_to_file,
+]

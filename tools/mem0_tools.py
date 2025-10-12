@@ -1,20 +1,20 @@
-from agents import function_tool
-
 """Tool wrappers exposing the shared mem0 memory layer to agents.
 Each tool is intentionally small and returns plain serializable data.
 """
+
+from agents import function_tool
 from tools.utils.mem0_memory import (
-    add_memory,
-    search_memories,
-    delete_memory,
-    update_memory,
-    history_memory,
-    get_all_memories,
+    memory_add,
+    memory_search,
+    memory_delete,
+    memory_update,
+    get_memory_history,
+    memory_all,
 )
 
 
 @function_tool
-def memory_add(text: str, user_id: str = "logx") -> str:
+def add_memory(text: str, user_id: str = "logx") -> str:
     """Add a new memory fact / message to the shared memory layer.
 
     Args:
@@ -23,11 +23,11 @@ def memory_add(text: str, user_id: str = "logx") -> str:
     Returns:
         Result dict from mem0 add call.
     """
-    return add_memory(text, user_id=user_id)
+    return memory_add(text, user_id=user_id)
 
 
 @function_tool
-def memory_search(query: str, user_id: str = "logx", limit: int = 5) -> str:
+def search_memory(query: str, user_id: str = "logx", limit: int = 5) -> str:
     """Semantic search over stored memories.
 
     Args:
@@ -38,11 +38,11 @@ def memory_search(query: str, user_id: str = "logx", limit: int = 5) -> str:
     Returns:
         List of memory entries.
     """
-    return search_memories(query, user_id=user_id, limit=limit)
+    return memory_search(query, user_id=user_id, limit=limit)
 
 
 @function_tool
-def memory_delete(memory_id: str) -> str:
+def delete_memory(memory_id: str) -> str:
     """Delete a memory entry by its ID.
 
     Args:
@@ -50,11 +50,11 @@ def memory_delete(memory_id: str) -> str:
     Returns:
         Result dict from mem0 delete call.
     """
-    return delete_memory(memory_id=memory_id)
+    return memory_delete(memory_id=memory_id)
 
 
 @function_tool
-def memory_update(memory_id: str, data: str) -> str:
+def update_memory(memory_id: str, data: str) -> str:
     """Update a memory entry by its ID.
 
     Args:
@@ -63,7 +63,7 @@ def memory_update(memory_id: str, data: str) -> str:
     Returns:
         Result dict from mem0 update call.
     """
-    return update_memory(memory_id=memory_id, data=data)
+    return memory_update(memory_id=memory_id, data=data)
 
 
 @function_tool
@@ -75,11 +75,11 @@ def memory_history(memory_id: str) -> str:
     Returns:
         Result dict from mem0 history call.
     """
-    return history_memory(memory_id=memory_id)
+    return get_memory_history(memory_id=memory_id)
 
 
 @function_tool
-def memory_get_all(user_id: str = "logx") -> str:
+def get_all_memories(user_id: str = "logx") -> str:
     """Get all memories for a user (may be large).
 
     Args:
@@ -88,4 +88,14 @@ def memory_get_all(user_id: str = "logx") -> str:
     Returns:
         All memory entries for the user.
     """
-    return get_all_memories(user_id=user_id)
+    return memory_all(user_id=user_id)
+
+
+MEM0_TOOLS = [
+    add_memory,
+    search_memory,
+    delete_memory,
+    update_memory,
+    memory_history,
+    get_all_memories,
+]
