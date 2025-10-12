@@ -193,15 +193,20 @@ def handle_agents_command(user_msg: str, agents: dict, agent: Agent) -> Agent:
     return agent
 
 
-# Pretty print conversation history
-def pretty_print_history(history):
+# Display conversation history
+def display_history(inputs: List[TResponseInputItem]):
     """
-    Pretty prints the conversation history from the JSON file and returns it as a string.
+    Display the conversation history.
     """
+    if not inputs:
+        console.print("[bold dim]No conversation history available.[/bold dim]")
+        return
+
     output_lines = []
 
-    for entry in history:
-        role: str = entry.get("role", "") or entry.get("type", "unknown")
+    for entry in inputs:
+        role = entry.get("role", "") or entry.get("type", "unknown")
+        role = str(role)
         content = entry.get("content", "")
 
         if content:
@@ -240,22 +245,13 @@ def pretty_print_history(history):
                     )
             if "output" in entry:
                 output = entry["output"]
+                output = str(output)
                 if output.startswith('{"'):
                     continue
                 output_lines.append(f"**Output:**\n```\n{output}\n```\n")
 
-    return "\n".join(output_lines)
+    history_text = "\n".join(output_lines)
 
-
-# Display conversation history
-def display_history(inputs: List[TResponseInputItem]):
-    """
-    Display the conversation history.
-    """
-    if not inputs:
-        console.print("[bold dim]No conversation history available.[/bold dim]")
-        return
-    history_text = pretty_print_history(inputs)
     console.print(
         Panel(
             Markdown(history_text, style="white"),
@@ -679,7 +675,7 @@ async def run_cli(
         if not user_msg:
             continue
         if user_msg.startswith("<ml>"):
-            while not user_msg.endswith("</ml>"):
+            while not user_msg.strip().endswith("</ml>"):
                 next_line = Prompt.ask(":")
                 user_msg += "\n" + next_line
                 user_msg = user_msg.strip()
@@ -700,13 +696,12 @@ async def run_cli(
                 tts_client.shutdown()
             break
         if skip:
-            if inputs:
-                inputs.pop()
             continue
 
         inputs.append({"content": user_msg, "role": "user"})
 
         if use_context_agent:
+
             # context_result = await Runner.run(
             #     starting_agent=context_agent.agent, input=inputs, max_turns=MAX_TURNS
             # )
