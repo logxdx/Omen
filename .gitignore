@@ -231,6 +231,9 @@ docs/.doctrees/
 
 # Root directory (contains user data)
 root/
+rag/
+memory_store/
+models/
 
 # Backup files
 *.bak

@@ -3,11 +3,65 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Version
+Version = "1.3.0"
+
 # Global max turns for agent interactions
-MAX_TURNS = 15
+MAX_TURNS = 50
+
+# Global word buffer size for streaming text-to-speech
+WORD_BUFFER_SIZE = 30
+
+# Online or Local
+LOCAL = False
 
 # Individual configurations for each agent
-AGENT_CONFIGS = {
+LOCAL_CONFIG = {
+    "PERSONALITY": "omen",
+    "triage_agent": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("TRIAGE_API_KEY"),
+        "MODEL_NAME": "openai/qwen3:1.7b",
+    },
+    "web_search_agent": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("WEB_SEARCH_API_KEY"),
+        "MODEL_NAME": "openai/qwen3:1.7b",
+    },
+    "filesystem_agent": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("FILESYSTEM_API_KEY"),
+        "MODEL_NAME": "openai/qwen3:1.7b",
+    },
+    "ideation_agent": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("IDEATION_API_KEY"),
+        "MODEL_NAME": "openai/qwen3:1.7b",
+    },
+    "study_agent": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("STUDY_API_KEY"),
+        "MODEL_NAME": "openai/qwen3:1.7b",
+    },
+    "memory_agent": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("MEMORY_API_KEY"),
+        "MODEL_NAME": "openai/qwen3:1.7b",
+    },
+    "analysis_agent": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("ANALYSIS_API_KEY"),
+        "MODEL_NAME": "openai/qwen3:1.7b",
+    },
+    "context_manager_agent": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("CONTEXT_API_KEY"),
+        "MODEL_NAME": "openai/qwen3:1.7b",
+    },
+}
+
+# Individual configurations for each agent
+ONLINE_CONFIG = {
     "PERSONALITY": "omen",
     "triage_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
@@ -48,5 +102,9 @@ AGENT_CONFIGS = {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
         "MODEL_NAME": "openai/gpt-oss-120b",
-    }
+    },
 }
+
+
+# Select configuration based on environment
+AGENT_CONFIGS = LOCAL_CONFIG if LOCAL else ONLINE_CONFIG
