@@ -1,7 +1,6 @@
 from my_agents.base_agent import agent_config, my_agent
 from config.agent_config import AGENT_CONFIGS
-from tools.python_tools import execute_code
-from tools.misc_tools import get_current_datetime
+from tools.misc_tools import MISC_TOOLS
 from .prompt import ANALYSIS_AGENT_SYSTEM_PROMPT, ANALYSIS_AGENT_HANDOFF_INSTRUCTIONS
 
 
@@ -13,8 +12,5 @@ analysis_agent = my_agent(
     config=agent_config(**config),
     instructions=instructions,
     handoff_instructions=ANALYSIS_AGENT_HANDOFF_INSTRUCTIONS,
-    tools=[
-        execute_code,
-        get_current_datetime,
-    ],
+    tools=MISC_TOOLS,
 )

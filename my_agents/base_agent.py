@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+from typing import Sequence
 from agents import Agent, Tool
 from agents.extensions.models.litellm_model import LitellmModel
 
@@ -17,10 +18,10 @@ class my_agent:
     agent_name: str
     config: agent_config
     instructions: str
-    agent: Agent = None # type: ignore
+    agent: Agent = None  # type: ignore
     handoff_instructions: str = ""
     handoffs: list[my_agent] = field(default_factory=list)
-    tools: list[Tool] = field(default_factory=list)
+    tools: list = field(default_factory=list)
 
     def __post_init__(self):
         self.create_agent()
@@ -69,8 +70,9 @@ class my_agent:
         if isinstance(handoffs, my_agent):
             handoffs = [handoffs]
         if handoffs:
+            if not self.handoffs:
+                self.instructions += "\n\n## AVAILABLE SPECIALIST AGENTS\n---\n"
             self.handoffs.extend(handoffs)
-            self.instructions += "\n\n## AVAILABLE SPECIALIST AGENTS\n"
             for handoff_agent in self.handoffs:
                 if (
                     handoff_agent.agent
