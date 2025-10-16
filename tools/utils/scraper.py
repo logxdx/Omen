@@ -12,7 +12,7 @@ from html import unescape
 import requests
 
 from urllib.parse import urljoin
-from spider_rs import Page  # type: ignore
+from spider_rs import Page, Website  # type: ignore
 from browserforge.headers import HeaderGenerator
 from html2text import html2text
 from litellm import completion
@@ -61,9 +61,9 @@ for logger_name in logging.root.manager.loggerDict:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 # Set the summarization model
-BASE_URL = os.getenv("CEREBRAS_BASE_URL")
+BASE_URL = os.getenv("OLLAMA_BASE_URL")
 API_KEY = os.getenv("CEREBRAS_API_KEY")
-SUMMARIZATION_MODEL = "llama-3.3-70b"
+SUMMARIZATION_MODEL = "LFM2:1.2B"
 
 # These patterns will be used to filter out unwanted URLs
 EXCLUDE_PATTERNS = [
@@ -129,7 +129,7 @@ class PageResult(BaseModel):
         return (
             f"URL: {self.url}\n"
             + (f"Title: {self.title}\n" if self.title else "")
-            + "Content:\n"
+            + "---\n"
             + (f"{self.summary}" if self.summary else f"{self.markdown}")
         )
 
@@ -184,7 +184,7 @@ def get_page_content(
 
         # If raw html is empty, return empty PageResult
         if not raw_html:
-            logger.warning("[get_page_content]: CANNOT FETCH HTML")
+            logger.warning(f"[get_page_content]: CANNOT FETCH HTML ({url})")
             return PageResult(url=url)
 
         logger.info(f"[get_page_content] FETCHED")
@@ -200,6 +200,90 @@ def get_page_content(
         return PageResult(url=url)
 
 
+def scrape_content(
+    url: str,
+    headers: dict[str, str] | None = None,
+    subdomains: bool | None = None,
+    tld: bool | None = None,
+):
+    """
+    Scrape the HTML content from a URL and extract all links.
+
+    Args:
+        url (str): The URL to scrape and extract links from
+        headers (dict[str, str] | None): Optional headers to use for the request
+        subdomains (bool | None): Include subdomains in the search
+        tld (bool | None): Search for different top-level domains (TLDs)
+
+    Returns:
+            PageResult: PageResult object containing the URL, raw HTML, cleaned HTML, markdown, and links
+
+    Raises:
+            Exception: If there's an error during scraping
+
+    Example:
+            >>> url = "https://example.com"
+            >>> content = scrape_content(url)
+            >>> print(content)
+    """
+
+    if not url:
+        logger.warning("[scrape_content]: URL EMPTY")
+        return PageResult(url=url)
+
+    try:
+        logger.info(f"[scrape_content] FETCHING HTML")
+
+        # If headers are not provided, generate random headers
+        if headers is None:
+            headers = get_headers()
+
+        website: Website = (
+            Website(url=url)
+            .with_return_page_links(True)
+            .with_depth(0)
+            .with_budget({"*": 1})
+            .with_stealth(True)
+        )
+
+        if headers is not None:
+            website = website.with_headers(headers)
+        if subdomains is not None:
+            website = website.with_subdomains(subdomains)
+        if tld is not None:
+            website = website.with_tld(tld)
+
+        website.scrape(headless=False)
+        page = website.get_pages()[0]
+        raw_html = str(page.content)
+
+        # If raw html is empty, return empty PageResult
+        if not raw_html:
+            logger.info(f"[scrape_content] Trying with headless browser...")
+            website.scrape(headless=True)
+            page = website.get_pages()[0]
+            raw_html = str(page.content)
+            if not raw_html:
+                logger.warning(f"[scrape_content]: CANNOT FETCH HTML ({url})")
+                return PageResult(url=url)
+
+        website.with_budget({"*": 0}).with_depth(1)
+        website.crawl()
+        links = website.get_links()
+        # website.crawl_smart()
+        # links += website.get_links()
+
+        links = list(set(links))
+
+        logger.info(f"[scrape_content] FETCHED")
+
+        return PageResult(url=url, raw_html=raw_html, links=links)
+
+    except Exception as e:
+        logger.error(f"[get_page_content] ERROR: {e}")
+        return PageResult(url=url)
+
+
 def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[str]]:
     """
     HTML Cleanup Magic 🪄
@@ -209,7 +293,7 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
             baseurl (str): The base URL to resolve relative links
 
     Returns:
-            str: Cleaned HTML content
+            Title, Cleaned HTML, Page Links
 
     Raises:
             Exception: If there's an error during cleaning
@@ -238,7 +322,6 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
                 "script",
                 "noscript",
                 "style",
-                "img",
                 "br",
                 "hr",
                 "meta",
@@ -270,8 +353,6 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
             "button",
             "main",
             "article",
-            "header",
-            "footer",
             "ul",
             "ol",
             "li",
@@ -299,6 +380,7 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
             "caption",
             "col",
             "colgroup",
+            "img",
         }
 
         # Allowed attributes for tags
@@ -439,7 +521,7 @@ def html2md(html: str, instructions: Optional[str] = None) -> str:
     except Exception as e:
         logger.error(f"[html2md] ERROR: {e}")
         logger.info(f"[html2md] FALLBACK TO html2text")
-        markdown = html2text(html=html, bodywidth=600).strip()
+        markdown = html2text(html=html, bodywidth=0).strip()
         return markdown
 
 
@@ -494,18 +576,7 @@ def summarize_content(content: str, instructions: Optional[str] = None) -> str:
         logger.info(f"[summarize_content] Summarizing Content...")
 
         if not instructions:
-            instructions = dedent(
-                """
-            You are a precise and context-aware summarization assistant. 
-            Your task is to generate a concise summary that captures all the essential information, key arguments, and supporting details from the original content.
-            Maintain the logical flow, chronological order, and structural integrity of the original material.
-            Do not omit significant facts, figures, technical terms, names, or causal relationships. 
-            Use clear and coherent language suitable for an educated reader who seeks a faithful, compressed version of the original content without losing context.
-            Do not introduce interpretations, opinions, or paraphrasing that alters the meaning. 
-            The goal is to compress the material, not reinterpret it.
-            The summary should be comprehensive, capturing the essence of the original content while being as brief as possible.
-            """
-            )
+            instructions = dedent("""Summarise the content into bullet points.""")
 
         response = str(
             completion(
@@ -559,17 +630,6 @@ def jina_reader_api(url: str) -> str:
         headers = get_headers()
         headers["X-Engine"] = "browser"
 
-        # # pdf handling
-        # if url.startswith("file://") and url.endswith(".pdf"):
-        #     JINA_URL = "https://r.jina.ai/"
-        #     headers["Content-Type"] = "application/json"
-
-        #     filepath = url.replace("file://", "")
-        #     filepath = Path(filepath).resolve()
-        #     with open(filepath, "rb") as f:
-        #         pdf = base64.b64encode(f.read()).decode("utf-8")
-        #     json_payload = {"pdf": pdf}
-
         markdown = requests.get(JINA_URL, headers=headers, json=json_payload)
         markdown = markdown.text
 
@@ -614,7 +674,7 @@ def scrape_page(
         if headers is None:
             headers = get_headers()
 
-        # If user_agent is provided, remove it from headers
+        # If user_agent is provided, update it in headers
         if user_agent:
             headers["User-Agent"] = user_agent
 
@@ -627,14 +687,17 @@ def scrape_page(
             page.markdown = jina_reader_api(url=url)
         else:
             # get PageResult object with raw_html, links and url
-            page = get_page_content(
+            page = scrape_content(
                 url=url, headers=headers, subdomains=subdomains, tld=tld
             )
 
+            links: list[str] = []
+
             # get cleaned html
-            page.title, page.cleaned_html, links = soup_html(
-                html=page.raw_html, baseurl=url
-            )
+            if page.raw_html:
+                page.title, page.cleaned_html, links = soup_html(
+                    html=page.raw_html, baseurl=url
+                )
 
             # ensure links are unique
             page.links = list(set(links + page.links))
@@ -666,8 +729,18 @@ def scrape_page(
 
 
 if __name__ == "__main__":
+    url = "https://blog.zeptonow.com/"
     url = "https://news.ycombinator.com/"
     url = "https://spider.cloud/"
     url = "https://openai.com/index/introducing-gpt-oss/"
-    result: str = scrape_page(url)
-    print(result)
+
+    result = scrape_page(url, summarise=True)
+    output = f"URL: {result.url}\n\n"
+    output += f"Markdown\n---\n{result.markdown}\n\n"
+    output += f"Summary\n---\n{result.summary}"
+    print(output)
+    print("\n\n---\n" + "\n".join(result.links) + "\n---\n")
+
+    # for link in result.links:
+    #     page = scrape_page(link, summarise=True)
+    #     print(str(page) + "\n\n===\n")
