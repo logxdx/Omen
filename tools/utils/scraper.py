@@ -1,23 +1,21 @@
-# type:ignore
-
 import os
 import re
-from textwrap import dedent
 import logging
-from typing import Optional
+from textwrap import dedent
 
 import bs4
+import requests
 import unicodedata
 from html import unescape
-import requests
-
+from typing import Optional
+from litellm import completion
+from dotenv import load_dotenv
+from pydantic import BaseModel
+from html2text import html2text
 from urllib.parse import urljoin
+from SearxSearch import search
 from spider_rs import Page, Website  # type: ignore
 from browserforge.headers import HeaderGenerator
-from html2text import html2text
-from litellm import completion
-from pydantic import BaseModel
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -31,7 +29,7 @@ class ColoredLogging(logging.Formatter):
     red = "\x1b[31;20m"
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
-    base_format = "%(levelname)s - %(message)s [%(filename)s:%(lineno)d]"
+    base_format = "[%(filename)s:%(lineno)d] - %(levelname)s | %(message)s"
 
     FORMATS = {
         logging.DEBUG: cyan + base_format + reset,
@@ -134,7 +132,7 @@ class PageResult(BaseModel):
         )
 
 
-def get_page_content(
+def fetch_page_content(
     url: str,
     headers: Optional[dict[str, str]] = None,
     subdomains: Optional[bool] = None,
@@ -157,14 +155,14 @@ def get_page_content(
 
     Example:
             >>> url = "https://example.com"
-            >>> content = get_page_content(url)
+            >>> content = fetch_page_content(url)
             >>> print(content)
     """
     if not url:
-        logger.warning("[get_page_content]: URL EMPTY")
+        logger.warning("[fetch_page_content]: URL EMPTY")
         return PageResult(url=url)
     try:
-        logger.info(f"[get_page_content] FETCHING HTML")
+        logger.info(f"[fetch_page_content] FETCHING HTML")
 
         # If headers are not provided, generate random headers
         if headers is None:
@@ -184,10 +182,10 @@ def get_page_content(
 
         # If raw html is empty, return empty PageResult
         if not raw_html:
-            logger.warning(f"[get_page_content]: CANNOT FETCH HTML ({url})")
+            logger.warning(f"[fetch_page_content]: CANNOT FETCH HTML ({url})")
             return PageResult(url=url)
 
-        logger.info(f"[get_page_content] FETCHED")
+        logger.info(f"[fetch_page_content] FETCHED")
 
         return PageResult(
             url=url,
@@ -196,11 +194,11 @@ def get_page_content(
         )
 
     except Exception as e:
-        logger.error(f"[get_page_content] ERROR: {e}")
+        logger.error(f"[fetch_page_content] ERROR: {e}")
         return PageResult(url=url)
 
 
-def scrape_content(
+def scrape_page_content(
     url: str,
     headers: dict[str, str] | None = None,
     subdomains: bool | None = None,
@@ -223,16 +221,16 @@ def scrape_content(
 
     Example:
             >>> url = "https://example.com"
-            >>> content = scrape_content(url)
+            >>> content = scrape_page_content(url)
             >>> print(content)
     """
 
     if not url:
-        logger.warning("[scrape_content]: URL EMPTY")
+        logger.warning("[scrape_page_content]: URL EMPTY")
         return PageResult(url=url)
 
     try:
-        logger.info(f"[scrape_content] FETCHING HTML")
+        logger.info(f"[scrape_page_content] FETCHING HTML")
 
         # If headers are not provided, generate random headers
         if headers is None:
@@ -259,12 +257,12 @@ def scrape_content(
 
         # If raw html is empty, return empty PageResult
         if not raw_html:
-            logger.info(f"[scrape_content] Trying with headless browser...")
+            logger.info(f"[scrape_page_content] Trying with headless browser...")
             website.scrape(headless=True)
             page = website.get_pages()[0]
             raw_html = str(page.content)
             if not raw_html:
-                logger.warning(f"[scrape_content]: CANNOT FETCH HTML ({url})")
+                logger.warning(f"[scrape_page_content]: CANNOT FETCH HTML ({url})")
                 return PageResult(url=url)
 
         website.with_budget({"*": 0}).with_depth(1)
@@ -275,12 +273,12 @@ def scrape_content(
 
         links = list(set(links))
 
-        logger.info(f"[scrape_content] FETCHED")
+        logger.info(f"[scrape_page_content] FETCHED")
 
         return PageResult(url=url, raw_html=raw_html, links=links)
 
     except Exception as e:
-        logger.error(f"[get_page_content] ERROR: {e}")
+        logger.error(f"[fetch_page_content] ERROR: {e}")
         return PageResult(url=url)
 
 
@@ -329,6 +327,7 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
                 "header",
                 "footer",
                 "svg",
+                "img",
                 "input",
                 "textarea",
                 "select",
@@ -687,7 +686,7 @@ def scrape_page(
             page.markdown = jina_reader_api(url=url)
         else:
             # get PageResult object with raw_html, links and url
-            page = scrape_content(
+            page = scrape_page_content(
                 url=url, headers=headers, subdomains=subdomains, tld=tld
             )
 
@@ -726,6 +725,249 @@ def scrape_page(
     except Exception as e:
         logger.error(f"[scrape_page] ERROR: {e}")
         return PageResult(url=url)
+
+
+class CrawlingSubscription:
+    """
+    A subscription class to handle page events.
+    """
+
+    def __init__(self):
+        logger.info("[CRAWLING STARTED]")
+
+    def __call__(self, page):
+        if page.status_code != 200:
+            logger.info(page.url + " - " + str(page.status_code))
+        else:
+            logger.debug(page.url + " - " + str(page.status_code))
+
+
+def crawl_links(
+    url: str,
+    headers: dict | None = None,
+    user_agent: str | None = None,
+    crawl_budget: dict[str, int] | None = None,
+    depth: int = 1,
+    chrome_intercept: bool = False,
+    block_images: bool = False,
+    stealth: bool = True,
+    subdomains: bool = False,
+    tld: bool = False,
+    timeout: int = 10000,  # in milliseconds
+    whitelist_url: list[str] | None = None,
+    blacklist_url: list[str] | None = EXCLUDE_PATTERNS,
+    chrome_url: str | None = None,
+    proxies: list[str] | None = None,
+    external_domains: list[str] | None = None,
+    respect_robots_txt: bool = False,
+    cache_page: bool = False,
+    delay_between_requests: int = 0,
+) -> list[str]:
+    """
+    Crawl a page and return a list of links found on that page.
+    Args:
+        url (str): The URL of the website to crawl
+        headers (dict): Headers to use for the request
+        user_agent (str): User agent to use for the request
+        crawl_budget (dict[str, int]): Map of domain to number of pages to crawl for that domain
+        depth (int): Depth of the crawl, 0 for infinite depth
+        chrome_intercept (bool): Enable Chrome network interception
+        block_images (bool): Block images from loading
+        stealth (bool): Use stealth mode
+        subdomains (bool): Include subdomains in the search
+        tld (bool): Search for different top-level domains (TLDs)
+        timeout (int): Request timeout in milliseconds
+        whitelist_url (list[str] | None): List of URLs (path, url, regex pattern) to whitelist
+        blacklist_url (list[str] | None): List of URLs (path, url, regex pattern) to blacklist
+        chrome_url (str): Remote Chrome URL for headless browsing
+        proxies (list[str] | None): List of proxies to use for the request
+        external_domains (list[str] | None): List of external domains to include in the crawl
+        respect_robots_txt (bool): Respect robots.txt rules
+        cache_page (bool): Cache the page content
+        delay_between_requests (int): Delay between requests in milliseconds
+    """
+
+    if not url:
+        logger.warning("[crawl_page] WARNING: URL EMPTY")
+        return []
+
+    crawl_result: set[str] = set()
+
+    try:
+        logger.info(f"[crawl_page] CRAWLING FOR LINKS FROM {url}")
+
+        # If headers are not provided, generate random headers
+        if headers is None:
+            headers = get_headers()
+
+        # If user_agent is provided, remove it from headers
+        if user_agent:
+            if headers.get("User-Agent"):
+                del headers["User-Agent"]
+
+        website: Website = Website(url=url)
+
+        if headers is not None:
+            website = website.with_headers(headers)
+        if user_agent is not None:
+            website = website.with_user_agent(user_agent)
+        if crawl_budget is not None:
+            website = website.with_budget(crawl_budget)
+        if subdomains is not None:
+            website = website.with_subdomains(subdomains)
+        if tld is not None:
+            website = website.with_tld(tld)
+        if whitelist_url is not None:
+            website = website.with_whitelist_url(whitelist_url)
+        if blacklist_url is not None:
+            website = website.with_blacklist_url(blacklist_url)
+        if chrome_url is not None:
+            website = website.with_chrome_connection(chrome_url)
+        if proxies is not None:
+            website = website.with_proxies(proxies)
+        if external_domains is not None:
+            website = website.with_external_domains(external_domains)
+
+        # Create a Website object
+        website: Website = (
+            Website(url=url)
+            .with_depth(depth)
+            .with_chrome_intercept(chrome_intercept, block_images)
+            .with_stealth(stealth)
+            .with_request_timeout(timeout)
+            .with_caching(cache_page)
+            .with_respect_robots_txt(respect_robots_txt)
+            .with_delay(delay_between_requests)
+            .with_return_page_links(True)
+        )
+
+        # Use the default crawl method
+        website.crawl(on_page_event=CrawlingSubscription(), headless=False)
+        # Collect links from the page
+        for link in website.get_links():
+            crawl_result.add(str(link))
+
+        # Use the default crawl method with headless browser
+        website.crawl(on_page_event=CrawlingSubscription(), headless=True)
+        # Collect links from the page
+        for link in website.get_links():
+            crawl_result.add(str(link))
+
+        # Use smart crawl
+        website.crawl_smart(on_page_event=CrawlingSubscription())
+        # Collect links from the page
+        for link in website.get_links():
+            crawl_result.add(str(link))
+        logger.info("\n[CRAWLING COMPLETED]")
+
+    except Exception as e:
+        logger.warning(f"[crawl_page] ERROR: {e}")
+
+    return list(crawl_result)
+
+
+def crawl_page(
+    url: str,
+    use_reader_lm: bool = True,
+    summarise: bool = False,
+    instructions: str = "",
+    headers: dict | None = None,
+    user_agent: str | None = None,
+    crawl_budget: dict[str, int] | None = None,
+    depth: int = 1,
+    chrome_intercept: bool = False,
+    block_images: bool = False,
+    stealth: bool = True,
+    subdomains: bool = False,
+    tld: bool = False,
+    timeout: int = 10000,  # in milliseconds
+    whitelist_url: list[str] | None = None,
+    blacklist_url: list[str] | None = EXCLUDE_PATTERNS,
+    chrome_url: str | None = None,
+    proxies: list[str] | None = None,
+    external_domains: list[str] | None = None,
+    respect_robots_txt: bool = False,
+    cache_page: bool = False,
+    delay_between_requests: int = 0,
+) -> list[PageResult]:
+    """
+    Crawl a website and return a list of pages found on that website.
+    Args:
+        url (str): The URL of the website to crawl
+        use_reader_lm (bool): Use the Reader-LM for HTML to Markdown (default: True)
+        summarise (bool): Summarise markdown using an LLM (default: False)
+        instructions (str): Optional instructions to guide the summarisation
+        headers (dict): Headers to use for the request
+        user_agent (str): User agent to use for the request
+        crawl_budget (dict[str, int]): Map of domain to number of pages to crawl for that domain
+        depth (int): Depth of the crawl, 0 for infinite depth
+        chrome_intercept (bool): Enable Chrome network interception
+        block_images (bool): Block images from loading
+        stealth (bool): Use stealth mode
+        subdomains (bool): Include subdomains in the search
+        tld (bool): Search for different top-level domains (TLDs)
+        timeout (int): Request timeout in milliseconds
+        whitelist_url (list[str] | None): List of URLs (path, url, regex pattern) to whitelist
+        blacklist_url (list[str] | None): List of URLs (path, url, regex pattern) to blacklist
+        chrome_url (str): Remote Chrome URL for headless browsing
+        proxies (list[str] | None): List of proxies to use for the request
+        external_domains (list[str] | None): List of external domains to include in the crawl
+        respect_robots_txt (bool): Respect robots.txt rules
+        cache_page (bool): Cache the page content
+        delay_between_requests (int): Delay between requests in milliseconds
+    """
+
+    if not url:
+        logger.warning("[crawl_page] WARNING: URL EMPTY")
+        return []
+
+    crawl_result = []
+
+    try:
+        logger.info(f"[crawl_page] SCRAPING PAGES FROM {url}")
+
+        links = crawl_links(
+            url=url,
+            headers=headers,
+            user_agent=user_agent,
+            crawl_budget=crawl_budget,
+            depth=depth,
+            chrome_intercept=chrome_intercept,
+            block_images=block_images,
+            stealth=stealth,
+            subdomains=subdomains,
+            tld=tld,
+            timeout=timeout,
+            whitelist_url=whitelist_url,
+            blacklist_url=blacklist_url,
+            chrome_url=chrome_url,
+            proxies=proxies,
+            external_domains=external_domains,
+            respect_robots_txt=respect_robots_txt,
+            cache_page=cache_page,
+            delay_between_requests=delay_between_requests,
+        )
+
+        for link in links:
+            crawl_result.append(
+                scrape_page(
+                    url=str(link),
+                    use_reader_lm=use_reader_lm,
+                    summarise=summarise,
+                    instructions=instructions,
+                    subdomains=subdomains,
+                    tld=tld,
+                    user_agent=user_agent,
+                    headers=headers,
+                )
+            )
+
+        logger.info(f"[crawl_page] SCRAPED {len(crawl_result)} PAGES")
+
+    except Exception as e:
+        print(f"[LOG] Error while crawling: {e}")
+
+    return crawl_result
 
 
 if __name__ == "__main__":
