@@ -1,37 +1,16 @@
 import asyncio
-# from cli.interface import run_cli
+
 from cli.v1 import run_cli
 
-# Agent Definitions
-from my_agents import triage_agent
-from my_agents import web_search_agent
-from my_agents import filesystem_agent
-from my_agents import ideation_agent
-from my_agents import study_agent
-from my_agents import analysis_agent
+from agent_runtime import get_agent_registry
 
-# Agent handoffs
-triage_agent.add_handoffs([web_search_agent, filesystem_agent])
-web_search_agent.add_handoffs([])
-filesystem_agent.add_handoffs([])
-analysis_agent.add_handoffs([web_search_agent, filesystem_agent])
-ideation_agent.add_handoffs([web_search_agent])
-study_agent.add_handoffs([web_search_agent, filesystem_agent, analysis_agent])
 
-# Agent registry
-agents = {
-    "triage": triage_agent.agent,
-    "web": web_search_agent.agent,
-    "fs": filesystem_agent.agent,
-    "idea": ideation_agent.agent,
-    "study": study_agent.agent,
-    "analysis": analysis_agent.agent,
-}
+agents, primary_agent = get_agent_registry()
 
 
 async def main():
     """Main conversation loop"""
-    await run_cli(agents, triage_agent.agent, use_context_agent=True)
+    await run_cli(agents, primary_agent)
 
 
 if __name__ == "__main__":

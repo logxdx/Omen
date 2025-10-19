@@ -40,8 +40,8 @@ from agents import (
     set_tracing_disabled,
 )
 from config.agent_config import Version, MAX_TURNS
-from .art import get_random_omen
-from tts.kokoro import KokoroTTS as TTS
+from .art import get_art
+from tts.PiperTTS import PiperTTS as TTS
 from my_agents import context_agent
 
 set_tracing_disabled(disabled=True)
@@ -67,7 +67,7 @@ COLOR_GREEN = "\033[32m"
 #     COLOR_RESET = COLOR_BOLD = COLOR_PURPLE = COLOR_WHITE = ""
 #     COLOR_YELLOW = COLOR_DIM = COLOR_RED = COLOR_GREEN = ""
 
-welcome_art = get_random_omen()
+welcome_art = get_art()
 _tts = None
 
 
