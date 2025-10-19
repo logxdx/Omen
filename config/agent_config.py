@@ -7,62 +7,67 @@ load_dotenv()
 Version = "1.3.0"
 
 # Global max turns for agent interactions
-MAX_TURNS = 50
+MAX_TURNS = 20
 
 # Global word buffer size for streaming text-to-speech
-WORD_BUFFER_SIZE = 30
+WORD_BUFFER_SIZE = 10
 
 # Online or Local
-LOCAL = False
+LOCAL = True
 
 # Individual configurations for each agent
 LOCAL_CONFIG = {
-    "PERSONALITY": "omen",
+    "PERSONALITY": "glados",
     "triage_agent": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("TRIAGE_API_KEY"),
-        "MODEL_NAME": "openai/qwen3:1.7b",
+        "MODEL_NAME": "openai/Granite4:3b",
     },
     "web_search_agent": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("WEB_SEARCH_API_KEY"),
-        "MODEL_NAME": "openai/qwen3:1.7b",
+        "MODEL_NAME": "openai/Granite4:3b",
     },
     "filesystem_agent": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("FILESYSTEM_API_KEY"),
-        "MODEL_NAME": "openai/qwen3:1.7b",
+        "MODEL_NAME": "openai/Granite4:3b",
     },
     "ideation_agent": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("IDEATION_API_KEY"),
-        "MODEL_NAME": "openai/qwen3:1.7b",
+        "MODEL_NAME": "openai/Granite4:3b",
     },
     "study_agent": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("STUDY_API_KEY"),
-        "MODEL_NAME": "openai/qwen3:1.7b",
+        "MODEL_NAME": "openai/Granite4:3b",
     },
     "memory_agent": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("MEMORY_API_KEY"),
-        "MODEL_NAME": "openai/qwen3:1.7b",
+        "MODEL_NAME": "openai/Granite4:3b",
     },
     "analysis_agent": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("ANALYSIS_API_KEY"),
-        "MODEL_NAME": "openai/qwen3:1.7b",
+        "MODEL_NAME": "openai/Granite4:3b",
     },
     "context_manager_agent": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
-        "MODEL_NAME": "openai/qwen3:1.7b",
+        "MODEL_NAME": "openai/Granite4:3b",
+    },
+    "tts_summarizer": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("CONTEXT_API_KEY"),
+        "MODEL_NAME": "Granite4:3b",
     },
 }
 
 # Individual configurations for each agent
 ONLINE_CONFIG = {
-    "PERSONALITY": "omen",
+    "PERSONALITY": "glados",
     "triage_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("TRIAGE_API_KEY"),
@@ -102,6 +107,11 @@ ONLINE_CONFIG = {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
         "MODEL_NAME": "openai/gpt-oss-120b",
+    },
+    "tts_summarizer": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("CONTEXT_API_KEY"),
+        "MODEL_NAME": "LFM2:700M",
     },
 }
 

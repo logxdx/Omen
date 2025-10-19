@@ -13,7 +13,6 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from html2text import html2text
 from urllib.parse import urljoin
-from SearxSearch import search
 from spider_rs import Page, Website  # type: ignore
 from browserforge.headers import HeaderGenerator
 

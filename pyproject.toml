@@ -36,6 +36,7 @@ dependencies = [
     "docling==2.55.1",
     "easyocr==1.7.2",
     "onnx-asr[cpu,hub]==0.7.0",
+    "openai-chatkit>=1.0.2",
 ]
 
 [[tool.uv.index]]

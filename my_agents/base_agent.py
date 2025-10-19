@@ -1,6 +1,5 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Sequence
 from agents import Agent, Tool
 from agents.extensions.models.litellm_model import LitellmModel
 

@@ -51,7 +51,7 @@ def load_context_topic(topic_name: str) -> str:
     Load a saved context topic.
 
     Args:
-        topic_name: Name of the topic to load
+        topic_name: Name of the topic to load without extension (.md)
 
     Returns:
         The context content
@@ -89,7 +89,7 @@ def update_context_content(topic_name: str, old_content: str, new_content: str) 
     Update specific content within a context topic.
 
     Args:
-        topic_name: Name of the topic
+        topic_name: Name of the topic without the extension (.md)
         old_content: Text to replace
         new_content: New text
 
@@ -116,7 +116,7 @@ def delete_context_topic(topic_name: str) -> str:
     Delete a context topic.
 
     Args:
-        topic_name: Name of the topic to delete
+        topic_name: Name of the topic to delete without the extension (.md)
 
     Returns:
         Success message

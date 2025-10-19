@@ -55,19 +55,19 @@ from openwakeword.model import Model as OpenWakewordModel
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "FALSE"
 
-INIT_MODEL_TRANSCRIPTION = "small.en"
+INIT_MODEL_TRANSCRIPTION = "base.en"
 INIT_MODEL_TRANSCRIPTION_REALTIME = "tiny.en"
 INIT_REALTIME_PROCESSING_PAUSE = 0.5
 INIT_REALTIME_INITIAL_PAUSE = 0.5
 INIT_SILERO_SENSITIVITY = 0.5
-INIT_POST_SPEECH_SILENCE_DURATION = 0.5
+INIT_POST_SPEECH_SILENCE_DURATION = 1.0
 INIT_MIN_LENGTH_OF_RECORDING = 1
-INIT_MIN_GAP_BETWEEN_RECORDINGS = 1
+INIT_MIN_GAP_BETWEEN_RECORDINGS = 0.1
 INIT_WAKE_WORDS_SENSITIVITY = 0.5
 INIT_PRE_RECORDING_BUFFER_DURATION = 0.5
 INIT_WAKE_WORD_ACTIVATION_DELAY = 0.0
-INIT_WAKE_WORD_TIMEOUT = 5.0
-INIT_WAKE_WORD_BUFFER_DURATION = 0.5
+INIT_WAKE_WORD_TIMEOUT = 3.0
+INIT_WAKE_WORD_BUFFER_DURATION = 0.1
 ALLOWED_LATENCY_LIMIT = 100
 
 TIME_SLEEP = 0.02
@@ -252,7 +252,7 @@ class STT:
         compute_type: str = "int8",
         input_device_index: int = 0,
         gpu_device_index: Union[int, List[int]] = 0,
-        device: str = "cuda",
+        device: str = "cpu",
         on_recording_start=None,
         on_recording_stop=None,
         on_transcription_start=None,
@@ -282,9 +282,9 @@ class STT:
         on_vad_detect_stop=None,
         # Wake word parameters
         wakeword_backend: str = "oww",
-        openwakeword_model_paths: List[str] = ["hey_kratos"],
+        wake_word: str = "Jarvis",
+        openwakeword_model_paths: List[str] = ["hey_jarvis", "jarvis", "ok_jarvis"],
         openwakeword_inference_framework: str = "onnx",
-        wake_word: str = "Kratos",
         wake_words_sensitivity: float = INIT_WAKE_WORDS_SENSITIVITY,
         wake_word_activation_delay: float = (INIT_WAKE_WORD_ACTIVATION_DELAY),
         wake_word_timeout: float = INIT_WAKE_WORD_TIMEOUT,
@@ -2674,13 +2674,14 @@ if __name__ == "__main__":
     CLEAR_LINE = "\033[2K"
 
     recorder = STT(
-        enable_realtime_transcription=True,
-        no_log_file=True,
+        spinner=True,
+        wakeword_backend="oww",
     )
 
     try:
         while True:
             # Fetch finalized transcription text, if available
+            t = input("Yo: ")
             if text := recorder.text():
                 # Display the finalized transcription
                 print(f"Finalized transcription: {text}")
