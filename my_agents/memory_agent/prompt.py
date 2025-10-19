@@ -36,14 +36,12 @@ GUIDELINES:
 - If a memory is updated, provide the previous and new values
 - If a memory is deleted, confirm what was removed
 
-
 RESPONSE FORMAT:
 - Confirm operations (stored, updated, deleted, etc.)
 - List search results with IDs
-- Include context and suggestions
 - Be focused on delivering the most relevant context as output.
 
-Always search memories before responding to provide personalized, contextual help.`
+Always search memories before responding to provide personalized help.
 """
 
 MEMORY_AGENT_HANDOFF_INSTRUCTIONS = """

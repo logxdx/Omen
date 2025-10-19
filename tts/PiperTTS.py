@@ -3,21 +3,20 @@ import pyaudio
 import threading
 import io
 import time
-import keyboard
-import pathlib
 import random
+import pathlib
+import keyboard
 import markdown
-from bs4 import BeautifulSoup
-
 from openai import OpenAI
+
 from config.agent_config import AGENT_CONFIGS
 import config.agent_personality as personality
 
-config = AGENT_CONFIGS["triage_agent"]
+config = AGENT_CONFIGS["tts_summarizer"]
 BASE_URL = config["BASE_URL"]
 API_KEY = config["API_KEY"]
 MODEL_NAME: str = config["MODEL_NAME"]
-PERSONALITY: str = str(config.get("PERSONALITY", "random")).upper()
+PERSONALITY, _ = personality.get_personality()
 
 # Select personality based on config
 if PERSONALITY == "RANDOM":
@@ -26,42 +25,54 @@ else:
     selected_personality = personality.PERSONALITY_DICT[PERSONALITY]
 
 
-# Convert Markdown to plain text using BeautifulSoup
+# unmarkdown the text
+def unmark_element(element, stream=None):
+    if stream is None:
+        stream = io.StringIO()
+    if element.text:
+        stream.write(element.text)
+    for sub in element:
+        unmark_element(sub, stream)
+    if element.tail:
+        stream.write(element.tail)
+    return stream.getvalue()
+
+
+# patch markdown for plain text output
+markdown.Markdown.output_formats["plain"] = unmark_element  # type: ignore
+converter = markdown.Markdown(output_format="plain")  # type: ignore
+converter.stripTopLevelTags = False
+
+
+# Convert Markdown to plain text
 def markdown_to_plaintext(md_text):
-    # Convert Markdown to HTML
-    html_content = markdown.markdown(md_text)
-    # Remove HTML tags to get plain text
-    soup = BeautifulSoup(html_content, "html.parser")
-    plaintext = soup.get_text()
-    return plaintext
+    return converter.convert(md_text)
 
 
-def summarise_response(query: str | None, response_text: str) -> str:
+def summarise_response(query: str | None, response_text: str):
     """
     Summarise the response text using OpenAI API.
     """
     client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-    instructions = f"{selected_personality}\n\n You are the only point of contact of the user with the agent. You are to communicate with the user. Given the final response (and optionally the user query too), talk to the user about it in very brief like an assistant to their boss. You do not need to explain every detail, just the key points. Use simple language and avoid technical jargon. If the response is already very short, you can say it as is. Make sure the response is in plaintext with no emojis, artifacts (URLs, etc) or shortforms (e.g. -> example, i.e. -> that is)."
+    instructions = f"{selected_personality}\n\n You are the only point of communication with the user. Given the final response (and optionally the user query too), talk to the user about it in very brief like an assistant to their boss. You do not need to explain every detail, just the key points. Use simple language and avoid technical jargon (no need for code snippets, urls, etc). For tables, talk about them briefly, bringing up important points, if any. If the response is already very short, you can say it as is. Make sure the response is in plaintext with no bullet points, headers, emojis, artifacts (URLs, etc). Expand shortforms (e.g. -> example, i.e. -> that is) so that it is spoken normally."
+
     try:
-        output = str(
-            client.chat.completions.create(
-                model=MODEL_NAME.lstrip("openai/"),
-                messages=[
-                    {
-                        "role": "system",
-                        "content": instructions,
-                    },
-                    {
-                        "role": "user",
-                        "content": f"QUERY: {query}\n\nRESPONSE: {response_text}",
-                    },
-                ],
-            )
-            .choices[0]
-            .message.content
+        output = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {
+                    "role": "system",
+                    "content": instructions,
+                },
+                {
+                    "role": "user",
+                    "content": f"QUERY: {query}\n\nRESPONSE: {response_text}",
+                },
+            ],
         )
+        output = str(output.choices[0].message.content)
+        return markdown_to_plaintext(output)
     except Exception as e:
-        print(f"Error during summarization: {e}")
         output = "The output is on your screen."  # Fallback to original response if error occurs
 
     return markdown_to_plaintext(output)
@@ -74,11 +85,14 @@ MODEL_DIR = pathlib.Path(__file__).parent / "piper_voices"
 class PiperTTS:
     def __init__(
         self,
-        model_path=MODEL_DIR / "en_US-libritts_r-medium.onnx",
-        speaker_id: int = 7,
-        speed: float = 1.2,
-        volume: float = 1.25,
+        model_name="glados",
+        speaker_id: int | None = None,
+        speed: float = 1.3,
+        volume: float = 1.2,
     ):
+
+        model_path = MODEL_DIR / model_name / f"{model_name}.onnx"
+        self._spoken_text = ""
         self.syn_config = SynthesisConfig(
             speaker_id=speaker_id,
             length_scale=1 / speed,
@@ -120,7 +134,7 @@ class PiperTTS:
         # Reset buffer position for playback
         self.audio_buffer.seek(0)
         audio_data = self.audio_buffer.getvalue()
-        buffer_size = 1024
+        buffer_size = 2048
 
         # Play the audio
         while self.current_position < len(audio_data) and not self.stop_requested:
@@ -132,7 +146,7 @@ class PiperTTS:
                 self.current_position = end_pos
             else:
                 # When paused, sleep briefly to avoid CPU hogging
-                time.sleep(0.1)
+                time.sleep(0.01)
 
         # Mark as not playing when done (but keep stream alive)
         if not self.stop_requested:
@@ -143,7 +157,10 @@ class PiperTTS:
         # Stop any existing playback (but keep stream alive)
         self._stop_playback_only()
 
-        text = summarise_response(user_query, text)
+        if len(text) > 200:
+            text = summarise_response(user_query, text)
+
+        self._spoken_text = text
 
         # Reset state
         self.is_playing = True
@@ -159,6 +176,7 @@ class PiperTTS:
         keyboard.add_hotkey("ctrl+p", self.pause)
         keyboard.add_hotkey("ctrl+r", self.resume)
         keyboard.add_hotkey("ctrl+s", self.stop)
+        keyboard.add_hotkey("ctrl+y", self.replay)
 
         # Start playback in a new thread
         self.playback_thread = threading.Thread(
@@ -188,6 +206,7 @@ class PiperTTS:
             keyboard.remove_hotkey("ctrl+p")
             keyboard.remove_hotkey("ctrl+r")
             keyboard.remove_hotkey("ctrl+s")
+            keyboard.remove_hotkey("ctrl+y")
         except KeyError:
             pass
 
@@ -226,6 +245,10 @@ class PiperTTS:
             except Exception:
                 pass
 
+    @property
+    def text(self):
+        return self._spoken_text
+
     def synthesize(self, text):
         # For API: return all audio bytes at once
         audio_bytes = io.BytesIO()
@@ -233,20 +256,31 @@ class PiperTTS:
             audio_bytes.write(chunk.audio_int16_bytes)
         return audio_bytes.getvalue()
 
+    def replay(self):
+        """Replay the last spoken text"""
+        if self._spoken_text:
+            self.speak(self._spoken_text)
+
 
 if __name__ == "__main__":
     import time
 
-    text = "A transformer is an end-to-end neural architecture that uses attention instead of recurrence or convolution to relate all tokens in an input sequence at once."
+    text = "A transformer is an end-to-end neural architecture."
 
-    for i in [(7, 1.2), (25, 1.2), (26, 1.2)]:
-        # for i in [(26, 1.2)]:
-        print(i)
-        # 7, 8, 10, 25, 26, 36
-        # 7, 25, 26
-        # 26 is good default
-        tts = PiperTTS(speaker_id=i[0], speed=i[1])
-        out = tts.speak(text=text)
-        print(out)
-        time.sleep(10)
-        tts.stop()
+    tts = PiperTTS(model_name="kristin", speed=1.2, volume=1.2)
+    out = tts.speak(text=text)
+    print(out)
+    time.sleep(5)
+    tts.stop()
+
+    # for i in [(7, 1.5), (25, 1.5), (26, 1.5)]:
+    #     # for i in [(26, 1.2)]:
+    #     print(i)
+    #     # 7, 8, 10, 25, 26, 36
+    #     # 7, 25, 26
+    #     # 26 is good default
+    #     tts = PiperTTS(speaker_id=i[0], speed=i[1])
+    #     out = tts.speak(text=text)
+    #     print(out)
+    #     time.sleep(10)
+    #     tts.stop()
