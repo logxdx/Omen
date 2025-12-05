@@ -28,6 +28,7 @@ from rich.text import Text
 
 from .art import get_art
 from config.agent_config import Version, MAX_TURNS
+
 # from stt.WhisperSTT import STT
 from tts.KokoroTTS import KokoroTTS as TTS
 from my_agents import context_agent, memory_agent
@@ -36,7 +37,7 @@ from my_agents import context_agent, memory_agent
 set_tracing_disabled(disabled=True)
 
 
-CONSOLE_WIDTH = 130
+CONSOLE_WIDTH = 120
 console = Console(color_system="truecolor", width=CONSOLE_WIDTH)
 console.clear()
 
@@ -152,7 +153,7 @@ def select_context_agent_mode():
 
     while True:
         mode_choice = IntPrompt.ask("Mode", choices=["1", "2"], default="2")
-        if mode_choice == "1":
+        if mode_choice == 1:
             use_context = True
             console.print("[bold red]Using context agent for memory[/bold red]")
             break
@@ -479,6 +480,7 @@ def handle_context(
         use_context_agent,
     )
 
+
 def text2speech(user_msg, inputs, *, args):
     tts_client = get_tts()
     try:
@@ -521,7 +523,7 @@ COMMANDS = {
     },
     "clear": {
         "aliases": ["/clear", "/c"],
-        "description": "Clear conversation",
+        "description": "Clear screen",
         "handler": handle_clear,
     },
     "clear_history": {
@@ -816,7 +818,6 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
     agent, result = await stream_agent_response(agent, inputs, "managerial")
     inputs.clear()
     skip: bool = False
-
 
     while True:
 

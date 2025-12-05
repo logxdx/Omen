@@ -234,6 +234,8 @@ root/
 rag/
 memory_store/
 models/
+backend/
+chatkit*
 
 # Backup files
 *.bak
