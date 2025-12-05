@@ -1,4 +1,3 @@
-import os
 import re
 import logging
 from textwrap import dedent
@@ -15,6 +14,8 @@ from html2text import html2text
 from urllib.parse import urljoin
 from spider_rs import Page, Website  # type: ignore
 from browserforge.headers import HeaderGenerator
+
+from config.agent_config import AGENT_CONFIGS
 
 load_dotenv()
 
@@ -58,9 +59,12 @@ for logger_name in logging.root.manager.loggerDict:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 # Set the summarization model
-BASE_URL = os.getenv("OLLAMA_BASE_URL")
-API_KEY = os.getenv("CEREBRAS_API_KEY")
-SUMMARIZATION_MODEL = "LFM2:1.2B"
+config = AGENT_CONFIGS["scraper"]
+BASE_URL = config["BASE_URL"]
+API_KEY = config["API_KEY"]
+SUMMARIZATION_MODEL = config["MODEL_NAME"]
+
+CHROME_URL="http://localhost:9222/json/version"
 
 # These patterns will be used to filter out unwanted URLs
 EXCLUDE_PATTERNS = [
@@ -68,7 +72,7 @@ EXCLUDE_PATTERNS = [
     r"/(login|signup|register|sign-in|sign-up|logout|auth|account|user|profile|credits)/?",  # auth-related
     r"/(cart|checkout|order|payment|invoice|billing)/?",  # e-commerce transactions
     r"/(settings|preferences|config|admin|dashboard|privacy)/?",  # config/user settings
-    r"/(newsletter|subscribe|unsubscribe|follow|share|like)/?",  # social/subscription
+    r"/(newsletter|subscribe|unsubscribe|follow|share|like|gstatic)/?",  # social/subscription
     r"/(track|tracking|history)/?",  # order/tracking status
     r"/(error|404|403|500|maintenance|unavailable)/?",  # error pages
     r"^/api(/|$)|/api/v\d+(/|$)",  # API endpoints
@@ -202,7 +206,7 @@ def scrape_page_content(
     headers: dict[str, str] | None = None,
     subdomains: bool | None = None,
     tld: bool | None = None,
-):
+) -> PageResult:
     """
     Scrape the HTML content from a URL and extract all links.
 
@@ -235,6 +239,8 @@ def scrape_page_content(
         if headers is None:
             headers = get_headers()
 
+        raw_html = None
+
         website: Website = (
             Website(url=url)
             .with_return_page_links(True)
@@ -257,28 +263,27 @@ def scrape_page_content(
         # If raw html is empty, return empty PageResult
         if not raw_html:
             logger.info(f"[scrape_page_content] Trying with headless browser...")
-            website.scrape(headless=True)
+            website.with_chrome_connection("http://localhost:9222/json/version").scrape(headless=True)
             page = website.get_pages()[0]
             raw_html = str(page.content)
-            if not raw_html:
-                logger.warning(f"[scrape_page_content]: CANNOT FETCH HTML ({url})")
-                return PageResult(url=url)
+        if not raw_html:
+            return fetch_page_content(
+                url=url, headers=headers, subdomains=subdomains, tld=tld
+            )
 
         website.with_budget({"*": 0}).with_depth(1)
         website.crawl()
         links = website.get_links()
-        # website.crawl_smart()
-        # links += website.get_links()
-
+        website.crawl_smart()
+        links += website.get_links()
         links = list(set(links))
 
         logger.info(f"[scrape_page_content] FETCHED")
 
         return PageResult(url=url, raw_html=raw_html, links=links)
 
-    except Exception as e:
-        logger.error(f"[fetch_page_content] ERROR: {e}")
-        return PageResult(url=url)
+    except Exception:
+        return fetch_page_content(url=url)
 
 
 def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[str]]:
@@ -574,13 +579,15 @@ def summarize_content(content: str, instructions: Optional[str] = None) -> str:
         logger.info(f"[summarize_content] Summarizing Content...")
 
         if not instructions:
-            instructions = dedent("""Summarise the content into bullet points.""")
+            instructions = dedent(
+                """Summarise the content into bullet points. Include relevant URLs."""
+            )
 
         response = str(
             completion(
                 base_url=BASE_URL,
                 api_key=API_KEY,
-                model=f"openai/{SUMMARIZATION_MODEL}",
+                model=f"{SUMMARIZATION_MODEL}",
                 messages=[
                     {
                         "role": "system",
@@ -755,7 +762,7 @@ def crawl_links(
     timeout: int = 10000,  # in milliseconds
     whitelist_url: list[str] | None = None,
     blacklist_url: list[str] | None = EXCLUDE_PATTERNS,
-    chrome_url: str | None = None,
+    chrome_url: str | None = CHROME_URL,
     proxies: list[str] | None = None,
     external_domains: list[str] | None = None,
     respect_robots_txt: bool = False,
@@ -804,7 +811,17 @@ def crawl_links(
             if headers.get("User-Agent"):
                 del headers["User-Agent"]
 
-        website: Website = Website(url=url)
+        website: Website = (
+            Website(url=url)
+            .with_depth(depth)
+            .with_chrome_intercept(chrome_intercept, block_images)
+            .with_stealth(stealth)
+            .with_request_timeout(timeout)
+            .with_caching(cache_page)
+            .with_respect_robots_txt(respect_robots_txt)
+            .with_delay(delay_between_requests)
+            .with_return_page_links(True)
+        )
 
         if headers is not None:
             website = website.with_headers(headers)
@@ -826,19 +843,6 @@ def crawl_links(
             website = website.with_proxies(proxies)
         if external_domains is not None:
             website = website.with_external_domains(external_domains)
-
-        # Create a Website object
-        website: Website = (
-            Website(url=url)
-            .with_depth(depth)
-            .with_chrome_intercept(chrome_intercept, block_images)
-            .with_stealth(stealth)
-            .with_request_timeout(timeout)
-            .with_caching(cache_page)
-            .with_respect_robots_txt(respect_robots_txt)
-            .with_delay(delay_between_requests)
-            .with_return_page_links(True)
-        )
 
         # Use the default crawl method
         website.crawl(on_page_event=CrawlingSubscription(), headless=False)
@@ -882,7 +886,7 @@ def crawl_page(
     timeout: int = 10000,  # in milliseconds
     whitelist_url: list[str] | None = None,
     blacklist_url: list[str] | None = EXCLUDE_PATTERNS,
-    chrome_url: str | None = None,
+    chrome_url: str | None = CHROME_URL,
     proxies: list[str] | None = None,
     external_domains: list[str] | None = None,
     respect_robots_txt: bool = False,
@@ -970,18 +974,23 @@ def crawl_page(
 
 
 if __name__ == "__main__":
-    url = "https://blog.zeptonow.com/"
-    url = "https://news.ycombinator.com/"
-    url = "https://spider.cloud/"
-    url = "https://openai.com/index/introducing-gpt-oss/"
+    # url = "https://blog.zeptonow.com/"
+    # url = "https://openai.com/index/introducing-gpt-oss/"
+    url = "https://spider.cloud/guides"
+    # url = "https://news.ycombinator.com/"
+    # url = "https://www.ndtv.com/lifestyle/unseen-pic-of-shubman-gill-with-rumoured-girlfriend-sara-tendulkar-from-london-event-is-crazy-viral-8861084"
 
-    result = scrape_page(url, summarise=True)
+    result = scrape_page(
+        url,
+        summarise=False,
+        use_reader_lm=False,
+    )
     output = f"URL: {result.url}\n\n"
     output += f"Markdown\n---\n{result.markdown}\n\n"
-    output += f"Summary\n---\n{result.summary}"
+    output += f"Summary\n---\n{result.summary}\n\n"
     print(output)
-    print("\n\n---\n" + "\n".join(result.links) + "\n---\n")
+    print("---\n" + "\n".join(result.links) + "\n---\n")
 
-    # for link in result.links:
-    #     page = scrape_page(link, summarise=True)
-    #     print(str(page) + "\n\n===\n")
+    for link in result.links:
+        page = scrape_page(link, summarise=False, use_reader_lm=False)
+        print(str(page) + "\n\n===\n")

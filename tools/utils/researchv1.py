@@ -1,12 +1,9 @@
-import asyncio
-import json
 import os
 import re
-from typing import Optional
+import json
 import logging
-from datetime import datetime
+from typing import Optional
 from textwrap import dedent
-
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,206 +13,18 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(lineno)d - %(message)s",
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 import requests
-from crawl4ai import (
-    AsyncWebCrawler,
-    BrowserConfig,
-    CrawlerRunConfig,
-    DefaultMarkdownGenerator,
-    LLMContentFilter,
-    LLMExtractionStrategy,
-    LLMConfig,
-)
 from openai import OpenAI
+from browserforge.headers import HeaderGenerator
+from scraper import scrape_page
 
-SCRAPE_CONCURRENCY = 2
+SCRAPE_CONCURRENCY = 5
 
-LLM_BASE_URL = str(os.getenv("CEREBRAS_BASE_URL"))
+LLM_BASE_URL = str(os.getenv("OLLAMA_BASE_URL"))
 LLM_API_KEY = str(os.getenv("CEREBRAS_API_KEY"))
-LLM_MODEL = "gpt-oss-120b"
-
-# Async URL scraper function
-async def async_scrape_url(url: str, query: str) -> str:
-    """
-    Asynchronously scrape content from a URL based on a query.
-
-    Args:
-        url: The URL to scrape
-        query: The search query to filter content
-
-    Returns:
-        str: Extracted content in markdown format or error message
-    """
-    logger.debug(f"Starting async scrape of URL: {url}")
-    logger.debug(f"Search query: {query}")
-
-    if (
-        not url
-        or not isinstance(url, str)
-        or not url.startswith(("http://", "https://"))
-    ):
-        error_msg = f"Invalid URL provided: {url}"
-        logger.error(error_msg)
-        return error_msg
-
-    # url = "https://r.jina.ai/" + url
-
-    if not query or not isinstance(query, str):
-        error_msg = "Invalid search query provided"
-        logger.error(error_msg)
-        return error_msg
-
-    # Log the start of the scraping operation
-    start_time = datetime.now()
-    logger.debug(f"Scraping started at {start_time}")
-
-    # Configure browser with detailed logging
-    browser_config = BrowserConfig(
-        user_agent_mode="random",
-        verbose=True,
-    )
-
-    logger.debug("Browser configuration completed")
-
-    instruction = dedent(
-        f"""
-                         Extract each and every information relevant to \"{query}\".
-                         Include key concepts, explanations, examples, and essential details. 
-                         Keep all explanations, terminologies and examples intact.
-                         Format the output as a clean structured markdown.
-                         Return "NO RESULTS" if no relevant information is found.
-                        """
-    )
-
-    llm_config = LLMConfig(
-        provider=f"openai/{LLM_MODEL}",
-        api_token=LLM_API_KEY,
-        base_url=LLM_BASE_URL,
-        temperature=0.3,
-    )
-
-    llm_strategy = LLMExtractionStrategy(
-        llm_config=llm_config,
-        instruction=instruction,
-        chunk_token_threshold=2048,
-        overlap_rate=0.2,
-        apply_chunking=True,
-        input_format="markdown",
-        verbose=True,
-    )
-
-    llm_filter = LLMContentFilter(
-        llm_config=llm_config,
-        instruction=instruction,
-        chunk_token_threshold=2048,
-        overlap_rate=0.2,
-        verbose=True,
-    )
-
-    markdown_generator = DefaultMarkdownGenerator(
-        content_filter=llm_filter,
-        options={
-            "body_width": 100,
-            "ignore_emphasis": True,
-            "ignore_links": True,
-            "ignore_images": True,
-            "escape_html": True,
-        },
-    )
-
-    crawl_config = CrawlerRunConfig(
-        extraction_strategy=llm_strategy,
-        # markdown_generator=markdown_generator,
-        exclude_social_media_links=True,
-        keep_data_attributes=False,
-        process_iframes=False,
-        remove_overlay_elements=True,
-        excluded_tags=[
-            "form",
-            "header",
-            "footer",
-            "script",
-            "style",
-            "nav",
-            "img",
-            "a",
-        ],
-        verbose=True,
-    )
-
-    async with AsyncWebCrawler(config=browser_config) as crawler:
-        # Use a distinct name to avoid shadowing and help type-checkers
-        crawler_result = await crawler.arun(url=url, config=crawl_config)  # type: ignore[assignment]
-
-        if getattr(crawler_result, "success", False):
-            try:
-                extracted_content = getattr(crawler_result, "extracted_content", "")
-                logger.debug("Content extracted successfully.")
-                response = json.loads(extracted_content)
-
-                result = ""
-                for item in response:
-                    error = item.get("error", None)
-                    if error == "true":
-                        logger.debug(f"Error in item: {item.get('index')}")
-                        continue
-                    content = item.get("content", "")
-                    if isinstance(content, list):
-                        content = " ".join(content)
-                    elif isinstance(content, str):
-                        content = content.strip()
-                    if content:
-                        result += content + "\n"
-                    else:
-                        logger.debug(f"No content found in item: {item.get('index')}")
-                        continue
-
-                result = result.strip()
-                logger.debug("Content parsed successfully.")
-                logger.debug(f"Content length: {len(result)}")
-
-                logger.debug("---")
-                logger.debug("Filter Usage")
-                llm_filter.show_usage()
-                logger.debug("---")
-                logger.debug("Extraction Usage")
-                llm_strategy.show_usage()
-                logger.debug("---")
-
-                return result
-            except (json.JSONDecodeError, KeyError, IndexError) as e:
-                logger.error(f"Error parsing JSON response: {e}")
-                return "Could not parse the extracted content."
-        else:
-            logger.error(
-                f"Error in scraping: {getattr(crawler_result, 'error_message', 'Unknown error')}"
-            )
-            return "Could not scrape the URL."
-
-
-# Synchronous URL Scraper function
-def scrape_url(url: str, query: str) -> str:
-    """
-    Synchronous wrapper for async_scrape_url to maintain backward compatibility.
-
-    Args:
-        url: The URL to scrape
-        query: The search query to filter content
-
-    Returns:
-        str: Extracted content or error message
-    """
-    logger.debug(f"Starting synchronous scrape of URL: {url}")
-    try:
-        result = asyncio.run(async_scrape_url(url, query))
-        logger.debug("Synchronous scrape completed successfully")
-        return result
-    except Exception as e:
-        error_msg = f"Error in synchronous scrape: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return error_msg
+LLM_MODEL = "LFM2:1.2B"
 
 
 # Web Search function
@@ -272,11 +81,18 @@ def webSearch(
     if categories:
         params["categories"] = ",".join(categories)
 
+    headers = HeaderGenerator(locale=("en-US", "en")).generate()
+
     results = {"query": query, "results": []}
 
     try:
         logger.debug(f"Searching for: {query}")
-        response = requests.get(SEARXNG_URL, params=params, timeout=30)
+        response = requests.get(
+            SEARXNG_URL,
+            params=params,
+            timeout=30,
+            headers=headers,
+        )
         response.raise_for_status()
 
         data = response.json()
@@ -329,7 +145,7 @@ def deep_search(
                 "yahoo news",
             ]
         case _:
-            engines = ["brave", "duckduckgo", "google", "bing", "yahoo"]
+            engines = ["brave", "duckduckgo", "google", "bing"]
 
     # perform web search
     results = webSearch(
@@ -368,63 +184,17 @@ def deep_search(
 
         logger.debug(f"Starting concurrent scraping with max_workers={max_workers}")
 
-        def _scrape_and_summarize(item: tuple[int, str, str, str]):
-            order, url, title, category_local = item
-            try:
-                content = scrape_url(url=url, query=query)
-                if not content.strip() or "error:" in content.lower():
-                    logger.error(f"No relevant content from: {url}")
-                    return order, None
-
-                logger.debug(f"[{order}] URL scraped: {url} (len={len(content)})")
-
-                if len(content) > 20000:
-                    try:
-                        client_local = OpenAI(
-                            base_url=LLM_BASE_URL, api_key=LLM_API_KEY
-                        )
-                        content = (
-                            client_local.chat.completions.create(
-                                model=LLM_MODEL,
-                                messages=[
-                                    {
-                                        "role": "system",
-                                        "content": (
-                                            f"Extract and summarise information from the given content which answers or completely fulfills the query: {query}. "
-                                            "Structure the output in a clean markdown format. Remove any unnecessary information."
-                                        ),
-                                    },
-                                    {"role": "user", "content": f"CONTENT: {content}"},
-                                ],
-                            )
-                            .choices[0]
-                            .message.content
-                        )
-                    except Exception as e_inner:
-                        logger.error(f"Summarization failed for {url}: {e_inner}")
-
-                header = f"\n---\n{order}. {title}\n{url}\n"
-                safe_content = content if isinstance(content, str) else str(content)
-                return order, header + safe_content + "\n---\n"
-            except Exception as e_worker:
-                logger.error(f"Error scraping {url}: {e_worker}")
-                return order, None
-
-        results_by_order: dict[int, str] = {}
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_map = {
-                executor.submit(_scrape_and_summarize, item): item[0]
-                for item in items_to_scrape
+            future_to_scrape = {
+                executor.submit(scrape_page, item[1], True) for item in items_to_scrape
             }
-            for future in as_completed(future_map):
-                order, payload = future.result()
-                if payload:
-                    results_by_order[order] = payload
+            for future in as_completed(future_to_scrape):
+                scraped_content = str(future.result())
+                web_results += scraped_content
+                num_res += 1
 
-        # Assemble results in original order
-        for order in sorted(results_by_order.keys()):
-            web_results += results_by_order[order]
-            num_res += 1
+                print(f"\n===\n{scraped_content}\n===\n")
+
     except Exception as e:
         logger.error(f"Error in concurrent scraping: {e}")
         return "An error occurred while browsing the web."
@@ -437,7 +207,52 @@ def deep_search(
             messages=[
                 {
                     "role": "system",
-                    "content": "Draft a professional article for the query using the web search results in markdown format. Cite the relevant sources at the end of the article. Use [1], [2], etc in the article to refer to the sources.",
+                    "content": dedent(
+                        """
+                        You are an expert article head-writer responsible for generating well-structured, informative, and engaging article drafts in **Markdown** format. Please follow the guidelines below carefully:
+                        **🔶 Article Requirements:**
+
+                        * **Format:** Markdown
+                        * **Length:** Approximately 1000-1500 words (unless otherwise specified)
+                        * **Style:** Clear, concise, informative, and engaging. Aim for a tone appropriate to the target audience (professional, casual, technical, etc.)
+                        * **Voice:** Use an active voice and second-person ("you") or third-person perspective, depending on context.
+                        * **Readability:** Use short paragraphs, bullet points, and subheadings for clarity.
+
+                        **🧩 Structure:**
+
+                        ```markdown
+                        # [Compelling Title with Keyword]
+
+                        ## Introduction
+                        - Briefly introduce the topic and its relevance to the reader.
+                        - Clearly state the purpose or question the article will answer.
+
+                        ## [Main Section 1: Key Concept or Theme]
+                        - Provide definitions, context, or background.
+                        - Include examples or statistics where applicable.
+
+                        ## [Main Section 2: Deeper Exploration or Comparison]
+                        - Explore nuances, comparisons, or benefits/drawbacks.
+                        - Use bullet points or numbered lists where helpful.
+
+                        ## [Main Section 3: Practical Advice or Implementation]
+                        - Offer actionable tips, strategies, or real-world applications.
+
+                        ## Conclusion
+                        - Summarize key takeaways.
+                        - Optionally include a call to action or suggest further reading.
+                        ```
+
+                        **✅ Additional Notes:**
+
+                        * **Use headings and subheadings** to logically divide the content.
+                        * Include **relevant examples**, **data**, or **citations** if applicable.
+                        * Avoid filler. Every paragraph should provide value.
+                        * If the topic warrants it, include a short **FAQ** or **Pros & Cons** section.
+
+                        Cite the relevant sources at the end of the article. Use [1], [2], etc in the article to refer to the sources.
+                        """
+                    ),
                 },
                 {
                     "role": "user",
@@ -464,7 +279,7 @@ def deep_search(
 
 
 if __name__ == "__main__":
-    output = deep_search("Samsung Galaxy S25 Ultra features", num_results=4)
+    output = deep_search("Liquid AI")
     print(f"Output:\n---\n{output}\n---")
-    with open("deep_search_output.md", "w", encoding="utf-8") as f:
-        f.write(output)
+    # with open("researchv1.md", "w", encoding="utf-8") as f:
+    #     f.write(output)

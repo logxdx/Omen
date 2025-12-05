@@ -25,6 +25,15 @@ from .mem0_tools import (
     memory_history,
     get_all_memories,
 )
+from .data_tools import (
+    dataset_overview,
+    dataset_quality_report,
+    dataset_correlation_report,
+)
+from .automation_tools import (
+    automated_eda_report,
+    automated_modeling_workflow,
+)
 from .misc_tools import get_current_datetime, execute_code
 from .search_tools import (
     duckduckgo_search,
@@ -65,6 +74,13 @@ __all__ = [
     "update_memory",
     "memory_history",
     "get_all_memories",
+    # Data Tools
+    "dataset_overview",
+    "dataset_quality_report",
+    "dataset_correlation_report",
+    # Automation Tools
+    "automated_eda_report",
+    "automated_modeling_workflow",
     # Misc Tools
     "get_current_datetime",
     "execute_code",
