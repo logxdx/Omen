@@ -13,11 +13,11 @@ MAX_TURNS = 20
 WORD_BUFFER_SIZE = 10
 
 # Online or Local
-LOCAL = True
+LOCAL = False
 
 # Individual configurations for each agent
 LOCAL_CONFIG = {
-    "PERSONALITY": "glados",
+    "PERSONALITY": "omen",
     "triage_agent": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("TRIAGE_API_KEY"),
@@ -58,16 +58,26 @@ LOCAL_CONFIG = {
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
         "MODEL_NAME": "openai/Granite4:3b",
     },
+    "resume_agent": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("RESUME_API_KEY"),
+        "MODEL_NAME": "openai/Granite4:3b",
+    },
     "tts_summarizer": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
         "MODEL_NAME": "Granite4:3b",
     },
+    "scraper": {
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
+        "API_KEY": os.getenv("CONTEXT_API_KEY"),
+        "MODEL_NAME": "openai/Granite4:3b",
+    },
 }
 
 # Individual configurations for each agent
 ONLINE_CONFIG = {
-    "PERSONALITY": "glados",
+    "PERSONALITY": "omen",
     "triage_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("TRIAGE_API_KEY"),
@@ -108,13 +118,22 @@ ONLINE_CONFIG = {
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
         "MODEL_NAME": "openai/gpt-oss-120b",
     },
+    "resume_agent": {
+        "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
+        "API_KEY": os.getenv("RESUME_API_KEY"),
+        "MODEL_NAME": "openai/gpt-oss-120b",
+    },
     "tts_summarizer": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
         "MODEL_NAME": "LFM2:700M",
     },
+    "scraper": {
+        "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
+        "API_KEY": os.getenv("STUDY_API_KEY"),
+        "MODEL_NAME": "openai/gpt-oss-120b",
+    },
 }
-
 
 # Select configuration based on environment
 AGENT_CONFIGS = LOCAL_CONFIG if LOCAL else ONLINE_CONFIG

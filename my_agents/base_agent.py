@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from agents import Agent, Tool
 from agents.extensions.models.litellm_model import LitellmModel
+from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
 
 
 @dataclass
@@ -40,7 +41,8 @@ class my_agent:
         if not self.agent:
             self.agent = Agent(
                 name=self.agent_name,
-                instructions=self.instructions,
+                instructions=RECOMMENDED_PROMPT_PREFIX + "\n" + self.instructions,
+                handoff_description=self.handoff_instructions,
                 model=model,
                 tools=self.tools,
             )
@@ -69,14 +71,15 @@ class my_agent:
         if isinstance(handoffs, my_agent):
             handoffs = [handoffs]
         if handoffs:
-            if not self.handoffs:
-                self.instructions += "\n\n## AVAILABLE SPECIALIST AGENTS\n---\n"
+            # if not self.handoffs:
+            #     self.instructions += "\n\n## AVAILABLE SPECIALIST AGENTS\n---\n"
             self.handoffs.extend(handoffs)
+
             for handoff_agent in self.handoffs:
                 if (
                     handoff_agent.agent
                     and handoff_agent.agent not in self.agent.handoffs
                 ):
                     self.agent.handoffs.append(handoff_agent.agent)
-                    self.instructions += f"\n{handoff_agent.handoff_instructions}\n"
-        self.agent.instructions = self.instructions
+                    # self.instructions += f"\n{handoff_agent.handoff_instructions}\n"
+        # self.agent.instructions = self.instructions

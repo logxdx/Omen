@@ -7,6 +7,7 @@ from my_agents.study_agent import study_agent
 from my_agents.memory_agent import memory_agent
 from my_agents.analysis_agent import analysis_agent
 from my_agents.context_memory_agent import context_agent
+from my_agents.resume_agent import resume_agent
 
 __all__ = [
     "triage_agent",
@@ -17,4 +18,5 @@ __all__ = [
     "memory_agent",
     "analysis_agent",
     "context_agent",
+    "resume_agent",
 ]
