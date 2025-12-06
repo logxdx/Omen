@@ -31,7 +31,7 @@ from config.agent_config import Version, MAX_TURNS
 
 # from stt.WhisperSTT import STT
 from tts.KokoroTTS import KokoroTTS as TTS
-from my_agents import context_agent, memory_agent
+from my_agents import context_agent
 
 
 set_tracing_disabled(disabled=True)

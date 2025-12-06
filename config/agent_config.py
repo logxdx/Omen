@@ -4,10 +4,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Version
-Version = "1.3.0"
+Version = "1.4.0"
 
 # Global max turns for agent interactions
-MAX_TURNS = 20
+MAX_TURNS = 50
 
 # Global word buffer size for streaming text-to-speech
 WORD_BUFFER_SIZE = 10
