@@ -1,5 +1,5 @@
-from typing import List
 import json
+from typing import List
 
 from openai.types.responses import (
     ResponseTextDeltaEvent,
@@ -27,31 +27,35 @@ from rich.table import Table
 from rich.text import Text
 
 from .art import get_art
-from config.agent_config import Version, MAX_TURNS
-
-# from stt.WhisperSTT import STT
+from config.agent_config import MAX_TURNS
+from config import ui_config
+from agent_runtime import get_agent_registry
+from stt.WhisperSTT import WhisperSTT as STT
 from tts.KokoroTTS import KokoroTTS as TTS
 from my_agents import context_agent
 
-
 set_tracing_disabled(disabled=True)
-
 
 CONSOLE_WIDTH = 120
 console = Console(color_system="truecolor", width=CONSOLE_WIDTH)
 console.clear()
 
-MESSAGE_HISTORY: list[TResponseInputItem] = []
-
 welcome_art = get_art()
-_tts = None
+stt_client: STT = None  # type: ignore
+tts_client: TTS = None  # type: ignore
+CURRENT_AGENT: Agent
+
+AGENTS_REGISTRY, CURRENT_AGENT = get_agent_registry()
 
 
-def get_tts():
-    global _tts
-    if _tts is None:
-        _tts = TTS()
-    return _tts
+def setup_voice_mode():
+    global tts_client, stt_client
+
+    if tts_client is None:
+        tts_client = TTS()
+
+    if stt_client is None:
+        stt_client = STT(spinner=True, on_vad_detect_start=lambda: tts_client.pause())
 
 
 def welcome_panel():
@@ -67,14 +71,13 @@ def welcome_panel():
     for cmd_info in COMMANDS.values():
         aliases_display = ", ".join(cmd_info.get("aliases", []))
         commands_table.add_row(aliases_display, cmd_info.get("description", ""))
-    commands_table.add_row("Ctrl + X", "Interrupt a streaming reply")
 
     art_text = Text(welcome_art, style="bold red", justify="center")
 
     commands_panel = Group(
         art_text,
-        Text("Quick Controls", style="bold white"),
-        Rule(style="red"),
+        # Rule(style="red"),
+        Text("Quick Controls\n", style="bold white"),
         commands_table,
     )
 
@@ -82,7 +85,7 @@ def welcome_panel():
         Panel(
             # Columns([art_text, commands_panel], expand=True, equal=True),
             commands_panel,
-            title=f"Version: {Version}",
+            title=f"Version: {ui_config.Version}",
             title_align="right",
             padding=(1, 2),
             box=box.ROUNDED,
@@ -92,7 +95,7 @@ def welcome_panel():
     )
 
 
-def select_hierarchy_mode():
+def select_hierarchy_mode(*args):
     """
     Prompt user to select hierarchy mode.
     """
@@ -105,20 +108,21 @@ def select_hierarchy_mode():
     )
     console.print()
 
+    ui_config.SKIP_TURN = True
+
     while True:
         mode_choice = IntPrompt.ask("Mode", choices=["1", "2"], default="1")
         if mode_choice == "1":
-            hierarchy_mode = "managerial"
+            ui_config.HEIRARCHY_MODE = "managerial"
             console.print("[bold red]Managerial mode[/bold red]")
             break
         else:
-            hierarchy_mode = "collaborative"
+            ui_config.HEIRARCHY_MODE = "collaborative"
             console.print("[bold red]Collaborative mode[/bold red]")
             break
-    return hierarchy_mode
 
 
-def select_interaction_mode():
+def select_interaction_mode(*args):
     """
     Prompt user to select interaction mode.
     """
@@ -127,20 +131,22 @@ def select_interaction_mode():
     console.print("2. [red]Voice[/red] - STT (Whisper) + TTS (Piper)")
     console.print()
 
+    ui_config.SKIP_TURN = True
+
     while True:
         mode_choice = IntPrompt.ask("Mode", choices=["1", "2"], default=1)
         if mode_choice == 1:
-            interaction_mode = "text"
+            ui_config.INTERACTION_MODE = "text"
             console.print("[bold red]Text mode[/bold red]")
             break
         else:
-            interaction_mode = "voice"
+            setup_voice_mode()
+            ui_config.INTERACTION_MODE = "voice"
             console.print("[bold red]Voice mode[/bold red]")
             break
-    return interaction_mode
 
 
-def select_context_agent_mode():
+def select_context_agent_mode(*args):
     """
     Prompt user to select whether to use context agent for memory.
     """
@@ -151,23 +157,29 @@ def select_context_agent_mode():
     console.print("2. [red]No[/red] [bold dim](default)[/bold dim]")
     console.print()
 
+    ui_config.SKIP_TURN = True
+
     while True:
         mode_choice = IntPrompt.ask("Mode", choices=["1", "2"], default="2")
         if mode_choice == 1:
-            use_context = True
+            ui_config.USE_CONTEXT_MANAGER = True
             console.print("[bold red]Using context agent for memory[/bold red]")
             break
         else:
-            use_context = False
+            ui_config.USE_CONTEXT_MANAGER = False
             console.print("[bold red]Not using context agent for memory[/bold red]")
             break
-    return use_context
 
 
-def handle_agents_command(user_msg: str, agents: dict, agent: Agent) -> Agent:
+def handle_agents(user_msg: str) -> None:
     """
     Handle `/agent` command for listing and switching agents.
     """
+
+    global CURRENT_AGENT
+
+    ui_config.SKIP_TURN = True
+
     parts = user_msg.split()
     agents_table = Table(
         title="Available Agents",
@@ -183,7 +195,7 @@ def handle_agents_command(user_msg: str, agents: dict, agent: Agent) -> Agent:
     if len(parts) == 1:
         agents_panel = Text()
         agents_panel.append("\n")
-        for key, value in agents.items():
+        for key, value in AGENTS_REGISTRY.items():
             agents_panel.append(
                 f"  {key}: {str(value.name).capitalize()}\n", style="white"
             )
@@ -205,33 +217,33 @@ def handle_agents_command(user_msg: str, agents: dict, agent: Agent) -> Agent:
 
     elif len(parts) == 2:
         agent_name = parts[1].lower()
-        if agent_name in agents:
-            agent = agents[agent_name]
+        if agent_name in AGENTS_REGISTRY:
+            CURRENT_AGENT = AGENTS_REGISTRY[agent_name]
             console.print(
-                f"[bold dim]Switched to {str(agent.name).capitalize()}[/bold dim]"
+                f"[bold dim]Switched to {str(CURRENT_AGENT.name).capitalize()}[/bold dim]"
             )
-            return agent
         else:
             console.print(f"[bold red]Unknown agent: {agent_name}[/bold red]")
 
     else:
         console.print("[bold red]Usage: /agents or /a <name>[/bold red]")
 
-    return agent
-
 
 # Display conversation history
-def display_history(inputs: List[TResponseInputItem]):
+def display_history(*args):
     """
     Display the conversation history.
     """
-    if not inputs:
+
+    ui_config.SKIP_TURN = True
+
+    if not ui_config.CONVERSATION_HISTORY:
         console.print("[bold dim]No conversation history available.[/bold dim]")
         return
 
     output_lines = []
 
-    for entry in inputs:
+    for entry in ui_config.CONVERSATION_HISTORY:
         role = entry.get("role", "") or entry.get("type", "unknown")
         role = str(role)
         content = entry.get("content", "")
@@ -275,7 +287,7 @@ def display_history(inputs: List[TResponseInputItem]):
                 output = str(output)
                 if output.startswith('{"'):
                     continue
-                output_lines.append(f"**Output:**\n```\n{output}\n```\n")
+                output_lines.append(f"# Tool Output\n\n```markdown\n{output}\n```\n")
 
     history_text = "\n".join(output_lines)
 
@@ -293,10 +305,11 @@ def display_history(inputs: List[TResponseInputItem]):
 
 
 # Help panel
-def help_panel():
+def help_panel(*args):
     """
     Display available commands.
     """
+    ui_config.SKIP_TURN = True
     help_table = Table(
         title="Slash Commands",
         show_header=True,
@@ -312,181 +325,30 @@ def help_panel():
         alias_str = ", ".join(cmd_info["aliases"])
         help_table.add_row(alias_str, cmd_info["description"])
 
-    console.print(
-        Group(
-            help_table,
-            Text("Use Ctrl+X to interrupt responses", style="red"),
-        ),
-        justify="center",
-    )
+    console.print(help_table, justify="center")
 
 
 # Quit application
-def handle_quit(
-    user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode, use_context_agent
-):
-    return (
-        True,
-        True,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
+def quit_session(*args):
+    ui_config.QUIT_SESSION = True
 
 
 # Clear conversation
-def handle_clear(
-    user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode, use_context_agent
-):
+def clear_console(*args):
+    ui_config.SKIP_TURN = True
     console.clear()
-    current_display = str(agent.name).capitalize()
+    current_display = str(CURRENT_AGENT.name).capitalize()
     console.print(f"[dim]Current agent: {current_display}[/dim]")
-    return (
-        False,
-        True,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
-
-
-# Show conversation history
-def handle_history(
-    user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode, use_context_agent
-):
-    display_history(inputs)
-    return (
-        False,
-        True,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
-
-
-# Change hierarchy mode
-def handle_hierarchy(
-    user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode, use_context_agent
-):
-    hierarchy_mode = select_hierarchy_mode()
-    return (
-        False,
-        True,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
-
-
-# Show help panel
-def handle_help(
-    user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode, use_context_agent
-):
-    help_panel()
-    return (
-        False,
-        True,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
 
 
 # Clear conversation history
-def handle_clear_history(
-    user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode, use_context_agent
-):
-    inputs.clear()
+def clear_history(*args):
+    ui_config.SKIP_TURN = True
+    ui_config.CONVERSATION_HISTORY.clear()
     console.clear()
     console.print("[bold red]🔄 Conversation history cleared![/bold red]\n")
-    current_display = str(agent.name).capitalize()
+    current_display = str(CURRENT_AGENT.name).capitalize()
     console.print(f"[dim]Current agent: {current_display}[/dim]")
-    return (
-        False,
-        True,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
-
-
-# List and switch agents
-def handle_agents(
-    user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode, use_context_agent
-):
-    agent = handle_agents_command(user_msg, agents, agent)
-    return (
-        False,
-        True,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
-
-
-# Change interaction mode
-def handle_interaction(
-    user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode, use_context_agent
-):
-    interaction_mode = select_interaction_mode()
-    return (
-        False,
-        True,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
-
-
-# Toggle context agent
-def handle_context(
-    user_msg, inputs, agent, agents, hierarchy_mode, interaction_mode, use_context_agent
-):
-    use_context_agent = select_context_agent_mode()
-    status = "enabled" if use_context_agent else "disabled"
-    console.print(f"[bold red]Context agent: {status}[/bold red]")
-    return (
-        False,
-        True,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
-
-
-def text2speech(user_msg, inputs, *, args):
-    tts_client = get_tts()
-    try:
-        tts_client.speak(str(inputs[-1]))
-    except Exception as e:
-        console.print(f"Error: {e}")
 
 
 # Command registry
@@ -494,12 +356,12 @@ COMMANDS = {
     "help": {
         "aliases": ["/help", "/h"],
         "description": "Show this help message",
-        "handler": handle_help,
+        "handler": help_panel,
     },
     "history": {
         "aliases": ["/history", "/hs"],
         "description": "Show conversation history",
-        "handler": handle_history,
+        "handler": display_history,
     },
     "agents": {
         "aliases": ["/agents", "/a"],
@@ -509,76 +371,48 @@ COMMANDS = {
     "hierarchy": {
         "aliases": ["/hierarchy", "/hmode"],
         "description": "Change hierarchy mode",
-        "handler": handle_hierarchy,
+        "handler": select_hierarchy_mode,
     },
     "interaction": {
         "aliases": ["/interaction", "/imode"],
         "description": "Change interaction mode",
-        "handler": handle_interaction,
+        "handler": select_interaction_mode,
     },
     "context": {
         "aliases": ["/context", "/ctx"],
         "description": "Toggle context agent for memory",
-        "handler": handle_context,
+        "handler": select_context_agent_mode,
     },
     "clear": {
         "aliases": ["/clear", "/c"],
         "description": "Clear screen",
-        "handler": handle_clear,
+        "handler": clear_console,
     },
     "clear_history": {
         "aliases": ["/clear_history", "/ch"],
         "description": "Clear conversation history",
-        "handler": handle_clear_history,
+        "handler": clear_history,
     },
     "quit": {
         "aliases": ["/quit", "/exit", "/q"],
         "description": "Exit the application",
-        "handler": handle_quit,
+        "handler": quit_session,
     },
 }
 
 
 # Handle slash commands
-def slash_commands(
-    user_msg: str,
-    inputs: list[TResponseInputItem],
-    agent: Agent,
-    agents: dict,
-    hierarchy_mode: str,
-    interaction_mode: str,
-    use_context_agent: bool,
-) -> tuple[bool, bool, list[TResponseInputItem], Agent, dict, str, str, bool]:
+def slash_commands(user_msg: str) -> None:
     """
     Handle special commands like quit and clear.
     """
     for cmd_info in COMMANDS.values():
         if user_msg.lower().split()[0] in [a.lower() for a in cmd_info["aliases"]]:
-            return cmd_info["handler"](
-                user_msg,
-                inputs,
-                agent,
-                agents,
-                hierarchy_mode,
-                interaction_mode,
-                use_context_agent,
-            )
-    return (
-        False,
-        False,
-        inputs,
-        agent,
-        agents,
-        hierarchy_mode,
-        interaction_mode,
-        use_context_agent,
-    )
+            cmd_info["handler"](user_msg)
 
 
 # Stream agent response with rich live updates
-async def stream_agent_response(
-    agent: Agent, inputs: list[TResponseInputItem], hierarchy_mode: str
-) -> tuple[Agent, RunResultStreaming]:
+async def stream_agent_response() -> RunResultStreaming:
     """
     Stream the agent's response and handle events.
 
@@ -587,8 +421,13 @@ async def stream_agent_response(
     :param hierarchy_mode: The current hierarchy mode
     :return: Updated agent and run result
     """
+
+    global CURRENT_AGENT
+
     result = Runner.run_streamed(
-        starting_agent=agent, input=inputs, max_turns=MAX_TURNS
+        starting_agent=CURRENT_AGENT,
+        input=ui_config.CONVERSATION_HISTORY,
+        max_turns=MAX_TURNS,
     )
 
     # Create a live display for streaming response
@@ -608,7 +447,9 @@ async def stream_agent_response(
                 ),
                 Panel(
                     markdown_obj,
-                    title=Text(f"{str(agent.name).capitalize()}", style="bold white"),
+                    title=Text(
+                        f"{str(CURRENT_AGENT.name).capitalize()}", style="bold white"
+                    ),
                     border_style="red",
                     padding=(1, 1),
                 ),
@@ -632,8 +473,11 @@ async def stream_agent_response(
                             delta = data.delta
 
                             if "<think>" in delta:
+                                delta = delta.replace("<think>", "")
                                 thinking = True
                             elif "</think>" in delta:
+                                delta = delta.replace("</think>", "")
+                                thinking_text += delta
                                 thinking = False
                                 if thinking_text.strip():
                                     events.append(
@@ -675,9 +519,9 @@ async def stream_agent_response(
                             target_name = event.item.target_agent.name  # type: ignore
                             display_target = str(target_name).capitalize()
 
-                            if hierarchy_mode == "collaborative":
+                            if ui_config.HEIRARCHY_MODE == "collaborative":
                                 # Switch to the new agent for direct handoff
-                                agent = event.item.target_agent  # type: ignore
+                                CURRENT_AGENT = event.item.target_agent  # type: ignore
                                 handoff_msg = f"Handed-off to {display_target}."
                             else:
                                 # Managerial mode: keep current agent, just notify
@@ -759,7 +603,7 @@ async def stream_agent_response(
                         Panel(
                             markdown_obj,
                             title=Text(
-                                f"{str(agent.name).capitalize()}",
+                                f"{str(CURRENT_AGENT.name).capitalize()}",
                                 style="bold white",
                             ),
                             border_style="red",
@@ -778,19 +622,11 @@ async def stream_agent_response(
     except Exception as e:
         console.print(f"Error: {e}")
 
-    return agent, result
-
-
-async def agentic_chat():
-    pass
-
-
-async def conversational_chat():
-    pass
+    return result
 
 
 # Main CLI loop
-async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
+async def run_cli():
     """
     Main conversation loop
 
@@ -798,107 +634,125 @@ async def run_cli(agents: dict[str, Agent], starting_agent: Agent):
     :param starting_agent: The agent to start the conversation with
     """
 
-    tts_client: TTS = None  # type: ignore
     session_context: str = ""
+
     try:
-        hierarchy_mode = select_hierarchy_mode()
-        interaction_mode = select_interaction_mode()
-        use_context_agent = select_context_agent_mode()
+        select_hierarchy_mode()
+        select_interaction_mode()
+        select_context_agent_mode()
+        console.print("\n\n")
+        ui_config.SKIP_TURN = False
     except Exception as e:
         raise Exception(f"Error selecting modes")
-    agent = starting_agent
+
     welcome_panel()
-    inputs: List[TResponseInputItem] = [
+
+    ui_config.CONVERSATION_HISTORY = [
         {
             "content": "Short Intro. State your capabilities and ask how you can assist.",
             "role": "user",
         }
     ]
 
-    agent, result = await stream_agent_response(agent, inputs, "managerial")
-    inputs.clear()
-    skip: bool = False
+    result = await stream_agent_response()
+    ui_config.CONVERSATION_HISTORY.clear()
 
     while True:
 
-        if session_context and use_context_agent:
-            inputs = [{"content": session_context, "role": "assistant"}]
-
-        user_msg = Prompt.ask("\n[dim]You[/dim]")
-        if not user_msg:
-            continue
-        if user_msg.startswith("<ml>"):
-            while not user_msg.strip().endswith("</ml>"):
-                next_line = Prompt.ask(":")
-                user_msg += "\n" + next_line
-                user_msg = user_msg.strip()
-            user_msg = user_msg.replace("<ml>", "").replace("</ml>", "").strip()
-        # Handle special commands
-        (
-            quit_flag,
-            skip,
-            inputs,
-            agent,
-            agents,
-            hierarchy_mode,
-            interaction_mode,
-            use_context_agent,
-        ) = slash_commands(
-            user_msg.lower(),
-            inputs,
-            agent,
-            agents,
-            hierarchy_mode,
-            interaction_mode,
-            use_context_agent,
-        )
-        if quit_flag:
+        if ui_config.QUIT_SESSION:
             if tts_client:
                 tts_client.shutdown()
+            if stt_client:
+                stt_client.shutdown()
             break
-        if skip:
-            continue
 
-        inputs.append({"content": user_msg, "role": "user"})
+        if session_context and ui_config.USE_CONTEXT_MANAGER:
+            ui_config.CONVERSATION_HISTORY = [
+                {"content": session_context, "role": "assistant"}
+            ]
 
-        if use_context_agent:
+        if ui_config.INTERACTION_MODE == "text":
 
-            # context_result = await Runner.run(
-            #     starting_agent=context_agent.agent, input=inputs, max_turns=MAX_TURNS
-            # )
+            user_msg = Prompt.ask("\n[dim]You[/dim]")
 
-            _, context_result = await stream_agent_response(
-                context_agent.agent, inputs, "managerial"
-            )
+            if not user_msg:
+                continue
+
+            if user_msg.startswith("<ml>"):
+                while not user_msg.strip().endswith("</ml>"):
+                    next_line = Prompt.ask(":")
+                    user_msg += "\n" + next_line
+                    user_msg = user_msg.strip()
+                user_msg = user_msg.replace("<ml>", "").replace("</ml>", "").strip()
+
+            # Handle special commands
+            slash_commands(user_msg.lower())
+
+            if ui_config.SKIP_TURN:
+                ui_config.SKIP_TURN = False
+                continue
+
+            if ui_config.QUIT_SESSION:
+                if tts_client:
+                    tts_client.shutdown()
+                if stt_client:
+                    stt_client.shutdown()
+                break
+
+        else:
+
+            setup_voice_mode()
+
+            try:
+                user_msg = stt_client.text()  # type: ignore
+                console.print(f"\n[dim]You:[/dim] {user_msg}\n")
+            except KeyboardInterrupt:
+                if tts_client:
+                    tts_client.shutdown()
+                if stt_client:
+                    stt_client.shutdown()
+                break
+            except Exception as e:
+                console.print(f"[bold red]STT Error: {e}[/bold red]")
+                break
+
+            if not user_msg:
+                console.print(
+                    "[bold red]No speech detected. Please try again.[/bold red]"
+                )
+                continue
+
+        ui_config.SKIP_TURN = False
+        ui_config.CONVERSATION_HISTORY.append({"content": user_msg, "role": "user"})
+
+        if ui_config.USE_CONTEXT_MANAGER:
+
+            context_result = await stream_agent_response()
 
             if context_result.final_output != session_context:
                 session_context = str(context_result.final_output).strip()
                 console.print(f"[dim]Context updated.[/dim]")
 
             if session_context:
-                inputs = [
+                ui_config.CONVERSATION_HISTORY = [
                     {"role": "assistant", "content": session_context},
                     {"role": "user", "content": user_msg},
                 ]
 
         # Stream the response
-        agent, result = await stream_agent_response(agent, inputs, hierarchy_mode)
+        result = await stream_agent_response()
 
-        inputs = result.to_input_list()
+        if ui_config.INTERACTION_MODE == "voice":
+            if tts_client and result.final_output:
+                tts_client.speak(str(result.final_output))
 
-        if use_context_agent:
-            for input_item in inputs:
+        ui_config.CONVERSATION_HISTORY = result.to_input_list()
+
+        if ui_config.USE_CONTEXT_MANAGER:
+            for input_item in ui_config.CONVERSATION_HISTORY:
                 if input_item.get("type") in ["function_call", "function_call_output"]:
 
-                    # context_result = await Runner.run(
-                    #     starting_agent=context_agent.agent,
-                    #     input=inputs,
-                    #     max_turns=MAX_TURNS,
-                    # )
-
-                    _, context_result = await stream_agent_response(
-                        context_agent.agent, inputs, "managerial"
-                    )
+                    context_result = await stream_agent_response()
 
                     if context_result.final_output:
                         session_context = str(context_result.final_output).strip()

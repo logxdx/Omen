@@ -1,27 +1,19 @@
-from typing import Literal
-import pyaudio
-import threading
 import io
 import time
-import random
-import keyboard
+import pyaudio
 import markdown
+import threading
 from openai import OpenAI
+from typing import Literal
+from textwrap import dedent
 
-from config.agent_config import AGENT_CONFIGS, WORD_BUFFER_SIZE
+from config.agent_config import AGENT_CONFIGS
 import config.agent_personality as personality
 
 config = AGENT_CONFIGS["tts_summarizer"]
 BASE_URL = config["BASE_URL"]
 API_KEY = config["API_KEY"]
 MODEL_NAME: str = config["MODEL_NAME"]
-PERSONALITY, _ = personality.get_personality()
-
-# Select personality based on config
-if PERSONALITY == "RANDOM":
-    selected_personality = random.choice(personality.PERSONALITIES)
-else:
-    selected_personality = personality.PERSONALITY_DICT[PERSONALITY]
 
 
 # unmarkdown the text
@@ -53,7 +45,28 @@ def summarise_response(query: str | None, response_text: str):
     Summarise the response text using OpenAI API.
     """
     client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-    instructions = f"{selected_personality}\n\n You are the direct assistant to the the user (your Boss). Given the final response (and optionally the user query too), repeat it in very brief like an assistant briefing their boss. You do not need to explain every detail, just the key points. Use simple language and avoid technical jargon (no need for code snippets, urls, etc). For tables, explain them briefly, bringing up important points. If the response is already very short, you can say it as is. Make sure the response is in plaintext with no emojis, artifacts (URLs, etc). Always expand shortforms (e.g. -> example, i.e. -> that is). Talk in first person and have a professional tone."
+    instructions = dedent(
+        """
+        ### SYSTEM ROLE
+        You are a concise, efficient Executive Assistant. Your User is "The Boss."
+
+        ### TASK
+        Your goal is to read the provided [Final Response] and rewrite it as a brief, plain-English verbal briefing for your Boss.
+
+        ### GUIDELINES
+        1. **Content:** Focus only on the key points and actionable takeaways. Omit all technical jargon, code snippets, URLs, and granular details.
+        2. **Tables:** If the text contains tables or data sets, extract the main insight or trend; do not reproduce the table.
+        3. **Abbreviations:** Expand all Latin abbreviations (change "e.g." to "for example", "i.e." to "that is", etc.).
+        4. **Tone:** Speak in the first person ("I have found...", "Here is the summary..."). Maintain a professional, executive tone.
+        5. **Length:** Keep it brief. However, if the input is already very short (under 2 sentences), repeat it as is.
+
+        ### FORMATTING CONSTRAINTS
+        - Output strictly in Plaintext.
+        - DO NOT use emojis.
+        - DO NOT use markdown formatting (no bolding, italics, or headers).
+        - DO NOT include artifacts like links or file paths.
+        """
+    )
 
     try:
         output = client.chat.completions.create(
@@ -83,7 +96,15 @@ def stream_summarised_response(query: str | None, response_text: str):
     Summarise the response text using OpenAI API.
     """
     client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-    instructions = f"{selected_personality}\n\n You are the direct assistant to the the user (your Boss). Given the final response (and optionally the user query too), repeat it in very brief like an assistant briefing their boss. You do not need to explain every detail, just the key points. Use simple language and avoid technical jargon (no need for code snippets, urls, etc). For tables, explain them briefly, bringing up important points. If the response is already very short, you can say it as is. Make sure the response is in plaintext with no emojis, artifacts (URLs, etc). Always expand shortforms (e.g. -> example, i.e. -> that is). Talk in first person and have a professional tone."
+    instructions = dedent(
+        """
+        You are my direct assistant. 
+        When I ask you to brief me, you will take the final response and restate it very briefly as if you are updating your boss. 
+        Keep it simple, professional, and in plain text. Avoid technical jargon, emojis, and links. Expand all abbreviations. 
+        For tables, summarize only the key points. If the response is already short, repeat it as is. Do not change the meaning. 
+        If the original text is very long, summarize only the most important points. Always speak in the first person.
+        """
+    )
 
     try:
         output = client.chat.completions.create(
@@ -118,7 +139,7 @@ class KokoroTTS:
     def __init__(
         self,
         voice: str = "af_kore(1)+af_nicole(0.5)",
-        speed: float = 1.0,
+        speed: float = 1.25,
         response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = "pcm",
         base_url: str = "http://localhost:8880/v1",
         api_key: str = "not-needed",
@@ -160,11 +181,6 @@ class KokoroTTS:
         self.is_playing = True
         self.is_paused = False
         self.stop_requested = False
-
-        # Add hotkeys for control
-        keyboard.add_hotkey("ctrl+p", self.pause)
-        keyboard.add_hotkey("ctrl+r", self.play)
-        keyboard.add_hotkey("ctrl+s", self.stop)
 
         # Start playback in a new thread
         self.playback_thread = threading.Thread(
@@ -209,13 +225,6 @@ class KokoroTTS:
             if self.playback_thread and self.playback_thread.is_alive():
                 self.playback_thread.join(timeout=1.0)
 
-        try:
-            keyboard.remove_hotkey("ctrl+p")
-            keyboard.remove_hotkey("ctrl+r")
-            keyboard.remove_hotkey("ctrl+s")
-        except KeyError:
-            pass
-
     def pause(self):
         """Pause tts playback"""
         if self.is_playing and not self.is_paused:
@@ -240,11 +249,6 @@ class KokoroTTS:
         self.is_playing = True
         self.is_paused = False
         self.stop_requested = False
-
-        # Add hotkeys for control
-        keyboard.add_hotkey("ctrl+p", self.pause)
-        keyboard.add_hotkey("ctrl+r", self.play)
-        keyboard.add_hotkey("ctrl+s", self.stop)
 
         # Start playback in a new thread
         self.playback_thread = threading.Thread(
@@ -279,9 +283,7 @@ if __name__ == "__main__":
         voice=voice,
         speed=1.2,
     )
-    text = """
-I am going to fly tomorrow using my self made jetpack. Hello IST. Hi.
-"""
+    text = "I am going to fly tomorrow using my self made jetpack. Hello IST. Hi."
 
     print(markdown_to_plaintext(text))
 

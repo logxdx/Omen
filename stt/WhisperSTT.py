@@ -57,17 +57,17 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "FALSE"
 
 INIT_MODEL_TRANSCRIPTION = "base.en"
 INIT_MODEL_TRANSCRIPTION_REALTIME = "tiny.en"
-INIT_REALTIME_PROCESSING_PAUSE = 0.5
-INIT_REALTIME_INITIAL_PAUSE = 0.5
+INIT_REALTIME_PROCESSING_PAUSE = 0.1
+INIT_REALTIME_INITIAL_PAUSE = 0.2
 INIT_SILERO_SENSITIVITY = 0.5
-INIT_POST_SPEECH_SILENCE_DURATION = 1.0
-INIT_MIN_LENGTH_OF_RECORDING = 1
-INIT_MIN_GAP_BETWEEN_RECORDINGS = 0.1
+INIT_POST_SPEECH_SILENCE_DURATION = 0.5
+INIT_MIN_LENGTH_OF_RECORDING = 1.0
+INIT_MIN_GAP_BETWEEN_RECORDINGS = 1.0
 INIT_WAKE_WORDS_SENSITIVITY = 0.5
 INIT_PRE_RECORDING_BUFFER_DURATION = 0.5
 INIT_WAKE_WORD_ACTIVATION_DELAY = 0.0
-INIT_WAKE_WORD_TIMEOUT = 3.0
-INIT_WAKE_WORD_BUFFER_DURATION = 0.1
+INIT_WAKE_WORD_TIMEOUT = 5.0
+INIT_WAKE_WORD_BUFFER_DURATION = 0.5
 ALLOWED_LATENCY_LIMIT = 100
 
 TIME_SLEEP = 0.02
@@ -237,7 +237,7 @@ class bcolors:
     ENDC = "\033[0m"  # Reset to default color
 
 
-class STT:
+class WhisperSTT:
     """
     A class responsible for capturing audio from the microphone, detecting
     voice activity, and then transcribing the captured audio using the
@@ -261,7 +261,7 @@ class STT:
         use_microphone=True,
         spinner=False,
         level=logging.ERROR,
-        batch_size: int = 8,
+        batch_size: int = 5,
         # Realtime transcription parameters
         enable_realtime_transcription=False,
         use_main_model_for_realtime=False,
@@ -667,7 +667,7 @@ class STT:
 
         # Start transcription process
         self.transcript_process = self._start_thread(
-            target=STT._transcription_worker,
+            target=WhisperSTT._transcription_worker,
             args=(
                 child_transcription_pipe,
                 child_stdout_pipe,
@@ -695,7 +695,7 @@ class STT:
                 f" buffer size: {self.buffer_size}"
             )
             self.reader_process = self._start_thread(
-                target=STT._audio_data_worker,
+                target=WhisperSTT._audio_data_worker,
                 args=(
                     self.audio_queue,
                     self.sample_rate,
@@ -2261,7 +2261,7 @@ class STT:
                         > self.init_realtime_after_seconds
                     ):
 
-                        logging.debug('Starting realtime transcription')
+                        logging.debug("Starting realtime transcription")
                         self.realtime_transcription_text = realtime_text
                         self.realtime_transcription_text = (
                             self.realtime_transcription_text.strip()
@@ -2673,7 +2673,7 @@ if __name__ == "__main__":
     RESET_CURSOR = "\033[H"
     CLEAR_LINE = "\033[2K"
 
-    recorder = STT(
+    recorder = WhisperSTT(
         spinner=True,
         wakeword_backend="oww",
     )

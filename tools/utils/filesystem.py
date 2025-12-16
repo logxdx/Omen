@@ -40,7 +40,9 @@ def list_files_in_sandbox(relative_path: str = "") -> str:
     top_border = "─" * line_num_width + "┬" + "─" * max_len
     dir_header = " " * line_num_width + "│ Directory: " + relative_path + "/"
     middle_border = "─" * line_num_width + "┼" + "─" * max_len
-    numbered_files = [f"{i+1:>{line_num_width-2}}  │ {df}" for i, df in enumerate(display_files)]
+    numbered_files = [
+        f"{i+1:>{line_num_width-2}}  │ {df}" for i, df in enumerate(display_files)
+    ]
     bottom_border = "─" * line_num_width + "┴" + "─" * max_len
     return "\n".join(
         [top_border, dir_header, middle_border] + numbered_files + [bottom_border]

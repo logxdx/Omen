@@ -59,5 +59,5 @@ def get_agent_registry() -> Tuple[Dict[str, Agent], Agent]:
 
 def get_primary_agent() -> Agent:
     """Convenience helper that returns the triage (orchestrator) agent."""
-    _, agent = get_agent_registry()
-    return agent
+    assert _PRIMARY_AGENT is not None, "Agents not configured"
+    return _PRIMARY_AGENT

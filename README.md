@@ -135,7 +135,7 @@ The system provides a comprehensive toolkit organized by functionality:
 ### Web Tools
 
 -   `duckduckgo_search`: Privacy-focused web search
--   `searx_search`: Decentralized search
+-   `web_search`: Decentralized search
 -   `search_youtube_videos`: Video content discovery
 -   `open_url_in_browser`: URL launching
 -   `get_weather_info`: Weather data retrieval

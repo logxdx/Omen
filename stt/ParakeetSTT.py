@@ -202,7 +202,7 @@ class bcolors:
     ENDC = "\033[0m"  # Reset to default color
 
 
-class stt:
+class ParakeetSTT:
     """
     A class responsible for capturing audio from the microphone, detecting
     voice activity, and then transcribing the captured audio using the
@@ -469,7 +469,7 @@ class stt:
 
         # Start transcription process
         self.transcript_process = self._start_thread(
-            target=stt._transcription_worker,
+            target=ParakeetSTT._transcription_worker,
             args=(
                 child_transcription_pipe,
                 child_stdout_pipe,
@@ -491,7 +491,7 @@ class stt:
                 f" buffer size: {self.buffer_size}"
             )
             self.reader_process = self._start_thread(
-                target=stt._audio_data_worker,
+                target=ParakeetSTT._audio_data_worker,
                 args=(
                     self.audio_queue,
                     self.sample_rate,
@@ -1959,7 +1959,7 @@ class stt:
                     # Skip transcription if no audio data
                     if len(audio_array) == 0:
                         continue
-                    
+
                     realtime_text = ""
                     if self.use_main_model_for_realtime:
                         with self.transcription_lock:
@@ -1997,7 +1997,7 @@ class stt:
                         # Perform transcription and assemble the text
                         realtime_text = self.realtime_model_type.recognize(  # type: ignore
                             waveform=audio_array,
-                            sample_rate=self.sample_rate, # type: ignore
+                            sample_rate=self.sample_rate,  # type: ignore
                             language=self.language if self.language else None,
                         )
 
@@ -2011,7 +2011,7 @@ class stt:
                         > self.init_realtime_after_seconds
                     ):
 
-                        logging.debug('Starting realtime transcription')
+                        logging.debug("Starting realtime transcription")
                         self.realtime_transcription_text = realtime_text
                         self.realtime_transcription_text = (
                             self.realtime_transcription_text.strip()
@@ -2109,7 +2109,7 @@ class stt:
         audio_chunk = audio_chunk.astype(np.float32) / INT16_MAX_ABS_VALUE
         vad_prob = self.silero_vad_model(
             torch.from_numpy(audio_chunk), SAMPLE_RATE
-        ).item() # type: ignore
+        ).item()  # type: ignore
         is_silero_speech_active = vad_prob > (1 - self.silero_sensitivity)
         if is_silero_speech_active:
             if not self.is_silero_speech_active and self.use_extended_logging:
@@ -2378,7 +2378,7 @@ if __name__ == "__main__":
     RESET_CURSOR = "\033[H"
     CLEAR_LINE = "\033[2K"
 
-    recorder = stt(
+    recorder = ParakeetSTT(
         enable_realtime_transcription=True, no_log_file=True, wakeword_backend="oww"
     )
 

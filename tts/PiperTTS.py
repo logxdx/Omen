@@ -5,7 +5,6 @@ import io
 import time
 import random
 import pathlib
-import keyboard
 import markdown
 from openai import OpenAI
 
@@ -17,6 +16,7 @@ BASE_URL = config["BASE_URL"]
 API_KEY = config["API_KEY"]
 MODEL_NAME: str = config["MODEL_NAME"]
 PERSONALITY, _ = personality.get_personality()
+
 
 # Select personality based on config
 if PERSONALITY == "RANDOM":
@@ -172,12 +172,6 @@ class PiperTTS:
         # Ensure stream is ready (but don't recreate if already exists)
         self._start_stream()
 
-        # Add hotkeys for control
-        keyboard.add_hotkey("ctrl+p", self.pause)
-        keyboard.add_hotkey("ctrl+r", self.resume)
-        keyboard.add_hotkey("ctrl+s", self.stop)
-        keyboard.add_hotkey("ctrl+y", self.replay)
-
         # Start playback in a new thread
         self.playback_thread = threading.Thread(
             target=self._playback_thread, args=(text,)
@@ -200,15 +194,6 @@ class PiperTTS:
 
             # Reset state
             self.current_position = 0
-
-        # Remove hotkeys
-        try:
-            keyboard.remove_hotkey("ctrl+p")
-            keyboard.remove_hotkey("ctrl+r")
-            keyboard.remove_hotkey("ctrl+s")
-            keyboard.remove_hotkey("ctrl+y")
-        except KeyError:
-            pass
 
     def stop(self):
         """Stop TTS playback completely (but keep stream alive for next use)"""
@@ -267,7 +252,7 @@ if __name__ == "__main__":
 
     text = "A transformer is an end-to-end neural architecture."
 
-    tts = PiperTTS(model_name="kristin", speed=1.2, volume=1.2)
+    tts = PiperTTS(model_name="kristin", speed=1.25, volume=1.0)
     out = tts.speak(text=text)
     print(out)
     time.sleep(5)

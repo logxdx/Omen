@@ -36,12 +36,12 @@ from tools.utils import SearxSearch
 
 
 @function_tool
-def searx_search(
+def web_search(
     query: str,
     num_results: int = 5,
 ) -> str:
     """
-    Perform a web search using Searxng.
+    Perform a web search.
 
     Args:
         query (str): Search query string
@@ -99,4 +99,4 @@ def search_youtube_videos(query: str, num_results: int = 5) -> str:
     return formatted_output.strip()
 
 
-SEARCH_TOOLS = [searx_search, search_youtube_videos]
+SEARCH_TOOLS = [web_search, search_youtube_videos]

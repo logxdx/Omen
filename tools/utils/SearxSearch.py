@@ -179,7 +179,7 @@ def search(
         "q": query,
         "format": "json",
         "language": language,
-        "engines": "brave,bing,google,duckduckgo",
+        "engines": "google,brave,duckduckgo",
         "safe": safe,
     }
 
@@ -224,7 +224,7 @@ def search(
 # Example usage
 if __name__ == "__main__":
     # Synchronous usage
-    search_results = search("OpenAI", max_results=5)
+    search_results = search("sony xm4 vs xm6 comparison", max_results=5)
     # print query
     print(f"Search Query: {search_results.query}")
     # print answers if any
