@@ -1,223 +1,104 @@
-# Omen - AI Multi-Agent System
+# AI Agent System
 
-Omen is a sophisticated multi-agent AI system designed for intelligent task orchestration and specialized execution. The system features a hierarchical agent architecture with a central triage agent that routes requests to specialized agents, each equipped with domain-specific tools and capabilities.
+A sophisticated, multi-agent AI system designed to handle complex tasks through a collaborative architecture. This system integrates voice capabilities, advanced memory management, and a wide array of tools to assist with research, coding, data analysis, and daily automation.
 
-## Architecture Overview
+## 🌟 Key Features
 
-### Core Components
+*   **Multi-Agent Architecture**: A specialized team of agents orchestrated by a central Triage Agent to handle diverse tasks efficiently.
+*   **Voice Interface**: Full support for voice interaction using Whisper (STT) and Kokoro/Piper (TTS) for a natural conversational experience.
+*   **Advanced Memory**:
+    *   **Vector Store**: Semantic search capabilities using ChromaDB.
+    *   **Graph Store**: Knowledge graph for relationship mapping.
+    *   **File-based Memory**: Persistent storage of research and context.
+*   **Rich Tool Ecosystem**: Integrated tools for web searching, file manipulation, data analysis, Google Workspace automation, and more.
+*   **Interactive CLI**: A polished command-line interface built with `rich` for structured output and easy interaction.
 
--   **Triage Agent (Orchestrator)**: Central routing and coordination agent that analyzes user requests and delegates to appropriate specialized agents
--   **Specialized Agents**: Domain-specific agents for web search, file operations, ideation, study, memory management, and code analysis
--   **Tool System**: Comprehensive toolkit providing filesystem operations, web interactions, memory management, code execution, and search capabilities
--   **CLI Interface**: Rich console-based interface with streaming responses and text-to-speech support
--   **Configuration System**: Flexible agent configuration with personality traits and model settings
+## 🤖 Agents
 
-### Agent Hierarchy
+The system is composed of several specialized agents:
 
-```
-User Request
-    ↓
-Triage Agent (Routes & Coordinates)
-    ↓
-Specialized Agents:
-├── Web Search Agent
-├── Filesystem Agent
-├── Ideation Agent
-├── Study Agent
-├── Memory Agent
-└── Analysis Agent
-```
+| Agent | Role | Key Capabilities |
+|-------|------|------------------|
+| **Triage (Orchestrator)** | Primary Interface | Routes user requests to the appropriate specialist agent. Handles general queries and manages the conversation flow. |
+| **Web Search** | Researcher | Performs web searches (Google, DuckDuckGo), scrapes content, and finds YouTube videos. |
+| **Filesystem** | File Manager | Reads, writes, edits, and organizes files within the workspace. |
+| **Analysis** | Data Scientist | Performs data analysis, generates reports, executes code, and automates workflows. |
+| **Google Workspace** | Assistant | Manages Calendar events and Gmail (reading/drafting emails). |
+| **Ideation** | Creative Writer | Brainstorms ideas, drafts content, and helps with creative writing tasks. |
+| **Study** | Tutor | Assists with learning and studying topics (hands off to Analysis for deep dives). |
+| **Resume** | Career Coach | Specialized in reading, editing, and optimizing resumes. |
 
-## Multi-Agent Abilities
+## 🛠️ Tools & Capabilities
 
-### Triage Agent
+The agents have access to a powerful suite of tools:
 
--   **Role**: Request analysis and intelligent routing
--   **Capabilities**:
-    -   Complex workflow coordination
-    -   Multi-agent orchestration
-    -   Ambiguous request resolution
-    -   Agent capability guidance
--   **Tools**: Current datetime retrieval
+*   **Web**: Search engines, URL scraping, browser automation, media downloading (audio/video).
+*   **Filesystem**: Full CRUD operations on files and directories.
+*   **Data Analysis**: Automated EDA reports, correlation analysis, and modeling workflows.
+*   **Automation**: Code execution and script running.
+*   **Google Integration**: Calendar and Gmail API access.
+*   **Context Manager**: Tools to save, load, and manage conversation context.
 
-### Web Search Agent
+## 🚀 Getting Started
 
--   **Role**: Information retrieval and web research
--   **Capabilities**:
-    -   DuckDuckGo and Searx search
-    -   YouTube video search
-    -   URL scraping and content extraction
-    -   Weather information retrieval
--   **Tools**: Web search, scraping, weather API
+### Prerequisites
 
-### Filesystem Agent
+*   Python 3.10+
+*   `uv` (recommended for dependency management) or `pip`
 
--   **Role**: File and directory management
--   **Capabilities**:
-    -   Complete file operations (CRUD)
-    -   Directory structure manipulation
-    -   File content editing and searching
-    -   Data organization and storage
--   **Tools**: File read/write, directory operations, content editing
+### Installation
 
-### Ideation Agent
-
--   **Role**: Creative thinking and idea generation
--   **Capabilities**:
-    -   Brainstorming and concept development
-    -   Creative problem solving
-    -   Innovation workflows
--   **Tools**: Memory integration, web research access
-
-### Study Agent
-
--   **Role**: Learning and research assistance
--   **Capabilities**:
-    -   Study material organization
-    -   Research coordination
-    -   Knowledge synthesis
-    -   Educational content processing
--   **Tools**: File access, web search, memory systems, analysis tools
-
-### Memory Agent
-
--   **Role**: Knowledge persistence and retrieval
--   **Capabilities**:
-    -   Long-term memory storage
-    -   Semantic search and retrieval
-    -   Memory organization and management
-    -   Context preservation across sessions
--   **Tools**: Memory CRUD operations, search, history tracking
-
-### Analysis Agent
-
--   **Role**: Computational analysis and code execution
--   **Capabilities**:
-    -   End-to-end data science workflows (EDA → modeling → reporting) triggered by a user-provided dataset path
-    -   Python code execution with pandas/numpy/scikit-learn/statsmodels
-    -   Automated clarifying questions to lock down objectives, target variables, metrics, and deliverables
-    -   Built-in dataset utilities (`dataset_overview`, `dataset_quality_report`, `dataset_correlation_report`) for rapid inspection and guardrailed processing
-    -   Automation helpers (`automated_eda_report`, `automated_modeling_workflow`) that produce ready-to-share EDA bundles and baseline ML experiments with artifacts
-    -   Data audits, visualization suites, and experiment tracking with artifact exports under `./root/analysis_outputs`
-    -   Debugging and troubleshooting for failing analyses or scripts
--   **Usage**:
-    1. Provide the dataset path (relative to `./root`) and, optionally, any initial context.
-    2. Answer the agent’s clarifying questions about goals, targets, metrics, and constraints.
-    3. Receive a structured plan, execution log, insights, and a list of generated artifacts—no extra coordination required.
--   **Tools**: Python interpreter, datetime utilities
-
-## Tool System
-
-The system provides a comprehensive toolkit organized by functionality:
-
-### Filesystem Tools
-
--   `list_files`: Directory content listing
--   `read_file`: File content reading
--   `write_file`: File creation and writing
--   `create_directory`: Directory creation
--   `delete_file`: File deletion
--   `delete_directory`: Directory removal
--   `move_file`: File relocation
--   `copy_file`: File duplication
--   `edit_file_section`: Targeted content editing
--   `append_to_file`: Content appending
-
-### Memory Tools
-
--   `memory_add`: Store information
--   `memory_search`: Semantic search
--   `memory_delete`: Remove memories
--   `memory_update`: Modify stored data
--   `memory_history`: Access interaction history
--   `memory_get_all`: Retrieve all memories
-
-### Web Tools
-
--   `duckduckgo_search`: Privacy-focused web search
--   `web_search`: Decentralized search
--   `search_youtube_videos`: Video content discovery
--   `open_url_in_browser`: URL launching
--   `get_weather_info`: Weather data retrieval
--   `scrape_url`: Web content extraction
--   `download_audio`: Audio file downloading
--   `download_video`: Video file downloading
-
-### Python Tools
-
--   `execute_python_code`: Safe code execution environment
--   `dataset_overview`: Retrieve dataset metadata, schema preview, and row samples
--   `dataset_quality_report`: Inspect missingness, cardinality, and descriptive statistics
--   `dataset_correlation_report`: Surface top linear correlations or target-specific signals
--   `automated_eda_report`: Chain the overview/quality/correlation reports in one go for fast discovery
--   `automated_modeling_workflow`: Auto-build preprocessing pipelines, train baseline models, log metrics/artifacts under `./root/analysis_outputs`
-
-### Miscellaneous Tools
-
--   `get_current_datetime`: Current time retrieval
-
-## Configuration System
-
-### Agent Configuration
-
--   Individual model configurations for each agent
--   API key management via environment variables
--   Base URL and model name settings
--   Maximum interaction turns (15 default)
-
-### Personality System
-
--   Customizable agent personalities
--   Character-consistent responses
--   Specialized system prompts per agent
-
-### Memory Configuration
-
--   ChromaDB for vector storage
--   Graph-based memory relationships
--   Persistent storage across sessions
-
-## CLI Interface
-
-The command-line interface provides:
-
--   **Rich Console Output**: Formatted text with panels and markdown support
--   **Streaming Responses**: Real-time response display
--   **Text-to-Speech**: Audio output for responses
--   **Interactive Prompts**: User-friendly input handling
--   **Keyboard Controls**: Interrupt and control capabilities
-
-## Getting Started
-
-1. **Install uv** (if not already installed):
-
+1.  **Clone the repository:**
     ```bash
-    pip install uv
+    git clone <repository-url>
+    cd ai
     ```
 
-2. **Setup venv & Install dependencies**:
-
+2.  **Install dependencies:**
+    Using `uv`:
     ```bash
     uv sync
     ```
+    Or using `pip`:
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-3. **Configuration**: Set up environment variables for API keys
+3.  **Configuration:**
+    *   Ensure `api_keys.txt` and `credentials.json` are properly set up in the root directory for external API access (OpenAI, Google, etc.).
+    *   Check `config/` for agent and UI configuration options.
 
-4. **Run**: Execute `uv run  main.py` to start the CLI interface
+### Usage
 
-5. **Interact**: Begin conversations with the triage agent
+Start the system by running the main script:
 
-## ChatKit Integration
+```bash
+python main.py
+```
 
--   The `chatkit_server.OmenChatKitServer` class bridges the existing Agents SDK runtime with ChatKit. It reuses the same agent registry and supports streaming responses.
--   To expose the server over HTTP, install optional dependencies (`fastapi` and `uvicorn`) and run `uvicorn chatkit_server:create_fastapi_app --factory`. The generated `/chatkit` endpoint is compatible with the ChatKit frontend.
--   Conversation state is persisted in `memory_store/chatkit.sqlite3`, allowing ChatKit sessions to resume across restarts.
--   The ChatKit helpers share the orchestrator logic with the CLI, so handoffs, tools, and multi-agent coordination behave the same across both interfaces.
+## 📂 Project Structure
 
-## Architecture Benefits
+```
+.
+├── agent_runtime.py    # Core logic for agent orchestration and handoffs
+├── main.py             # Entry point of the application
+├── cli/                # Command-line interface implementation
+├── config/             # Configuration files for agents and UI
+├── memory_store/       # Storage for vector, graph, and file memories
+├── my_agents/          # Definitions and logic for each specific agent
+├── stt/                # Speech-to-Text modules (Whisper, Parakeet)
+├── tts/                # Text-to-Speech modules (Kokoro, Piper)
+└── tools/              # Tool implementations (Web, Data, FS, etc.)
+```
 
--   **Modularity**: Specialized agents for focused tasks
--   **Scalability**: Easy addition of new agents and tools
--   **Flexibility**: Dynamic handoffs and workflow adaptation
--   **Reliability**: Isolated agent failures don't affect the system
--   **Extensibility**: Plugin-like tool and agent addition
+## 🧠 Memory System
+
+The system uses a hybrid memory approach:
+*   **`memory_store/memories/`**: Markdown files for human-readable long-term storage.
+
+## 🎙️ Voice Mode
+
+The system supports hands-free interaction:
+*   **STT**: Uses `WhisperSTT` for accurate speech recognition.
+*   **TTS**: Uses `KokoroTTS` or `PiperTTS` for natural-sounding speech synthesis.
+*   **Activation**: Voice mode can be toggled within the CLI.

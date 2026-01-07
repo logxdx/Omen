@@ -1,5 +1,5 @@
+import re
 import json
-from typing import List
 
 from openai.types.responses import (
     ResponseTextDeltaEvent,
@@ -12,7 +12,6 @@ from agents import (
     Runner,
     RunResultStreaming,
     RunItemStreamEvent,
-    TResponseInputItem,
     AgentUpdatedStreamEvent,
     set_tracing_disabled,
 )
@@ -22,7 +21,6 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt, IntPrompt
-from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
@@ -101,10 +99,10 @@ def select_hierarchy_mode(*args):
     """
     console.print("[bold white]\nChoose your preferred interaction mode:[/bold white]")
     console.print(
-        "1. [red]Managerial[/red] - Triage agent manages all interactions behind the scenes [bold dim](default)[/bold dim]"
+        "1. [red]Collaborative[/red] - Agents can handoff directly to each other [bold dim](default)[/bold dim]"
     )
     console.print(
-        "2. [red]Collaborative[/red] - Agents can handoff directly to each other"
+        "2. [red]Managerial[/red] - Triage agent manages all interactions behind the scenes"
     )
     console.print()
 
@@ -113,12 +111,12 @@ def select_hierarchy_mode(*args):
     while True:
         mode_choice = IntPrompt.ask("Mode", choices=["1", "2"], default="1")
         if mode_choice == "1":
-            ui_config.HEIRARCHY_MODE = "managerial"
-            console.print("[bold red]Managerial mode[/bold red]")
-            break
-        else:
             ui_config.HEIRARCHY_MODE = "collaborative"
             console.print("[bold red]Collaborative mode[/bold red]")
+            break
+        else:
+            ui_config.HEIRARCHY_MODE = "managerial"
+            console.print("[bold red]Managerial mode[/bold red]")
             break
 
 
@@ -346,7 +344,6 @@ def clear_history(*args):
     ui_config.SKIP_TURN = True
     ui_config.CONVERSATION_HISTORY.clear()
     console.clear()
-    console.print("[bold red]🔄 Conversation history cleared![/bold red]\n")
     current_display = str(CURRENT_AGENT.name).capitalize()
     console.print(f"[dim]Current agent: {current_display}[/dim]")
 
@@ -432,195 +429,203 @@ async def stream_agent_response() -> RunResultStreaming:
 
     # Create a live display for streaming response
     full_response: str = ""
-    markdown_obj = Markdown(full_response, style="bold white")
+    markdown_obj = Markdown(full_response, style="white")
     events: list = []
     thinking_text: str = ""
+    thinking = False
 
-    try:
-        with Live(
-            Group(
-                Panel(
-                    Group(*events),
-                    title="Events",
-                    style="dim",
-                    padding=(0, 1),
-                ),
-                Panel(
-                    markdown_obj,
-                    title=Text(
-                        f"{str(CURRENT_AGENT.name).capitalize()}", style="bold white"
-                    ),
-                    border_style="red",
-                    padding=(1, 1),
-                ),
+    with Live(
+        Group(
+            Panel(
+                Group(*events),
+                title="Events",
+                style="dim",
+                padding=(0, 1),
             ),
-            console=console,
-            refresh_per_second=1,
-        ) as live:
+            Panel(
+                markdown_obj,
+                title=Text(
+                    f"{str(CURRENT_AGENT.name).capitalize()}", style="bold white"
+                ),
+                border_style="red",
+                padding=(1, 1),
+            ),
+        ),
+        console=console,
+        refresh_per_second=1,
+    ) as live:
 
-            is_complete = False
-            thinking = False
-            while not is_complete:
+        try:
+            # Stream the response
+            async for event in result.stream_events():
 
-                # Stream the response
-                async for event in result.stream_events():
+                # Handle the streamed text output
+                if isinstance(event, RawResponsesStreamEvent):
+                    data = event.data
 
-                    # Handle the streamed text output
-                    if isinstance(event, RawResponsesStreamEvent):
-                        data = event.data
+                    if isinstance(data, ResponseTextDeltaEvent):
+                        delta = data.delta
 
-                        if isinstance(data, ResponseTextDeltaEvent):
-                            delta = data.delta
-
-                            if "<think>" in delta:
-                                delta = delta.replace("<think>", "")
-                                thinking = True
-                            elif "</think>" in delta:
-                                delta = delta.replace("</think>", "")
-                                thinking_text += delta
-                                thinking = False
-                                if thinking_text.strip():
-                                    events.append(
-                                        Panel(
-                                            thinking_text.strip(),
-                                            title="Reasoning",
-                                            style="dim",
-                                            padding=(0, 1),
-                                        )
+                        if any([tag in delta for tag in ["<think>", "[THINK]"]]):
+                            delta = delta.replace("<think>", "").replace("[THINK]", "")
+                            thinking = True
+                        elif any([tag in delta for tag in ["</think>", "[/THINK]"]]):
+                            delta = delta.replace("</think>", "").replace("[/THINK]", "")
+                            thinking_text += delta
+                            thinking = False
+                            if thinking_text.strip():
+                                events.append(
+                                    Panel(
+                                        thinking_text.strip(),
+                                        title="Reasoning",
+                                        style="dim",
+                                        padding=(0, 1),
                                     )
-                                thinking_text = ""
-                            if thinking:
-                                thinking_text += delta
-                            else:
-                                full_response += delta
-                                markdown_obj = Markdown(
-                                    full_response, style="bold white"
                                 )
-
-                        elif isinstance(data, ResponseReasoningTextDeltaEvent):
-                            delta = data.delta
+                            thinking_text = ""
+                        if thinking:
                             thinking_text += delta
+                        else:
+                            full_response += delta
+                            markdown_obj = Markdown(full_response, style="white")
 
-                        elif isinstance(data, ResponseReasoningSummaryTextDeltaEvent):
-                            delta = data.delta
-                            thinking_text += delta
+                    elif isinstance(data, ResponseReasoningTextDeltaEvent):
+                        delta = data.delta
+                        thinking_text += delta
 
-                    # Handle tool calls and handoffs
-                    elif isinstance(event, RunItemStreamEvent):
+                    elif isinstance(data, ResponseReasoningSummaryTextDeltaEvent):
+                        delta = data.delta
+                        thinking_text += delta
 
-                        # Handle handoff
-                        ###############
-                        # This here decides if you actually want to handoff to a new agent or let the orchestrator talk to it behind the scenes and return to you with the result.
-                        ###############
-                        if (
-                            event.name == "handoff_occured"
-                        ):  # Note: This is misspelled in the library
+                # Handle tool calls and handoffs
+                elif isinstance(event, RunItemStreamEvent):
 
-                            target_name = event.item.target_agent.name  # type: ignore
-                            display_target = str(target_name).capitalize()
+                    # Handle handoff
+                    ###############
+                    # This here decides if you actually want to handoff to a new agent or let the orchestrator talk to it behind the scenes and return to you with the result.
+                    ###############
+                    if (
+                        event.name == "handoff_occured"
+                    ):  # Note: This is misspelled in the library
 
-                            if ui_config.HEIRARCHY_MODE == "collaborative":
-                                # Switch to the new agent for direct handoff
-                                CURRENT_AGENT = event.item.target_agent  # type: ignore
-                                handoff_msg = f"Handed-off to {display_target}."
-                            else:
-                                # Managerial mode: keep current agent, just notify
-                                handoff_msg = f"Delegated to {display_target}."
-                            events.append(
-                                Panel(handoff_msg, style="dim", padding=(0, 1))
+                        target_name = event.item.target_agent.name  # type: ignore
+                        display_target = str(target_name).capitalize()
+
+                        if ui_config.HEIRARCHY_MODE == "collaborative":
+                            # Switch to the new agent for direct handoff
+                            CURRENT_AGENT = event.item.target_agent  # type: ignore
+                            handoff_msg = f"Handed-off to {display_target}."
+                        else:
+                            # Managerial mode: keep current agent, just notify
+                            handoff_msg = f"Delegated to {display_target}."
+                        events.append(
+                            Panel(
+                                handoff_msg,
+                                title="Handoff",
+                                style="dim",
+                                padding=(0, 1),
                             )
-
-                        # Handle tool calls
-                        elif event.name == "tool_called":
-                            tool_name: str = getattr(
-                                event.item.raw_item, "name", "unknown tool"
-                            )
-                            if tool_name.startswith("transfer_"):
-                                tool_msg = tool_name.replace("_", " ").split()[2:]
-                                tool_msg = [i.capitalize() for i in tool_msg]
-                                tool_msg = " ".join(tool_msg)
-                                continue
-                            else:
-                                tool_msg = f"`{tool_name}`"
-                            tool_args = getattr(event.item.raw_item, "arguments", "")
-                            if tool_args and tool_args != "{}":
-                                tool_msg += f"\n\nArgs: {json.dumps(json.loads(tool_args), indent=2)}"
-                            events.append(
-                                Panel(
-                                    tool_msg,
-                                    title="Tool Call",
-                                    style="dim",
-                                    padding=(0, 1),
-                                )
-                            )
-
-                        # Handle tool outputs
-                        elif event.name == "tool_output":
-                            tool_output = str(event.item.output).strip()  # type: ignore
-                            if tool_output:
-                                tool_output = f"Tool output: {tool_output}"
-                                # events.append(Panel(tool_output, style="dim", padding=(0, 1)))
-
-                    # Handle agent switch events
-                    elif isinstance(event, AgentUpdatedStreamEvent):
-                        continue
-                        new_agent = event.new_agent
-                        if new_agent.name != agent.name:
-                            # Already handled in RunItemStreamEvent
-                            # agent = new_agent
-                            switch_msg = (
-                                f"\n🔄 Switched to {str(agent.name).capitalize()}\n"
-                            )
-                            events_text.append(switch_msg)
-
-                    events = events[-5:]
-
-                    if thinking_text.strip():
-                        thinking_panel = Panel(
-                            thinking_text,
-                            title="Reasoning",
-                            style="dim",
-                            padding=(0, 1),
-                        )
-                        events_panel = Panel(
-                            Group(*events, thinking_panel),
-                            title="Events",
-                            style="dim",
-                            border_style="white",
-                            padding=(0, 1),
-                        )
-                    else:
-                        events_panel = Panel(
-                            Group(*events),
-                            title="Events",
-                            style="dim",
-                            border_style="white",
-                            padding=(0, 1),
                         )
 
-                    display = Group(
-                        events_panel,
-                        Panel(
-                            markdown_obj,
-                            title=Text(
-                                f"{str(CURRENT_AGENT.name).capitalize()}",
-                                style="bold white",
-                            ),
-                            border_style="red",
-                            padding=(1, 1),
+                    # Handle tool calls
+                    elif event.name == "tool_called":
+                        tool_name: str = getattr(
+                            event.item.raw_item, "name", "unknown tool"
+                        )
+                        if tool_name.startswith("transfer_"):
+                            tool_msg = tool_name.replace("_", " ").split()[2:]
+                            tool_msg = [i.capitalize() for i in tool_msg]
+                            tool_msg = " ".join(tool_msg)
+                            continue
+                        else:
+                            tool_msg = f"`{tool_name}`"
+                        tool_args = getattr(event.item.raw_item, "arguments", "")
+                        if tool_args and tool_args != "{}":
+                            tool_msg += f"\n\nArgs: {json.dumps(json.loads(tool_args), indent=2)}"
+                        events.append(
+                            Panel(
+                                tool_msg,
+                                title="Tool Call",
+                                style="dim",
+                                padding=(0, 1),
+                            )
+                        )
+
+                    # Handle tool outputs
+                    elif event.name == "tool_output":
+                        tool_output = str(event.item.output).strip()  # type: ignore
+                        if tool_output:
+                            tool_output = f"Tool output: {tool_output}"
+                            # events.append(Panel(tool_output, style="dim", padding=(0, 1)))
+
+                events = events[-2:]
+
+                if thinking_text.strip():
+                    events = events[-1:]
+                    thinking_panel = Panel(
+                        thinking_text,
+                        title="Reasoning",
+                        style="dim",
+                        padding=(0, 1),
+                    )
+                    events_panel = Panel(
+                        Group(*events, thinking_panel),
+                        title="Events",
+                        style="dim",
+                        border_style="white",
+                        padding=(0, 1),
+                    )
+                else:
+                    events_panel = Panel(
+                        Group(*events),
+                        title="Events",
+                        style="dim",
+                        border_style="white",
+                        padding=(0, 1),
+                    )
+
+                display = Group(
+                    events_panel,
+                    Panel(
+                        markdown_obj,
+                        title=Text(
+                            f"{str(CURRENT_AGENT.name).capitalize()}",
+                            style="bold white",
                         ),
-                    )
+                        border_style="red",
+                        padding=(1, 1),
+                    ),
+                )
 
-                    # Update the live display
-                    live.update(
-                        display,
-                        refresh=True,
-                    )
+                # Update the live display
+                live.update(
+                    display,
+                    refresh=True,
+                )
 
-                is_complete = True
+        except KeyboardInterrupt:
+            console.print("\n[bold red]Interrupted by user[/bold red]")
+        except Exception as e:
+            console.print(f"Error: {e}")
 
-    except Exception as e:
-        console.print(f"Error: {e}")
+        # TODO: remove reasoning from messages
+        history = result.to_input_list()
+        for item in history:
+            content = item.get("content", "")
+            if isinstance(content, str):
+                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
+                item["content"] = content  # type: ignore
+            elif isinstance(content, list):
+                text = content[0].get("text", "")
+                text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+                item["content"][0]["text"] = text  # type:ignore
+
+        ui_config.CONVERSATION_HISTORY = history
+
+        full_response = re.sub(
+            r"<think>.*?</think>", "", full_response, flags=re.DOTALL
+        )
+        result.final_output = full_response.strip()
 
     return result
 
@@ -634,6 +639,7 @@ async def run_cli():
     :param starting_agent: The agent to start the conversation with
     """
 
+    global CURRENT_AGENT
     session_context: str = ""
 
     try:
@@ -646,15 +652,6 @@ async def run_cli():
         raise Exception(f"Error selecting modes")
 
     welcome_panel()
-
-    ui_config.CONVERSATION_HISTORY = [
-        {
-            "content": "Short Intro. State your capabilities and ask how you can assist.",
-            "role": "user",
-        }
-    ]
-
-    result = await stream_agent_response()
     ui_config.CONVERSATION_HISTORY.clear()
 
     while True:
@@ -673,31 +670,35 @@ async def run_cli():
 
         if ui_config.INTERACTION_MODE == "text":
 
-            user_msg = Prompt.ask("\n[dim]You[/dim]")
+            try:
+                user_msg = Prompt.ask("\n[dim]You[/dim]")
 
-            if not user_msg:
+                if not user_msg:
+                    continue
+
+                if user_msg.startswith("<ml>"):
+                    while not user_msg.strip().endswith("</ml>"):
+                        next_line = Prompt.ask(":")
+                        user_msg += "\n" + next_line
+                        user_msg = user_msg.strip()
+                    user_msg = user_msg.replace("<ml>", "").replace("</ml>", "").strip()
+
+                # Handle special commands
+                slash_commands(user_msg.lower())
+
+                if ui_config.SKIP_TURN:
+                    ui_config.SKIP_TURN = False
+                    continue
+
+                if ui_config.QUIT_SESSION:
+                    if tts_client:
+                        tts_client.shutdown()
+                    if stt_client:
+                        stt_client.shutdown()
+                    break
+            except Exception as e:
+                console.print(f"[bold red]Input Error: {e}[/bold red]")
                 continue
-
-            if user_msg.startswith("<ml>"):
-                while not user_msg.strip().endswith("</ml>"):
-                    next_line = Prompt.ask(":")
-                    user_msg += "\n" + next_line
-                    user_msg = user_msg.strip()
-                user_msg = user_msg.replace("<ml>", "").replace("</ml>", "").strip()
-
-            # Handle special commands
-            slash_commands(user_msg.lower())
-
-            if ui_config.SKIP_TURN:
-                ui_config.SKIP_TURN = False
-                continue
-
-            if ui_config.QUIT_SESSION:
-                if tts_client:
-                    tts_client.shutdown()
-                if stt_client:
-                    stt_client.shutdown()
-                break
 
         else:
 
@@ -706,15 +707,10 @@ async def run_cli():
             try:
                 user_msg = stt_client.text()  # type: ignore
                 console.print(f"\n[dim]You:[/dim] {user_msg}\n")
-            except KeyboardInterrupt:
-                if tts_client:
-                    tts_client.shutdown()
-                if stt_client:
-                    stt_client.shutdown()
-                break
             except Exception as e:
                 console.print(f"[bold red]STT Error: {e}[/bold red]")
-                break
+                ui_config.INTERACTION_MODE = "text"
+                continue
 
             if not user_msg:
                 console.print(
@@ -727,7 +723,14 @@ async def run_cli():
 
         if ui_config.USE_CONTEXT_MANAGER:
 
-            context_result = await stream_agent_response()
+            try:
+                temp = CURRENT_AGENT
+                CURRENT_AGENT = context_agent.agent
+                context_result = await stream_agent_response()
+                CURRENT_AGENT = temp
+            except KeyboardInterrupt:
+                console.print("\n[bold red]Interrupted by user[/bold red]")
+                continue
 
             if context_result.final_output != session_context:
                 session_context = str(context_result.final_output).strip()
@@ -740,19 +743,30 @@ async def run_cli():
                 ]
 
         # Stream the response
-        result = await stream_agent_response()
+        try:
+            result = await stream_agent_response()
+        except KeyboardInterrupt:
+            console.print("\n[bold red]Interrupted by user[/bold red]")
+            continue
 
         if ui_config.INTERACTION_MODE == "voice":
             if tts_client and result.final_output:
                 tts_client.speak(str(result.final_output))
 
-        ui_config.CONVERSATION_HISTORY = result.to_input_list()
+        # ui_config.CONVERSATION_HISTORY = result.to_input_list()
 
         if ui_config.USE_CONTEXT_MANAGER:
             for input_item in ui_config.CONVERSATION_HISTORY:
                 if input_item.get("type") in ["function_call", "function_call_output"]:
 
-                    context_result = await stream_agent_response()
+                    try:
+                        temp = CURRENT_AGENT
+                        CURRENT_AGENT = context_agent.agent
+                        context_result = await stream_agent_response()
+                        CURRENT_AGENT = temp
+                    except KeyboardInterrupt:
+                        console.print("\n[bold red]Interrupted by user[/bold red]")
+                        continue
 
                     if context_result.final_output:
                         session_context = str(context_result.final_output).strip()

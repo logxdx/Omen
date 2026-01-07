@@ -48,7 +48,8 @@ from agents import (
     AgentUpdatedStreamEvent,
     set_tracing_disabled,
 )
-from config.agent_config import Version, MAX_TURNS
+from config.agent_config import MAX_TURNS
+from config.ui_config import Version
 from .art import get_art
 from tts.PiperTTS import PiperTTS as TTS
 from my_agents import context_agent
