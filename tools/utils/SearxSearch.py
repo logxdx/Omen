@@ -172,14 +172,12 @@ def search(
         List of search results as dictionaries
     """
     search_url = str(BASE_URL.rstrip("/"))
-    headers = HeaderGenerator(locale=["en-US", "en-GB"]).generate()
-    max_results += 5
 
     params = {
         "q": query,
         "format": "json",
         "language": language,
-        "engines": "google,brave,duckduckgo",
+        "engines": "google,brave,duckduckgo,startpage",
         "safe": safe,
     }
 
@@ -192,6 +190,9 @@ def search(
     search_results: SearchResults = SearchResults(query=query)
 
     try:
+        headers = HeaderGenerator(
+            locale=["en-US", "en-GB", "en-IN", "en-AU", "en-CA"]
+        ).generate()
         response = requests.get(url=search_url, params=params, headers=headers)
         response.raise_for_status()
         response = response.json()
@@ -224,7 +225,8 @@ def search(
 # Example usage
 if __name__ == "__main__":
     # Synchronous usage
-    search_results = search("sony xm4 vs xm6 comparison", max_results=5)
+    query = input("Enter your search query: ")
+    search_results = search(query, max_results=5)
     # print query
     print(f"Search Query: {search_results.query}")
     # print answers if any

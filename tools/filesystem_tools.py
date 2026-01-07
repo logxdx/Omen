@@ -14,7 +14,27 @@ from tools.utils.filesystem import (
     copy_file_in_sandbox,
     edit_file_section_in_sandbox,
     append_to_file_in_sandbox,
+    grep_file_content_in_sandbox,
 )
+
+
+@function_tool
+def grep_file_content(relative_path: str, pattern: str) -> str:
+    """
+    Search for a regex pattern in a file and return matching lines.
+
+    Args:
+        relative_path: file path relative to root
+        pattern: regular expression pattern to search for
+
+    Returns:
+        String containing newline-separated list of matching lines, or error message
+    """
+    try:
+        matches = grep_file_content_in_sandbox(relative_path, pattern)
+        return matches
+    except Exception as e:
+        return f"Error searching in file '{relative_path}': {str(e)}"
 
 
 @function_tool
@@ -215,4 +235,5 @@ FILESYSTEM_TOOLS = [
     copy_file,
     edit_file_section,
     append_to_file,
+    grep_file_content,
 ]

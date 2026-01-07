@@ -64,7 +64,8 @@ BASE_URL = config["BASE_URL"]
 API_KEY = config["API_KEY"]
 SUMMARIZATION_MODEL = config["MODEL_NAME"]
 
-CHROME_URL="http://localhost:9222/json/version"
+CHROME_URL = "http://localhost:9222/json/version"
+CHROME_URL = None  # Disable by default
 
 # These patterns will be used to filter out unwanted URLs
 EXCLUDE_PATTERNS = [
@@ -243,14 +244,14 @@ def scrape_page_content(
 
         website: Website = (
             Website(url=url)
+            .with_headers(headers)
             .with_return_page_links(True)
             .with_depth(0)
             .with_budget({"*": 1})
             .with_stealth(True)
+            .with_request_timeout(30000)
         )
 
-        if headers is not None:
-            website = website.with_headers(headers)
         if subdomains is not None:
             website = website.with_subdomains(subdomains)
         if tld is not None:
@@ -263,7 +264,9 @@ def scrape_page_content(
         # If raw html is empty, return empty PageResult
         if not raw_html:
             logger.info(f"[scrape_page_content] Trying with headless browser...")
-            website.with_chrome_connection("http://localhost:9222/json/version").scrape(headless=True)
+            website.with_chrome_connection("http://localhost:9222/json/version").scrape(
+                headless=True
+            )
             page = website.get_pages()[0]
             raw_html = str(page.content)
         if not raw_html:
@@ -432,7 +435,7 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
                     rel_url = tag["src"]
 
                 # absolute URL
-                abs_href = urljoin(baseurl, rel_url)
+                abs_href = urljoin(baseurl, rel_url)  # type: ignore
 
                 if tag.has_attr("href"):
                     tag["href"] = abs_href
@@ -508,8 +511,8 @@ def html2md(html: str, instructions: Optional[str] = None) -> str:
                 ],
                 temperature=0,
             )
-            .choices[0]
-            .message.content
+            .choices[0]  # type: ignore
+            .message.content  # type: ignore
         ).strip()
 
         # remove ```markdown and ``` from the response
@@ -596,8 +599,8 @@ def summarize_content(content: str, instructions: Optional[str] = None) -> str:
                     {"role": "user", "content": content},
                 ],
             )
-            .choices[0]
-            .message.content
+            .choices[0]  # type: ignore
+            .message.content  # type: ignore
         ).strip()
 
         logger.info(f"[summarize_content] SUMMARISED")
@@ -630,12 +633,11 @@ def jina_reader_api(url: str) -> str:
         logger.info(f"[jina_reader_api] Initiating...")
 
         JINA_URL = f"https://r.jina.ai/{url}"
-        json_payload = None
 
         headers = get_headers()
-        headers["X-Engine"] = "browser"
+        # headers["X-Engine"] = "browser"
 
-        markdown = requests.get(JINA_URL, headers=headers, json=json_payload)
+        markdown = requests.get(JINA_URL, headers=headers, timeout=30)
         markdown = markdown.text
 
         logger.info(f"[jina_reader_api] SCRAPED")
@@ -985,12 +987,9 @@ if __name__ == "__main__":
         summarise=False,
         use_reader_lm=False,
     )
-    output = f"URL: {result.url}\n\n"
-    output += f"Markdown\n---\n{result.markdown}\n\n"
-    output += f"Summary\n---\n{result.summary}\n\n"
-    print(output)
+    print(result)
     print("---\n" + "\n".join(result.links) + "\n---\n")
 
-    for link in result.links:
-        page = scrape_page(link, summarise=False, use_reader_lm=False)
-        print(str(page) + "\n\n===\n")
+    # for link in result.links:
+    #     page = scrape_page(link, summarise=False, use_reader_lm=False)
+    #     print(str(page) + "\n\n===\n")

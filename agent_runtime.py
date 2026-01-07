@@ -13,6 +13,7 @@ from agents import Agent
 
 from my_agents import (
     analysis_agent,
+    context_agent,
     resume_agent,
     filesystem_agent,
     google_workspace_agent,
@@ -47,6 +48,7 @@ def _configure_agents() -> None:
         "tutor": study_agent.agent,
         "analyst": analysis_agent.agent,
         "resume": resume_agent.agent,
+        "memory": context_agent.agent,
     }
     _PRIMARY_AGENT = triage_agent.agent
     _CONFIGURED = True

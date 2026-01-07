@@ -23,9 +23,6 @@ SUPPORTED_DATASET_EXTENSIONS = {
     ".tsv",
     ".txt",
     ".json",
-    ".ndjson",
-    ".parquet",
-    ".pq",
     ".xlsx",
     ".xls",
 }

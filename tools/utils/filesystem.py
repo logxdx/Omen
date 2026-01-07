@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import textwrap
 from pathlib import Path
@@ -33,7 +34,7 @@ def list_files_in_sandbox(relative_path: str = "") -> str:
         else:
             display_files.append(f)
     if display_files:
-        max_len = max(len(df) for df in display_files)
+        max_len = max(len(df) for df in display_files) + 12 # for line numbers and borders
     else:
         max_len = 0
     line_num_width = len(str(len(display_files))) + 2 if display_files else 2
@@ -192,6 +193,24 @@ def append_to_file_in_sandbox(relative_path: str, content: str):
     full_path.parent.mkdir(parents=True, exist_ok=True)
     with open(full_path, "a", encoding="utf-8") as f:
         f.write(content)
+
+
+def grep_file_content_in_sandbox(relative_path: str, pattern: str) -> str:
+    """Search for a term in a file and return matching lines."""
+    full_path = SANDBOX_PATH / relative_path.rstrip("/")
+    if str(SANDBOX_PATH) not in str(full_path):
+        raise AccessDeniedError(f"Access Denied")
+    if not full_path.is_file():
+        raise FileNotFoundError(f"File does not exist: {relative_path}")
+    with open(full_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    r = re.compile(pattern, re.MULTILINE)
+    matches = r.findall(content)
+    return (
+        (f"Matches for {pattern}:\n" + "\n\n---\n\n".join(map(str, matches)))
+        if matches
+        else "No matches found."
+    )
 
 
 if __name__ == "__main__":
