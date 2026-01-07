@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from agents import Agent, Tool
 from agents.extensions.models.litellm_model import LitellmModel
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
+
+RECOMMENDED_PROMPT_PREFIX = ""
 
 
 @dataclass
@@ -53,7 +56,7 @@ class my_agent:
         """
         if not self.agent:
             raise ValueError("Agent not created yet. Call create_agent() first.")
-        if isinstance(tools, Tool):
+        if not isinstance(tools, list):
             tools = [tools]
         self.tools.extend(tools)
         for tool in self.tools:
@@ -68,11 +71,9 @@ class my_agent:
 
         if not self.agent:
             raise ValueError("Agent not created yet. Call create_agent() first.")
-        if isinstance(handoffs, my_agent):
+        if not isinstance(handoffs, list):
             handoffs = [handoffs]
         if handoffs:
-            # if not self.handoffs:
-            #     self.instructions += "\n\n## AVAILABLE SPECIALIST AGENTS\n---\n"
             self.handoffs.extend(handoffs)
 
             for handoff_agent in self.handoffs:
