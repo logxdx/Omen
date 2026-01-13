@@ -139,9 +139,12 @@ BASE_URL = "http://localhost:9090/search"
 class SearchResult(BaseModel):
     title: str = ""
     link: str = ""
-    description: str = ""
+    snippet: str = ""
     score: float = 0
     category: str = ""
+
+    def __str__(self) -> str:
+        return f"Title: {self.title}\nURL: {self.link}\nSnippet: {self.snippet}"
 
 
 class SearchResults(BaseModel):
@@ -152,7 +155,7 @@ class SearchResults(BaseModel):
 
 def search(
     query: str,
-    max_results: int = 10,
+    max_results: int = 5,
     category: str | None = None,
     language: str = "en",
     safe: int = 1,
@@ -191,7 +194,7 @@ def search(
 
     try:
         headers = HeaderGenerator(
-            locale=["en-US", "en-GB", "en-IN", "en-AU", "en-CA"]
+            locale=["en", "en-IN"]
         ).generate()
         response = requests.get(url=search_url, params=params, headers=headers)
         response.raise_for_status()
@@ -209,7 +212,7 @@ def search(
                 SearchResult(
                     title=result.get("title", ""),
                     link=result.get("url", ""),
-                    description=result.get("content", ""),
+                    snippet=result.get("content", ""),
                     score=result.get("score", 0),
                     category=result.get("category", ""),
                 )
@@ -237,5 +240,5 @@ if __name__ == "__main__":
     # print results
     for i, result in enumerate(search_results.results, 1):
         print(
-            f"\n{i}. [{result.title}]({result.link}) - {result.category}\n  {result.description}"
+            f"\n{i}. [{result.title}]({result.link}) - {result.category}\n  {result.snippet}"
         )

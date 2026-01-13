@@ -60,7 +60,7 @@ def web_search(
 
     for i, result in enumerate(search_results.results, 1):
         formatted_output += (
-            f"{i}. [{result.title}]({result.link})\nSnippet: {result.description}\n\n"
+            f"{i}. [{result.title}]({result.link})\n\n"
         )
     return formatted_output.strip()
 

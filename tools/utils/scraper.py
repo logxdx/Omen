@@ -103,9 +103,7 @@ def get_headers() -> dict:
     """
     Returns a random set of headers.
     """
-    headers = HeaderGenerator(
-        locale=("en-US", "en"),
-    ).generate()
+    headers = HeaderGenerator(locale=("en-IN", "en"), http_version=1).generate()
 
     return headers
 
@@ -249,7 +247,7 @@ def scrape_page_content(
             .with_depth(0)
             .with_budget({"*": 1})
             .with_stealth(True)
-            .with_request_timeout(30000)
+            .with_request_timeout(10000)
         )
 
         if subdomains is not None:
@@ -264,22 +262,16 @@ def scrape_page_content(
         # If raw html is empty, return empty PageResult
         if not raw_html:
             logger.info(f"[scrape_page_content] Trying with headless browser...")
-            website.with_chrome_connection("http://localhost:9222/json/version").scrape(
-                headless=True
-            )
+            website.scrape(headless=True)
             page = website.get_pages()[0]
             raw_html = str(page.content)
         if not raw_html:
+            logger.info(f"[scrape_page_content] Trying with http fetch...")
             return fetch_page_content(
                 url=url, headers=headers, subdomains=subdomains, tld=tld
             )
 
-        website.with_budget({"*": 0}).with_depth(1)
-        website.crawl()
-        links = website.get_links()
-        website.crawl_smart()
-        links += website.get_links()
-        links = list(set(links))
+        links = list(set(website.get_links()))
 
         logger.info(f"[scrape_page_content] FETCHED")
 
