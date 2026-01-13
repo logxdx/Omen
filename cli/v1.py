@@ -8,11 +8,13 @@ from openai.types.responses import (
 )
 from agents import (
     Agent,
+    AgentUpdatedStreamEvent,
     RawResponsesStreamEvent,
     Runner,
+    RunConfig,
     RunResultStreaming,
     RunItemStreamEvent,
-    AgentUpdatedStreamEvent,
+    Usage,
     set_tracing_disabled,
 )
 from rich import box
@@ -348,6 +350,22 @@ def clear_history(*args):
     console.print(f"[dim]Current agent: {current_display}[/dim]")
 
 
+def print_usage(usage: Usage) -> None:
+    usage_string = ""
+    usage_string += "\n=== Usage ===\n"
+    usage_string += f"Input tokens: {usage.input_tokens}\n"
+    usage_string += f"Output tokens: {usage.output_tokens}\n"
+    usage_string += f"Total tokens: {usage.total_tokens}\n"
+    usage_string += f"Requests: {usage.requests}\n"
+    for i, request in enumerate(usage.request_usage_entries):
+        usage_string += (
+            f"  {i + 1}: {request.input_tokens} input, {request.output_tokens} output\n"
+        )
+    console.print(
+        usage_string, style="dim", justify="center", highlight=True, crop=True
+    )
+
+
 # Command registry
 COMMANDS = {
     "help": {
@@ -425,11 +443,11 @@ async def stream_agent_response() -> RunResultStreaming:
         starting_agent=CURRENT_AGENT,
         input=ui_config.CONVERSATION_HISTORY,
         max_turns=MAX_TURNS,
+        run_config=RunConfig(nest_handoff_history=False),
     )
 
     # Create a live display for streaming response
     full_response: str = ""
-    markdown_obj = Markdown(full_response, style="white")
     events: list = []
     thinking_text: str = ""
     thinking = False
@@ -439,14 +457,16 @@ async def stream_agent_response() -> RunResultStreaming:
             Panel(
                 Group(*events),
                 title="Events",
+                title_align="left",
                 style="dim",
                 padding=(0, 1),
             ),
             Panel(
-                markdown_obj,
+                Markdown(full_response, style="white"),
                 title=Text(
                     f"{str(CURRENT_AGENT.name).capitalize()}", style="bold white"
                 ),
+                title_align="left",
                 border_style="red",
                 padding=(1, 1),
             ),
@@ -470,7 +490,9 @@ async def stream_agent_response() -> RunResultStreaming:
                             delta = delta.replace("<think>", "").replace("[THINK]", "")
                             thinking = True
                         elif any([tag in delta for tag in ["</think>", "[/THINK]"]]):
-                            delta = delta.replace("</think>", "").replace("[/THINK]", "")
+                            delta = delta.replace("</think>", "").replace(
+                                "[/THINK]", ""
+                            )
                             thinking_text += delta
                             thinking = False
                             if thinking_text.strip():
@@ -487,7 +509,6 @@ async def stream_agent_response() -> RunResultStreaming:
                             thinking_text += delta
                         else:
                             full_response += delta
-                            markdown_obj = Markdown(full_response, style="white")
 
                     elif isinstance(data, ResponseReasoningTextDeltaEvent):
                         delta = data.delta
@@ -558,7 +579,7 @@ async def stream_agent_response() -> RunResultStreaming:
                             tool_output = f"Tool output: {tool_output}"
                             # events.append(Panel(tool_output, style="dim", padding=(0, 1)))
 
-                events = events[-2:]
+                events = events[-4:]
 
                 if thinking_text.strip():
                     events = events[-1:]
@@ -571,6 +592,7 @@ async def stream_agent_response() -> RunResultStreaming:
                     events_panel = Panel(
                         Group(*events, thinking_panel),
                         title="Events",
+                        title_align="left",
                         style="dim",
                         border_style="white",
                         padding=(0, 1),
@@ -579,6 +601,7 @@ async def stream_agent_response() -> RunResultStreaming:
                     events_panel = Panel(
                         Group(*events),
                         title="Events",
+                        title_align="left",
                         style="dim",
                         border_style="white",
                         padding=(0, 1),
@@ -587,11 +610,12 @@ async def stream_agent_response() -> RunResultStreaming:
                 display = Group(
                     events_panel,
                     Panel(
-                        markdown_obj,
+                        Markdown(full_response, style="white"),
                         title=Text(
                             f"{str(CURRENT_AGENT.name).capitalize()}",
                             style="bold white",
                         ),
+                        title_align="left",
                         border_style="red",
                         padding=(1, 1),
                     ),
@@ -626,6 +650,8 @@ async def stream_agent_response() -> RunResultStreaming:
             r"<think>.*?</think>", "", full_response, flags=re.DOTALL
         )
         result.final_output = full_response.strip()
+
+    # print_usage(result.context_wrapper.usage)
 
     return result
 
