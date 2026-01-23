@@ -36,8 +36,10 @@ from my_agents import context_agent
 
 set_tracing_disabled(disabled=True)
 
-CONSOLE_WIDTH = 120
-console = Console(color_system="truecolor", width=CONSOLE_WIDTH)
+CONSOLE_WIDTH = 150
+console = Console(
+    theme=ui_config.AGENT_THEME, color_system="truecolor", width=CONSOLE_WIDTH
+)
 console.clear()
 
 welcome_art = get_art()
@@ -65,19 +67,19 @@ def welcome_panel():
     console.clear()
 
     commands_table = Table.grid(padding=(0, 4))
-    commands_table.add_column(style="bold red", justify="right")
-    commands_table.add_column(style="white", justify="left")
+    commands_table.add_column(style="accent.bold", justify="right")
+    commands_table.add_column(style="assistant", justify="left")
 
     for cmd_info in COMMANDS.values():
         aliases_display = ", ".join(cmd_info.get("aliases", []))
         commands_table.add_row(aliases_display, cmd_info.get("description", ""))
 
-    art_text = Text(welcome_art, style="bold red", justify="center")
+    art_text = Text(welcome_art, style="accent.bold", justify="center")
 
     commands_panel = Group(
         art_text,
-        # Rule(style="red"),
-        Text("Quick Controls\n", style="bold white"),
+        # Rule(style="accent"),
+        Text("Quick Controls\n", style="title"),
         commands_table,
     )
 
@@ -89,7 +91,7 @@ def welcome_panel():
             title_align="right",
             padding=(1, 2),
             box=box.ROUNDED,
-            border_style="red",
+            border_style="accent",
         ),
         justify="center",
     )
@@ -99,12 +101,12 @@ def select_hierarchy_mode(*args):
     """
     Prompt user to select hierarchy mode.
     """
-    console.print("[bold white]\nChoose your preferred interaction mode:[/bold white]")
+    console.print("[title]\nChoose your preferred interaction mode:[/title]")
     console.print(
-        "1. [red]Collaborative[/red] - Agents can handoff directly to each other [bold dim](default)[/bold dim]"
+        "1. [accent]Collaborative[/accent] - Agents can handoff directly to each other [dim](default)[/dim]"
     )
     console.print(
-        "2. [red]Managerial[/red] - Triage agent manages all interactions behind the scenes"
+        "2. [accent]Managerial[/accent] - Triage agent manages all interactions behind the scenes"
     )
     console.print()
 
@@ -114,11 +116,11 @@ def select_hierarchy_mode(*args):
         mode_choice = IntPrompt.ask("Mode", choices=["1", "2"], default="1")
         if mode_choice == "1":
             ui_config.HEIRARCHY_MODE = "collaborative"
-            console.print("[bold red]Collaborative mode[/bold red]")
+            console.print("[accent.bold]Collaborative mode[/accent.bold]")
             break
         else:
             ui_config.HEIRARCHY_MODE = "managerial"
-            console.print("[bold red]Managerial mode[/bold red]")
+            console.print("[accent.bold]Managerial mode[/accent.bold]")
             break
 
 
@@ -126,9 +128,9 @@ def select_interaction_mode(*args):
     """
     Prompt user to select interaction mode.
     """
-    console.print("[bold white]\nChoose your preferred interaction mode:[/bold white]")
-    console.print("1. [red]Text[/red] [bold dim](default)[/bold dim]")
-    console.print("2. [red]Voice[/red] - STT (Whisper) + TTS (Piper)")
+    console.print("[title]\nChoose your preferred interaction mode:[/title]")
+    console.print("1. [accent]Text[/accent] [dim](default)[/dim]")
+    console.print("2. [accent]Voice[/accent] - STT (Whisper) + TTS (Piper)")
     console.print()
 
     ui_config.SKIP_TURN = True
@@ -137,12 +139,12 @@ def select_interaction_mode(*args):
         mode_choice = IntPrompt.ask("Mode", choices=["1", "2"], default=1)
         if mode_choice == 1:
             ui_config.INTERACTION_MODE = "text"
-            console.print("[bold red]Text mode[/bold red]")
+            console.print("[accent.bold]Text mode[/accent.bold]")
             break
         else:
             setup_voice_mode()
             ui_config.INTERACTION_MODE = "voice"
-            console.print("[bold red]Voice mode[/bold red]")
+            console.print("[accent.bold]Voice mode[/accent.bold]")
             break
 
 
@@ -151,10 +153,10 @@ def select_context_agent_mode(*args):
     Prompt user to select whether to use context agent for memory.
     """
     console.print(
-        "[bold white]\nChoose if you want to use context agent for memory:[/bold white]"
+        "[title]\nChoose if you want to use context agent for memory:[/title]"
     )
-    console.print("1. [red]Yes[/red] - Use context agent for memory")
-    console.print("2. [red]No[/red] [bold dim](default)[/bold dim]")
+    console.print("1. [accent]Yes[/accent] - Use context agent for memory")
+    console.print("2. [accent]No[/accent] [dim](default)[/dim]")
     console.print()
 
     ui_config.SKIP_TURN = True
@@ -163,11 +165,13 @@ def select_context_agent_mode(*args):
         mode_choice = IntPrompt.ask("Mode", choices=["1", "2"], default="2")
         if mode_choice == 1:
             ui_config.USE_CONTEXT_MANAGER = True
-            console.print("[bold red]Using context agent for memory[/bold red]")
+            console.print("[accent.bold]Using context agent for memory[/accent.bold]")
             break
         else:
             ui_config.USE_CONTEXT_MANAGER = False
-            console.print("[bold red]Not using context agent for memory[/bold red]")
+            console.print(
+                "[accent.bold]Not using context agent for memory[/accent.bold]"
+            )
             break
 
 
@@ -184,13 +188,13 @@ def handle_agents(user_msg: str) -> None:
     agents_table = Table(
         title="Available Agents",
         show_header=True,
-        header_style="bold white",
+        header_style="title",
         expand=True,
         box=box.ROUNDED,
         padding=(0, 1),
     )
-    agents_table.add_column("Key", style="bold red")
-    agents_table.add_column("Agent", style="white")
+    agents_table.add_column("Key", style="accent.bold")
+    agents_table.add_column("Agent", style="assistant")
 
     if len(parts) == 1:
         agents_panel = Text()
@@ -202,14 +206,14 @@ def handle_agents(user_msg: str) -> None:
             agents_table.add_row(key, str(value.name).capitalize())
         agents_panel.append(
             "\nUse /agents <name> OR /a <name> to talk to a specific agent.\n",
-            style="bold red",
+            style="accent.bold",
         )
         console.print(
             Group(
                 agents_table,
                 Text(
                     "Use /agents <key> OR /a <key> to talk to a specific agent.",
-                    style="bold white",
+                    style="title",
                 ),
             ),
             justify="center",
@@ -220,13 +224,13 @@ def handle_agents(user_msg: str) -> None:
         if agent_name in AGENTS_REGISTRY:
             CURRENT_AGENT = AGENTS_REGISTRY[agent_name]
             console.print(
-                f"[bold dim]Switched to {str(CURRENT_AGENT.name).capitalize()}[/bold dim]"
+                f"[dim]Switched to {str(CURRENT_AGENT.name).capitalize()}[/dim]"
             )
         else:
-            console.print(f"[bold red]Unknown agent: {agent_name}[/bold red]")
+            console.print(f"[error]Unknown agent: {agent_name}[/error]")
 
     else:
-        console.print("[bold red]Usage: /agents or /a <name>[/bold red]")
+        console.print("[warning]Usage: /agents or /a <name>[/warning]")
 
 
 # Display conversation history
@@ -238,7 +242,7 @@ def display_history(*args):
     ui_config.SKIP_TURN = True
 
     if not ui_config.CONVERSATION_HISTORY:
-        console.print("[bold dim]No conversation history available.[/bold dim]")
+        console.print("[dim]No conversation history available.[/dim]")
         return
 
     output_lines = []
@@ -293,9 +297,9 @@ def display_history(*args):
 
     console.print(
         Panel(
-            Markdown(history_text, style="white"),
-            title=Text("Conversation History", style="bold white"),
-            border_style="red",
+            Markdown(history_text, style="assistant"),
+            title=Text("Conversation History", style="title"),
+            border_style="accent",
             highlight=True,
             width=CONSOLE_WIDTH,
             padding=(1, 1),
@@ -313,13 +317,13 @@ def help_panel(*args):
     help_table = Table(
         title="Slash Commands",
         show_header=True,
-        header_style="bold white",
+        header_style="title",
         expand=True,
         box=box.ROUNDED,
         padding=(0, 1),
     )
-    help_table.add_column("Command", style="bold red")
-    help_table.add_column("Description", style="white")
+    help_table.add_column("Command", style="accent.bold")
+    help_table.add_column("Description", style="assistant")
 
     for cmd_info in COMMANDS.values():
         alias_str = ", ".join(cmd_info["aliases"])
@@ -462,12 +466,10 @@ async def stream_agent_response() -> RunResultStreaming:
                 padding=(0, 1),
             ),
             Panel(
-                Markdown(full_response, style="white"),
-                title=Text(
-                    f"{str(CURRENT_AGENT.name).capitalize()}", style="bold white"
-                ),
+                Markdown(full_response, style="assistant"),
+                title=Text(f"{str(CURRENT_AGENT.name).capitalize()}", style="title"),
                 title_align="left",
-                border_style="red",
+                border_style="accent",
                 padding=(1, 1),
             ),
         ),
@@ -478,6 +480,10 @@ async def stream_agent_response() -> RunResultStreaming:
         try:
             # Stream the response
             async for event in result.stream_events():
+                # print("\n---\n")
+                # print(event)
+                # print(type(event))
+                # print("\n---\n")
 
                 # Handle the streamed text output
                 if isinstance(event, RawResponsesStreamEvent):
@@ -579,10 +585,9 @@ async def stream_agent_response() -> RunResultStreaming:
                             tool_output = f"Tool output: {tool_output}"
                             # events.append(Panel(tool_output, style="dim", padding=(0, 1)))
 
-                events = events[-4:]
-
                 if thinking_text.strip():
-                    events = events[-1:]
+                    if len(thinking_text) > 2500:
+                        thinking_text = "..." + thinking_text[-2500:]
                     thinking_panel = Panel(
                         thinking_text,
                         title="Reasoning",
@@ -590,33 +595,33 @@ async def stream_agent_response() -> RunResultStreaming:
                         padding=(0, 1),
                     )
                     events_panel = Panel(
-                        Group(*events, thinking_panel),
+                        Group(*events[-1:], thinking_panel),
                         title="Events",
                         title_align="left",
                         style="dim",
-                        border_style="white",
+                        border_style="border",
                         padding=(0, 1),
                     )
                 else:
                     events_panel = Panel(
-                        Group(*events),
+                        Group(*events[-4:]),
                         title="Events",
                         title_align="left",
                         style="dim",
-                        border_style="white",
+                        border_style="border",
                         padding=(0, 1),
                     )
 
                 display = Group(
                     events_panel,
                     Panel(
-                        Markdown(full_response, style="white"),
+                        Markdown(full_response, style="assistant"),
                         title=Text(
                             f"{str(CURRENT_AGENT.name).capitalize()}",
-                            style="bold white",
+                            style="title",
                         ),
                         title_align="left",
-                        border_style="red",
+                        border_style="accent",
                         padding=(1, 1),
                     ),
                 )
@@ -628,9 +633,9 @@ async def stream_agent_response() -> RunResultStreaming:
                 )
 
         except KeyboardInterrupt:
-            console.print("\n[bold red]Interrupted by user[/bold red]")
+            console.print("\n[error]Interrupted by user[/error]")
         except Exception as e:
-            console.print(f"Error: {e}")
+            console.print(f"[error]Error: {e}[/error]")
 
         # TODO: remove reasoning from messages
         history = result.to_input_list()
@@ -723,7 +728,7 @@ async def run_cli():
                         stt_client.shutdown()
                     break
             except Exception as e:
-                console.print(f"[bold red]Input Error: {e}[/bold red]")
+                console.print(f"[error]Input Error: {e}[/error]")
                 continue
 
         else:
@@ -732,15 +737,15 @@ async def run_cli():
 
             try:
                 user_msg = stt_client.text()  # type: ignore
-                console.print(f"\n[dim]You:[/dim] {user_msg}\n")
+                console.print(f"\n[user]You:[/user] {user_msg}\n")
             except Exception as e:
-                console.print(f"[bold red]STT Error: {e}[/bold red]")
+                console.print(f"[error]STT Error: {e}[/error]")
                 ui_config.INTERACTION_MODE = "text"
                 continue
 
             if not user_msg:
                 console.print(
-                    "[bold red]No speech detected. Please try again.[/bold red]"
+                    "[warning]No speech detected. Please try again.[/warning]"
                 )
                 continue
 
@@ -755,7 +760,7 @@ async def run_cli():
                 context_result = await stream_agent_response()
                 CURRENT_AGENT = temp
             except KeyboardInterrupt:
-                console.print("\n[bold red]Interrupted by user[/bold red]")
+                console.print("\n[error]Interrupted by user[/error]")
                 continue
 
             if context_result.final_output != session_context:
@@ -772,7 +777,7 @@ async def run_cli():
         try:
             result = await stream_agent_response()
         except KeyboardInterrupt:
-            console.print("\n[bold red]Interrupted by user[/bold red]")
+            console.print("\n[error]Interrupted by user[/error]")
             continue
 
         if ui_config.INTERACTION_MODE == "voice":
@@ -791,7 +796,7 @@ async def run_cli():
                         context_result = await stream_agent_response()
                         CURRENT_AGENT = temp
                     except KeyboardInterrupt:
-                        console.print("\n[bold red]Interrupted by user[/bold red]")
+                        console.print("\n[error]Interrupted by user[/error]")
                         continue
 
                     if context_result.final_output:

@@ -1,4 +1,5 @@
 from agents import TResponseInputItem
+from rich.theme import Theme
 
 # Version
 Version = "1.4.0"
@@ -11,3 +12,25 @@ QUIT_SESSION: bool = False
 HEIRARCHY_MODE: str = "managerial"
 INTERACTION_MODE: str = "text"
 USE_CONTEXT_MANAGER: bool = False
+
+AGENT_THEME = Theme(
+    {
+        # General
+        "info": "cyan",
+        "warning": "yellow",
+        "error": "bright_red bold",
+        "success": "green",
+        "dim": "dim",
+        "muted": "grey50",
+        "border": "grey35",
+        "highlight": "bold cyan",
+        "accent": "magenta",
+        "accent.bold": "bold magenta",
+        "title": "bold white",
+        # Roles
+        "user": "bright_blue bold",
+        "assistant": "bright_white",
+        # Tools
+        "tool": "bright_magenta bold",
+    }
+)
