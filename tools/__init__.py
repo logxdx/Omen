@@ -48,11 +48,17 @@ from .web_tools import (
     download_audio,
     download_video,
 )
-from .google_tools import (
-    list_calendar_events,
-    create_calendar_event,
-    read_recent_emails,
-    create_draft_reply,
+from .task_tools import (
+    TASK_MANAGEMENT_TOOLS,
+    create_task_plan,
+    get_task_progress,
+    complete_current_step,
+    skip_current_step,
+    mark_step_failed,
+    store_task_data,
+    retrieve_task_data,
+    list_stored_data,
+    clear_task,
 )
 
 
@@ -89,6 +95,17 @@ __all__ = [
     "duckduckgo_search",
     "web_search",
     "search_youtube_videos",
+    # Task Management Tools (context-aware)
+    "TASK_MANAGEMENT_TOOLS",
+    "create_task_plan",
+    "get_task_progress",
+    "complete_current_step",
+    "skip_current_step",
+    "mark_step_failed",
+    "store_task_data",
+    "retrieve_task_data",
+    "list_stored_data",
+    "clear_task",
     # UI Tools
     "skip_turn",
     "quit_session",
@@ -102,9 +119,4 @@ __all__ = [
     "scrape_url",
     "download_audio",
     "download_video",
-    # Google Tools
-    "list_calendar_events",
-    "create_calendar_event",
-    "read_recent_emails",
-    "create_draft_reply",
 ]
