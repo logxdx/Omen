@@ -6,7 +6,31 @@ from agents import Agent, Tool, handoff, HandoffInputData
 from agents.extensions.handoff_filters import remove_all_tools
 from agents.extensions.models.litellm_model import LitellmModel
 
-from tools.utils.history_pager import HistoryPager, Page
+from config.agent_config import MAX_TURNS
+
+# =============================================================================
+# HANDOFFS vs AGENT-AS-TOOLS
+# =============================================================================
+#
+# HANDOFFS:
+#   - Transfers COMPLETE conversation history to the new agent
+#   - New agent takes over the conversation entirely
+#   - Original agent loses control; user now talks to the new agent
+#   - Use when: task requires full context and agent specialization
+#   - Example: Triage → Specialist (specialist needs all prior discussion)
+#
+# AGENT-AS-TOOLS (Sub-agents):
+#   - Executes a specific task and returns ONLY the final answer
+#   - Original agent stays in control of the conversation
+#   - Sub-agent doesn't see full history, just the delegated task
+#   - Use when: need a specialized result without losing conversation control
+#   - Example: Main agent calls research sub-agent, gets summary back
+#
+# TL;DR:
+#   Handoff  = "You take over" (full context transfer, control shifts)
+#   As-Tool  = "Do this for me" (task delegation, get result back)
+#
+# =============================================================================
 
 RECOMMENDED_PROMPT_PREFIX = ""
 
@@ -27,16 +51,6 @@ class my_agent:
     agent: Agent = None  # type: ignore
     handoff_instructions: str = ""
     tools: list = field(default_factory=list)
-
-    # Context keywords for paging - defines what topics this agent cares about
-    # Used during handoffs to filter relevant history pages
-    context_keywords: list[str] = field(default_factory=list)
-
-    # Maximum number of context pages to include during handoff
-    max_context_pages: int = 2
-
-    # Whether to include tool call details in handoff context
-    include_tools_in_context: bool = False
 
     def __post_init__(self):
         self.create_agent()
@@ -76,53 +90,6 @@ class my_agent:
                 self.agent.tools.append(tool)
 
     @staticmethod
-    def _create_handoff_filter(
-        target_agent: my_agent,
-    ) -> Callable[[HandoffInputData], HandoffInputData]:
-        """
-        Create a handoff filter that uses paging for the target agent.
-        The filter extracts only relevant context pages based on the target agent's keywords.
-        """
-
-        def _paged_handoff_filter(
-            handoff_message_data: HandoffInputData,
-        ) -> HandoffInputData:
-            # Remove tool-related messages from raw history first
-            # cleaned_data = remove_all_tools(handoff_message_data)
-            cleaned_data = handoff_message_data
-
-            # Convert input history to list for paging
-            input_history = (
-                list(cleaned_data.input_history) if cleaned_data.input_history else []
-            )
-
-            # If history is small, just pass it through
-            if len(input_history) <= 3:
-                return cleaned_data
-
-            # Create pager and extract relevant context
-            pager = HistoryPager(input_history)
-
-            # Get the latest user query
-            latest_query = pager.get_latest_query()
-
-            # Build paged context for the target agent
-            paged_history = pager.get_handoff_context(
-                current_query=latest_query,
-                target_agent_keywords=target_agent.context_keywords or None,
-                max_context_pages=target_agent.max_context_pages,
-                include_tools=target_agent.include_tools_in_context,
-            )
-
-            return HandoffInputData(
-                input_history=tuple(paged_history),
-                pre_handoff_items=tuple(cleaned_data.pre_handoff_items),
-                new_items=tuple(cleaned_data.new_items),
-            )
-
-        return _paged_handoff_filter
-
-    @staticmethod
     def _handoff_message_filter(
         handoff_message_data: HandoffInputData,
     ) -> HandoffInputData:
@@ -130,7 +97,7 @@ class my_agent:
         Default handoff filter - removes tools and passes full history.
         For paged handoffs, use _create_handoff_filter() instead.
         """
-        # First, we'll remove any tool-related messages from the message history
+        # We'll remove any tool-related messages from the message history
         handoff_message_data = remove_all_tools(handoff_message_data)
 
         # or, you can use the HandoffInputData.clone(kwargs) method
@@ -160,11 +127,33 @@ class my_agent:
         if handoffs:
             for handoff_agent in handoffs:
                 # Create appropriate filter based on paging preference
-                if use_paging:
-                    input_filter = self._create_handoff_filter(handoff_agent)
-                else:
-                    input_filter = self._handoff_message_filter
 
                 handoff_obj = handoff(agent=handoff_agent.agent, input_filter=None)
                 if handoff_obj not in self.agent.handoffs:
                     self.agent.handoffs.append(handoff_obj)
+
+    def add_subagents(self, subagents: list[my_agent] | my_agent):
+        """
+        Add sub-agent tools to this agent's tool list.
+        Sub-agents are used as tools within the main agent's conversation.
+
+        Args:
+            subagents: Agent(s) to add as sub-agent tools
+        """
+
+        if not self.agent:
+            raise ValueError("Agent not created yet. Call create_agent() first.")
+        if not isinstance(subagents, list):
+            subagents = [subagents]
+        if subagents:
+            for subagent in subagents:
+                self.agent.tools.append(
+                    subagent.agent.as_tool(
+                        tool_name=f"ask_{subagent.agent_name.lower().replace(' ', '_')}",
+                        tool_description=(
+                            f"Sub-agent for: {subagent.handoff_instructions}. "
+                            f"Send a task, get back relevant context."
+                        ),
+                        max_turns=MAX_TURNS,
+                    )
+                )

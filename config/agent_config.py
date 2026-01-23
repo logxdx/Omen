@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Global max turns for agent interactions
-MAX_TURNS = 100
+MAX_TURNS = 20
 
 # Online or Local
 LOCAL = False
@@ -66,12 +66,12 @@ LOCAL_CONFIG = {
     "tts_summarizer": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
-        "MODEL_NAME": f"{LOCAL_MODEL}",
+        "MODEL_NAME": f"lfm2.5",
     },
     "scraper": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
-        "MODEL_NAME": f"openai/{LOCAL_MODEL}",
+        "MODEL_NAME": f"openai/lfm2.5",
     },
 }
 
@@ -131,12 +131,12 @@ ONLINE_CONFIG = {
     "tts_summarizer": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
-        "MODEL_NAME": "LFM2:700M",
+        "MODEL_NAME": "lfm2.5",
     },
     "scraper": {
-        "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
+        "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("STUDY_API_KEY"),
-        "MODEL_NAME": "openai/gpt-oss-120b",
+        "MODEL_NAME": "openai/lfm2.5",
     },
 }
 

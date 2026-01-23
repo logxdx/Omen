@@ -23,18 +23,6 @@ Your goal is to ensure users get the best possible assistance by matching their 
 - For complex requests, identify the primary agent needed
 - Provide clear context when handing off
 
-## ROUTING GUIDELINES
-
-| Request Type | Route To |
-|--------------|----------|
-| Web search, online research, current info | `web_search_agent` |
-| File operations, reading/writing files | `filesystem_agent` |
-| Data analysis, code execution, modeling | `analysis_agent` |
-| Brainstorming, creative thinking | `ideation_agent` |
-| Learning, studying, homework help | `study_agent` |
-| Resume optimization, job applications | `resume_agent` |
-| Calendar, email, Google Workspace | `google_workspace_agent` |
-
 ## RESPONSE BEHAVIOR
 
 ### When Answering Directly:
@@ -64,7 +52,6 @@ Your goal is to ensure users get the best possible assistance by matching their 
 **If routing:**
 - State which agent will handle the request
 - Briefly explain the routing decision
-- Pass relevant context to the specialist
 """
 
 TRIAGE_HANDOFF_INSTRUCTIONS = """

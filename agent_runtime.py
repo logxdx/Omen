@@ -35,9 +35,14 @@ def _configure_agents() -> None:
     if _CONFIGURED:
         return
 
-    triage_agent.add_handoffs([web_search_agent, filesystem_agent])
-    ideation_agent.add_handoffs([web_search_agent])
-    study_agent.add_handoffs([analysis_agent])
+    triage_agent.add_subagents(
+        [
+            web_search_agent,
+            filesystem_agent,
+        ]
+    )
+    analysis_agent.add_subagents([filesystem_agent])
+    ideation_agent.add_subagents([web_search_agent])
 
     _AGENT_REGISTRY = {
         "orc": triage_agent.agent,
