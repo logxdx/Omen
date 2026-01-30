@@ -48,7 +48,7 @@ class ColoredLogging(logging.Formatter):
 handler = logging.StreamHandler()
 handler.setFormatter(ColoredLogging())
 logging.basicConfig(
-    level=logging.ERROR,
+    level=logging.WARNING,
     handlers=[handler],
 )
 logger = logging.getLogger()
@@ -103,7 +103,7 @@ def get_headers() -> dict:
     """
     Returns a random set of headers.
     """
-    headers = HeaderGenerator(locale=("en-IN", "en"), http_version=1).generate()
+    headers = HeaderGenerator().generate()
 
     return headers
 
@@ -127,10 +127,14 @@ class PageResult(BaseModel):
 
     def __str__(self) -> str:
         return (
-            f"URL: {self.url}\n"
-            + (f"Title: {self.title}\n" if self.title else "")
-            + "---\n"
-            + (f"{self.summary}" if self.summary else f"{self.markdown}")
+            (
+                (f"Title: {self.title}\n" if self.title else "")
+                + f"URL: {self.url}\n"
+                + "---\n"
+                + f"{self.summary}"
+            )
+            if self.summary
+            else f"{self.markdown}"
         )
 
 
@@ -278,7 +282,9 @@ def scrape_page_content(
         return PageResult(url=url, raw_html=raw_html, links=links)
 
     except Exception:
-        return fetch_page_content(url=url)
+        return fetch_page_content(
+            url=url, headers=headers, subdomains=subdomains, tld=tld
+        )
 
 
 def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[str]]:
@@ -302,7 +308,7 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
     """
     if not html:
         logger.warning("soup_html: HTML EMPTY")
-        return "", "Empty HTML", []
+        return "", "", []
     try:
         logger.info(f"[soup_html] CLEANING HTML")
 
@@ -319,14 +325,14 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
                 "script",
                 "noscript",
                 "style",
-                "br",
-                "hr",
-                "meta",
                 "nav",
                 "header",
                 "footer",
+                "iframe",
+                "br",
+                "hr",
+                "meta",
                 "svg",
-                "img",
                 "input",
                 "textarea",
                 "select",
@@ -343,6 +349,9 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
         structural_tags = {
             "html",
             "head",
+            "nav",
+            "header",
+            "footer",
             "body",
             "a",
             "div",
@@ -396,7 +405,6 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
         # Tags that should be checked for empty content
         check_empty_tags = {
             "span",
-            "p",
             "div",
             "a",
         }
@@ -575,7 +583,11 @@ def summarize_content(content: str, instructions: Optional[str] = None) -> str:
 
         if not instructions:
             instructions = dedent(
-                """Summarise the content into bullet points. Include relevant URLs."""
+                """Rewrite the content in bullet points. Include relevant URLs."""
+            )
+        else:
+            instructions = dedent(
+                instructions + "\nRewrite the content in bullet points."
             )
 
         response = str(
@@ -586,9 +598,9 @@ def summarize_content(content: str, instructions: Optional[str] = None) -> str:
                 messages=[
                     {
                         "role": "system",
-                        "content": dedent(f"{instructions}\n\nMARKDOWN CONTENT:"),
+                        "content": dedent(f"{instructions}"),
                     },
-                    {"role": "user", "content": content},
+                    {"role": "user", "content": f"CONTENT:\n```markdown\n{content}\n```"},
                 ],
             )
             .choices[0]  # type: ignore
@@ -629,7 +641,7 @@ def jina_reader_api(url: str) -> str:
         headers = get_headers()
         # headers["X-Engine"] = "browser"
 
-        markdown = requests.get(JINA_URL, headers=headers, timeout=30)
+        markdown = requests.get(JINA_URL, headers=headers, timeout=15)
         markdown = markdown.text
 
         logger.info(f"[jina_reader_api] SCRAPED")
@@ -677,11 +689,8 @@ def scrape_page(
         if user_agent:
             headers["User-Agent"] = user_agent
 
-        if "arxiv.org/abs" in url:
-            url = url.replace("arxiv.org/abs", "arxiv.org/html")
-
         # pdf handling
-        if ".pdf" in url:
+        if "pdf" in url:
             page = PageResult(url=url)
             page.markdown = jina_reader_api(url=url)
         else:
@@ -707,6 +716,13 @@ def scrape_page(
                 page.markdown = html2md(html=page.cleaned_html)
             else:
                 page.markdown = html2text(html=page.cleaned_html, bodywidth=0).strip()
+
+            header = (f"Title: {page.title}\n\n" if page.title else "") + (
+                f"URL: {page.url}\n\n---\n\n" if page.url else ""
+            )
+
+            if page.markdown:
+                page.markdown = header + page.markdown
 
             # get markdown using Jina Reader API if markdown is empty
             if not page.raw_html or not page.cleaned_html or not page.markdown:
@@ -970,17 +986,30 @@ def crawl_page(
 if __name__ == "__main__":
     # url = "https://blog.zeptonow.com/"
     # url = "https://openai.com/index/introducing-gpt-oss/"
-    url = "https://spider.cloud/guides"
     # url = "https://news.ycombinator.com/"
     # url = "https://www.ndtv.com/lifestyle/unseen-pic-of-shubman-gill-with-rumoured-girlfriend-sara-tendulkar-from-london-event-is-crazy-viral-8861084"
+    url = "https://spider.cloud/guides"
+    # url = "https://arxiv.org/pdf/2511.23404"
+    url = "https://www.liquid.ai"
+    # url = "https://en.wikipedia.org/wiki/Artificial_intelligence"
 
     result = scrape_page(
         url,
-        summarise=False,
+        summarise=True,
         use_reader_lm=False,
     )
-    print(result)
-    print("---\n" + "\n".join(result.links) + "\n---\n")
+    print("\n" + "=" * 100 + "\n")
+    print(result.markdown)
+    print("\n" + "=" * 100 + "\n")
+    print(result.summary)
+    print("\n" + "=" * 100 + "\n")
+    # with open("output.html", "w", encoding="utf-8") as f:
+    #     f.write(result.raw_html)
+    # with open("cleaned.html", "w", encoding="utf-8") as f:
+    #     f.write(result.cleaned_html)
+    # with open("output.md", "w", encoding="utf-8") as f:
+    #     f.write(result.markdown)
+    # print("---\n" + "\n".join(result.links) + "\n---\n")
 
     # for link in result.links:
     #     page = scrape_page(link, summarise=False, use_reader_lm=False)

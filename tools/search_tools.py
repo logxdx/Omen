@@ -38,14 +38,14 @@ from tools.utils import SearxSearch
 @function_tool
 def web_search(
     query: str,
-    num_results: int = 5,
+    num_results: int = 10,
 ) -> str:
     """
     Perform a web search.
 
     Args:
         query (str): Search query string
-        max_results (int): Maximum number of results to return (default: 5)
+        num_results (int): Maximum number of results to return (default: 10)
 
     Returns:
         List of search results
@@ -72,13 +72,13 @@ from tools.utils import YoutubeSearch
 
 
 @function_tool
-def search_youtube_videos(query: str, num_results: int = 5) -> str:
+def search_youtube_videos(query: str, num_results: int = 10) -> str:
     """
     Perform a web search for YouTube videos.
 
     Args:
         query (str): Search query string
-        max_results (int): Maximum number of results to return (default: 5)
+        num_results (int): Maximum number of results to return (default: 10)
 
     Returns:
         List of search results

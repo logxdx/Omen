@@ -180,7 +180,7 @@ def search(
         "q": query,
         "format": "json",
         "language": language,
-        "engines": "google,brave,duckduckgo,startpage",
+        "engines": "google,brave,duckduckgo,bing",
         "safe": safe,
     }
 
@@ -193,9 +193,7 @@ def search(
     search_results: SearchResults = SearchResults(query=query)
 
     try:
-        headers = HeaderGenerator(
-            locale=["en", "en-IN"]
-        ).generate()
+        headers = HeaderGenerator().generate()
         response = requests.get(url=search_url, params=params, headers=headers)
         response.raise_for_status()
         response = response.json()
