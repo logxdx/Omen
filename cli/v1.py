@@ -16,6 +16,7 @@ from agents import (
     RunItemStreamEvent,
     Usage,
     set_tracing_disabled,
+    set_default_openai_api,
 )
 from rich import box
 from rich.console import Console, Group
@@ -35,6 +36,7 @@ from tts.KokoroTTS import KokoroTTS as TTS
 from my_agents import context_agent
 
 set_tracing_disabled(disabled=True)
+set_default_openai_api("chat_completions")
 
 CONSOLE_WIDTH = 150
 console = Console(
@@ -461,7 +463,7 @@ async def stream_agent_response() -> RunResultStreaming:
             Panel(
                 Group(*events),
                 title="Events",
-                title_align="left",
+                title_align="right",
                 style="dim",
                 padding=(0, 1),
             ),
@@ -474,7 +476,7 @@ async def stream_agent_response() -> RunResultStreaming:
             ),
         ),
         console=console,
-        refresh_per_second=1,
+        refresh_per_second=10,
     ) as live:
 
         try:
@@ -501,15 +503,15 @@ async def stream_agent_response() -> RunResultStreaming:
                             )
                             thinking_text += delta
                             thinking = False
-                            if thinking_text.strip():
-                                events.append(
-                                    Panel(
-                                        thinking_text.strip(),
-                                        title="Reasoning",
-                                        style="dim",
-                                        padding=(0, 1),
-                                    )
-                                )
+                            # if thinking_text.strip():
+                            #     events.append(
+                            #         Panel(
+                            #             thinking_text.strip(),
+                            #             title="Reasoning",
+                            #             style="dim",
+                            #             padding=(0, 1),
+                            #         )
+                            #     )
                             thinking_text = ""
                         if thinking:
                             thinking_text += delta
@@ -549,6 +551,7 @@ async def stream_agent_response() -> RunResultStreaming:
                             Panel(
                                 handoff_msg,
                                 title="Handoff",
+                                title_align="right",
                                 style="dim",
                                 padding=(0, 1),
                             )
@@ -573,6 +576,7 @@ async def stream_agent_response() -> RunResultStreaming:
                             Panel(
                                 tool_msg,
                                 title="Tool Call",
+                                title_align="right",
                                 style="dim",
                                 padding=(0, 1),
                             )
@@ -591,13 +595,14 @@ async def stream_agent_response() -> RunResultStreaming:
                     thinking_panel = Panel(
                         thinking_text,
                         title="Reasoning",
+                        title_align="right",
                         style="dim",
                         padding=(0, 1),
                     )
                     events_panel = Panel(
                         Group(*events[-1:], thinking_panel),
                         title="Events",
-                        title_align="left",
+                        title_align="right",
                         style="dim",
                         border_style="border",
                         padding=(0, 1),
@@ -606,7 +611,7 @@ async def stream_agent_response() -> RunResultStreaming:
                     events_panel = Panel(
                         Group(*events[-4:]),
                         title="Events",
-                        title_align="left",
+                        title_align="right",
                         style="dim",
                         border_style="border",
                         padding=(0, 1),
@@ -627,17 +632,13 @@ async def stream_agent_response() -> RunResultStreaming:
                 )
 
                 # Update the live display
-                live.update(
-                    display,
-                    refresh=True,
-                )
+                live.update(display)
 
         except KeyboardInterrupt:
             console.print("\n[error]Interrupted by user[/error]")
         except Exception as e:
             console.print(f"[error]Error: {e}[/error]")
 
-        # TODO: remove reasoning from messages
         history = result.to_input_list()
         for item in history:
             content = item.get("content", "")
@@ -656,7 +657,7 @@ async def stream_agent_response() -> RunResultStreaming:
         )
         result.final_output = full_response.strip()
 
-    # print_usage(result.context_wrapper.usage)
+    print_usage(result.context_wrapper.usage)
 
     return result
 

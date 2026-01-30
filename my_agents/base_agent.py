@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable
-from agents import Agent, Tool, handoff, HandoffInputData
+from agents import Agent, Tool, handoff, HandoffInputData, ModelSettings
 from agents.extensions.handoff_filters import remove_all_tools
 from agents.extensions.models.litellm_model import LitellmModel
 
@@ -46,8 +45,8 @@ class agent_config:
 class my_agent:
 
     agent_name: str
-    config: agent_config
     instructions: str
+    config: agent_config
     agent: Agent = None  # type: ignore
     handoff_instructions: str = ""
     tools: list = field(default_factory=list)
@@ -70,9 +69,17 @@ class my_agent:
         if not self.agent:
             self.agent = Agent(
                 name=self.agent_name,
-                instructions=self.instructions + "\n" + RECOMMENDED_PROMPT_PREFIX,
+                instructions=(
+                    self.instructions
+                    + (
+                        ("\n" + RECOMMENDED_PROMPT_PREFIX)
+                        if RECOMMENDED_PROMPT_PREFIX
+                        else ""
+                    )
+                ),
                 handoff_description=self.handoff_instructions,
                 model=model,
+                model_settings=ModelSettings(include_usage=True),
                 tools=self.tools,
             )
 
