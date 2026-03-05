@@ -358,7 +358,6 @@ def clear_history(*args):
 
 def print_usage(usage: Usage) -> None:
     usage_string = ""
-    usage_string += "\n=== Usage ===\n"
     usage_string += f"Input tokens: {usage.input_tokens}\n"
     usage_string += f"Output tokens: {usage.output_tokens}\n"
     usage_string += f"Total tokens: {usage.total_tokens}\n"
@@ -367,9 +366,14 @@ def print_usage(usage: Usage) -> None:
         usage_string += (
             f"  {i + 1}: {request.input_tokens} input, {request.output_tokens} output\n"
         )
-    console.print(
-        usage_string, style="dim", justify="center", highlight=True, crop=True
+    usage_panel = Panel(
+        usage_string,
+        title="Token Usage",
+        title_align="right",
+        style="dim",
+        highlight=True,
     )
+    console.print(usage_panel, justify="center")
 
 
 # Command registry
