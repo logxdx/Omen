@@ -1,5 +1,6 @@
 import re
 import json
+import time
 
 from openai.types.responses import (
     ResponseTextDeltaEvent,
@@ -356,6 +357,10 @@ def clear_history(*args):
     console.print(f"[dim]Current agent: {current_display}[/dim]")
 
 
+def strip_think_tags(text: str) -> str:
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+
+
 def print_usage(usage: Usage) -> None:
     usage_string = ""
     usage_string += f"Input tokens: {usage.input_tokens}\n"
@@ -449,6 +454,8 @@ async def stream_agent_response() -> RunResultStreaming:
 
     global CURRENT_AGENT
 
+    start_time = time.time()
+
     result = Runner.run_streamed(
         starting_agent=CURRENT_AGENT,
         input=ui_config.CONVERSATION_HISTORY,
@@ -480,16 +487,12 @@ async def stream_agent_response() -> RunResultStreaming:
             ),
         ),
         console=console,
-        refresh_per_second=10,
+        refresh_per_second=4,
     ) as live:
 
         try:
             # Stream the response
             async for event in result.stream_events():
-                # print("\n---\n")
-                # print(event)
-                # print(type(event))
-                # print("\n---\n")
 
                 # Handle the streamed text output
                 if isinstance(event, RawResponsesStreamEvent):
@@ -507,15 +510,15 @@ async def stream_agent_response() -> RunResultStreaming:
                             )
                             thinking_text += delta
                             thinking = False
-                            # if thinking_text.strip():
-                            #     events.append(
-                            #         Panel(
-                            #             thinking_text.strip(),
-                            #             title="Reasoning",
-                            #             style="dim",
-                            #             padding=(0, 1),
-                            #         )
-                            #     )
+                            if thinking_text.strip():
+                                events.append(
+                                    Panel(
+                                        thinking_text.strip(),
+                                        title="Reasoning",
+                                        style="dim",
+                                        padding=(0, 1),
+                                    )
+                                )
                             thinking_text = ""
                         if thinking:
                             thinking_text += delta
@@ -638,6 +641,32 @@ async def stream_agent_response() -> RunResultStreaming:
                 # Update the live display
                 live.update(display)
 
+            elapsed = time.time() - start_time
+
+            events_panel = Panel(
+                Group(*events),
+                title="Events",
+                title_align="right",
+                style="dim",
+                border_style="border",
+                padding=(0, 1),
+            )
+
+            title_text = f"{str(CURRENT_AGENT.name).capitalize()}"
+            final_display = Group(
+                events_panel,
+                Panel(
+                    Markdown(full_response, style="assistant"),
+                    title=Text(title_text, style="title"),
+                    title_align="left",
+                    subtitle=f"({elapsed:.2f}s)",
+                    subtitle_align="right",
+                    border_style="accent",
+                    padding=(1, 1),
+                ),
+            )
+            live.update(final_display)
+
         except KeyboardInterrupt:
             console.print("\n[error]Interrupted by user[/error]")
         except Exception as e:
@@ -647,18 +676,14 @@ async def stream_agent_response() -> RunResultStreaming:
         for item in history:
             content = item.get("content", "")
             if isinstance(content, str):
-                content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
-                item["content"] = content  # type: ignore
-            elif isinstance(content, list):
+                item["content"] = strip_think_tags(content)  # type: ignore
+            elif isinstance(content, list) and content:
                 text = content[0].get("text", "")
-                text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-                item["content"][0]["text"] = text  # type:ignore
+                item["content"][0]["text"] = strip_think_tags(text)  # type: ignore
 
         ui_config.CONVERSATION_HISTORY = history
 
-        full_response = re.sub(
-            r"<think>.*?</think>", "", full_response, flags=re.DOTALL
-        )
+        full_response = strip_think_tags(full_response)
         result.final_output = full_response.strip()
 
     print_usage(result.context_wrapper.usage)
