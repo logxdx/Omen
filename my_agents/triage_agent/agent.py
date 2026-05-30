@@ -8,12 +8,12 @@ from .prompt import TRIAGE_AGENT_SYSTEM_PROMPT, TRIAGE_HANDOFF_INSTRUCTIONS
 config = AGENT_CONFIGS["triage_agent"]
 name, personality = get_personality()
 instructions: str = personality + "\n\n" + TRIAGE_AGENT_SYSTEM_PROMPT
-TOOLS = UI_TOOLS + [get_current_datetime]
+TOOLS = [get_current_datetime]
 
 triage_agent = my_agent(
     agent_name=name.capitalize() + " (Triage)",
     config=agent_config(**config),
     instructions=instructions,
     handoff_instructions=TRIAGE_HANDOFF_INSTRUCTIONS,
-    tools=TOOLS
+    tools=TOOLS,
 )
