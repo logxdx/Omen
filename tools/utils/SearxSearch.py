@@ -144,7 +144,7 @@ class SearchResult(BaseModel):
     category: str = ""
 
     def __str__(self) -> str:
-        return f"Title: {self.title}\nURL: {self.link}\nSnippet: {self.snippet}"
+        return f"Title: {self.title}\nSnippet: {self.snippet}\nURL: {self.link}"
 
 
 class SearchResults(BaseModel):

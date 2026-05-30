@@ -29,8 +29,9 @@ from .filesystem_tools import (
 )
 from .misc_tools import get_current_datetime, execute_code
 from .search_tools import (
-    duckduckgo_search,
+    duckduckgo_web_search,
     web_search,
+    search_the_web,
     search_youtube_videos,
 )
 from .ui_tools import (
@@ -97,8 +98,9 @@ __all__ = [
     "get_current_datetime",
     "execute_code",
     # Search Tools
-    "duckduckgo_search",
+    "duckduckgo_web_search",
     "web_search",
+    "search_the_web",
     "search_youtube_videos",
     # Task Management Tools
     "TASK_TOOLS",

@@ -7,7 +7,7 @@ from tools.utils import DuckDuckGoSearch
 
 
 @function_tool
-def duckduckgo_search(
+def duckduckgo_web_search(
     query: str,
     max_results: int = 5,
 ) -> str:
@@ -59,9 +59,37 @@ def web_search(
             formatted_output += f"{answer}\n\n"
 
     for i, result in enumerate(search_results.results, 1):
-        formatted_output += (
-            f"{i}. [{result.title}]({result.link})\n\n"
-        )
+        formatted_output += f"{i}. [{result.title}]({result.link})\n\n"
+    return formatted_output.strip()
+
+
+##############
+# OmniSearch #
+##############
+from tools.utils import OmniSearch
+
+
+@function_tool
+def search_the_web(
+    query: str,
+    num_results: int = 10,
+) -> str:
+    """
+    Perform a web search using OmniSearch.
+
+    Args:
+        query (str): Search query string
+        num_results (int): Maximum number of results to return (default: 10)
+
+    Returns:
+        List of search results
+    """
+
+    search_results = OmniSearch.search(query=query)[:num_results]
+    formatted_output = f"QUERY: {query}\n\n"
+
+    for i, result in enumerate(search_results, 1):
+        formatted_output += f"{i}. {result}\n\n"
     return formatted_output.strip()
 
 
