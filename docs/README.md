@@ -1,6 +1,6 @@
 # Omen Documentation
 
-Welcome to the official documentation for **Omen** – a sophisticated multi-agent AI system with voice capabilities, advanced memory management, and an extensible tool ecosystem.
+Welcome to the official documentation for **Omen** - a sophisticated multi-agent AI system with voice capabilities, advanced memory management, and an extensible tool ecosystem.
 
 ## 📚 Documentation Index
 

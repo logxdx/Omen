@@ -70,7 +70,7 @@ Performs web research, searches for information, scrapes web content, and downlo
 
 ### Tools
 - `web_search` - Search the web using Searx
-- `duckduckgo_search` - Alternative search via DuckDuckGo
+- `duckduckgo_web_search` - Alternative search via DuckDuckGo
 - `search_youtube_videos` - Find YouTube videos
 - `scrape_url` - Scrape and extract web content
 - `open_url_in_browser` - Open URLs in browser

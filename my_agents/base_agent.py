@@ -159,7 +159,6 @@ class my_agent:
                         tool_name=f"ask_{subagent.agent_name.lower().replace(' ', '_')}",
                         tool_description=(
                             f"Sub-agent for: {subagent.handoff_instructions}. "
-                            f"Send a task, get back relevant context."
                         ),
                         max_turns=MAX_TURNS,
                     )

@@ -34,13 +34,10 @@ def _configure_agents() -> None:
     if _CONFIGURED:
         return
 
-    triage_agent.add_subagents(
-        [
-            web_search_agent,
-            filesystem_agent,
-        ]
-    )
-    analysis_agent.add_subagents([filesystem_agent])
+    triage_agent.add_subagents([web_search_agent])
+    triage_agent.add_handoffs([filesystem_agent])
+
+    analysis_agent.add_handoffs([filesystem_agent])
     ideation_agent.add_subagents([web_search_agent])
 
     _AGENT_REGISTRY = {
@@ -62,9 +59,3 @@ def get_agent_registry() -> Tuple[Dict[str, Agent], Agent]:
     _configure_agents()
     assert _PRIMARY_AGENT is not None
     return dict(_AGENT_REGISTRY), _PRIMARY_AGENT
-
-
-def get_primary_agent() -> Agent:
-    """Convenience helper that returns the triage (orchestrator) agent."""
-    assert _PRIMARY_AGENT is not None, "Agents not configured"
-    return _PRIMARY_AGENT

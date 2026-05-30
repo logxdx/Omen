@@ -127,12 +127,12 @@ web_search(query: str, num_results: int = 5) -> str
 
 ---
 
-### `duckduckgo_search`
+### `duckduckgo_web_search`
 
 Search using DuckDuckGo.
 
 ```python
-duckduckgo_search(query: str, max_results: int = 5) -> str
+duckduckgo_web_search(query: str, max_results: int = 5) -> str
 ```
 
 **Parameters:**
