@@ -23,7 +23,6 @@ class SearchResult:
 
 
 class OmniSearchHTMLParser(HTMLParser):
-
     def __init__(self) -> None:
         super().__init__()
         self.results: List[SearchResult] = []
@@ -154,7 +153,9 @@ def main() -> None:
     results = search(query)
 
     print()
-    print(f"\n\n{chr(10)}".join(f"{idx}. {r}" for idx, r in enumerate(results, start=1)))
+    print(
+        f"\n\n{chr(10)}".join(f"{idx}. {r}" for idx, r in enumerate(results, start=1))
+    )
 
 
 if __name__ == "__main__":

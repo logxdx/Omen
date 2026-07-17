@@ -84,7 +84,6 @@ def search(
 
 
 if __name__ == "__main__":
-
     query = input("🔍 Search query: ")
     results = search(query, max_results=5)
     for result in results:

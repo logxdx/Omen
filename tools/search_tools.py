@@ -127,4 +127,4 @@ def search_youtube_videos(query: str, num_results: int = 10) -> str:
     return formatted_output.strip()
 
 
-SEARCH_TOOLS = [web_search, search_youtube_videos]
+SEARCH_TOOLS = [duckduckgo_web_search, search_youtube_videos]

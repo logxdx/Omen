@@ -5,7 +5,6 @@ from browserforge.headers import HeaderGenerator
 
 
 class YoutubeSearch:
-
     def __init__(self):
         self.BASE_URL = "https://youtube.com"
 
@@ -144,6 +143,7 @@ if __name__ == "__main__":
             f"   Channel: {video['channel']}\n"
             f"   Duration: {video['duration']}\n"
             f"   Views: {video['views']}\n"
-            f"   Published: {video['publish_time']}\n\n")
+            f"   Published: {video['publish_time']}\n\n"
+        )
 
     print(formatted_output.strip())

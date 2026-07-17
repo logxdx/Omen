@@ -32,7 +32,7 @@ def group_includes(values: list[str], op: str | None = None) -> str:
     else:
         parts = [f'"{v}"' for v in values]
 
-    return f'({" | ".join(parts)})'
+    return f"({' | '.join(parts)})"
 
 
 def group_excludes(op: str, values: list[str]) -> list[str]:

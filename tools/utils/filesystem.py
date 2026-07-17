@@ -20,7 +20,7 @@ def list_files_in_sandbox(relative_path: str = "") -> str:
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
     full_path = full_path.resolve()
     if str(SANDBOX_PATH) not in str(full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     if not os.path.exists(full_path):
         raise FileNotFoundError(f"Path does not exist: {relative_path}")
     if not os.path.isdir(full_path):
@@ -34,7 +34,9 @@ def list_files_in_sandbox(relative_path: str = "") -> str:
         else:
             display_files.append(f)
     if display_files:
-        max_len = max(len(df) for df in display_files) + 12 # for line numbers and borders
+        max_len = (
+            max(len(df) for df in display_files) + 12
+        )  # for line numbers and borders
     else:
         max_len = 0
     line_num_width = len(str(len(display_files))) + 2 if display_files else 2
@@ -42,7 +44,7 @@ def list_files_in_sandbox(relative_path: str = "") -> str:
     dir_header = " " * line_num_width + "│ Directory: " + relative_path + "/"
     middle_border = "─" * line_num_width + "┼" + "─" * max_len
     numbered_files = [
-        f"{i+1:>{line_num_width-2}}  │ {df}" for i, df in enumerate(display_files)
+        f"{i + 1:>{line_num_width - 2}}  │ {df}" for i, df in enumerate(display_files)
     ]
     bottom_border = "─" * line_num_width + "┴" + "─" * max_len
     return "\n".join(
@@ -54,7 +56,7 @@ def read_file_in_sandbox(relative_path: str) -> str:
     """Read the content of a file in the sandbox."""
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     if not full_path.is_file():
         raise FileNotFoundError(f"File does not exist: {relative_path}")
     with open(full_path, "r", encoding="utf-8") as f:
@@ -83,7 +85,7 @@ def read_file_in_sandbox(relative_path: str) -> str:
         numbered_lines = []
         for num, part in all_display_lines:
             if num is not None:
-                numbered_lines.append(f"{num:>{line_num_width-2}}  │ {part}")
+                numbered_lines.append(f"{num:>{line_num_width - 2}}  │ {part}")
             else:
                 numbered_lines.append(" " * (line_num_width - 2) + "  │ " + part)
         bottom_border = "─" * line_num_width + "┴" + "─" * max_line_len
@@ -96,7 +98,7 @@ def write_file_in_sandbox(relative_path: str, content: str):
     """Write content to a file in the sandbox."""
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     # Ensure the directory exists
     full_path.parent.mkdir(parents=True, exist_ok=True)
     with open(full_path, "w", encoding="utf-8") as f:
@@ -107,7 +109,7 @@ def create_directory_in_sandbox(relative_path: str):
     """Create a directory in the sandbox."""
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     full_path.mkdir(parents=True, exist_ok=True)
 
 
@@ -115,7 +117,7 @@ def delete_file_in_sandbox(relative_path: str):
     """Delete a file in the sandbox."""
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     if not full_path.exists():
         raise FileNotFoundError(f"File does not exist: {relative_path}")
     if full_path.is_dir():
@@ -127,7 +129,7 @@ def delete_directory_in_sandbox(relative_path: str):
     """Delete a directory in the sandbox (must be empty)."""
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     if not full_path.exists():
         raise FileNotFoundError(f"Directory does not exist: {relative_path}")
     if not full_path.is_dir():
@@ -140,9 +142,9 @@ def move_file_in_sandbox(src_relative_path: str, dst_relative_path: str):
     src_full_path = SANDBOX_PATH / src_relative_path.rstrip("/")
     dst_full_path = SANDBOX_PATH / dst_relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(src_full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     if str(SANDBOX_PATH) not in str(dst_full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     shutil.move(src_full_path, dst_full_path)
 
 
@@ -151,9 +153,9 @@ def copy_file_in_sandbox(src_relative_path: str, dst_relative_path: str):
     src_full_path = SANDBOX_PATH / src_relative_path.rstrip("/")
     dst_full_path = SANDBOX_PATH / dst_relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(src_full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     if str(SANDBOX_PATH) not in str(dst_full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     shutil.copy2(src_full_path, dst_full_path)
 
 
@@ -163,7 +165,7 @@ def edit_file_section_in_sandbox(
     """Edit a specific section of a file in the sandbox by replacing the original_section with new_content."""
     full_path = SANDBOX_PATH / relative_path
     if str(SANDBOX_PATH) not in str(full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     if not full_path.is_file():
         raise FileNotFoundError(f"File does not exist: {relative_path}")
 
@@ -173,7 +175,7 @@ def edit_file_section_in_sandbox(
     # Find the original section
     pos = content.find(original_section)
     if pos == -1:
-        raise ValueError(f"Original section not found in file")
+        raise ValueError("Original section not found in file")
 
     # Replace the section
     new_file_content = (
@@ -188,7 +190,7 @@ def append_to_file_in_sandbox(relative_path: str, content: str):
     """Append content to a file in the sandbox without overwriting existing content."""
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     # Ensure the directory exists
     full_path.parent.mkdir(parents=True, exist_ok=True)
     with open(full_path, "a", encoding="utf-8") as f:
@@ -199,7 +201,7 @@ def grep_file_content_in_sandbox(relative_path: str, pattern: str) -> str:
     """Search for a term in a file and return matching lines."""
     full_path = SANDBOX_PATH / relative_path.rstrip("/")
     if str(SANDBOX_PATH) not in str(full_path):
-        raise AccessDeniedError(f"Access Denied")
+        raise AccessDeniedError("Access Denied")
     if not full_path.is_file():
         raise FileNotFoundError(f"File does not exist: {relative_path}")
     with open(full_path, "r", encoding="utf-8") as f:

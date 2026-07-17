@@ -168,7 +168,7 @@ def fetch_page_content(
         logger.warning("[fetch_page_content]: URL EMPTY")
         return PageResult(url=url)
     try:
-        logger.info(f"[fetch_page_content] FETCHING HTML")
+        logger.info("[fetch_page_content] FETCHING HTML")
 
         # If headers are not provided, generate random headers
         if headers is None:
@@ -191,7 +191,7 @@ def fetch_page_content(
             logger.warning(f"[fetch_page_content]: CANNOT FETCH HTML ({url})")
             return PageResult(url=url)
 
-        logger.info(f"[fetch_page_content] FETCHED")
+        logger.info("[fetch_page_content] FETCHED")
 
         return PageResult(
             url=url,
@@ -236,7 +236,7 @@ def scrape_page_content(
         return PageResult(url=url)
 
     try:
-        logger.info(f"[scrape_page_content] FETCHING HTML")
+        logger.info("[scrape_page_content] FETCHING HTML")
 
         # If headers are not provided, generate random headers
         if headers is None:
@@ -265,19 +265,19 @@ def scrape_page_content(
 
         # If raw html is empty, return empty PageResult
         if not raw_html:
-            logger.info(f"[scrape_page_content] Trying with headless browser...")
+            logger.info("[scrape_page_content] Trying with headless browser...")
             website.scrape(headless=True)
             page = website.get_pages()[0]
             raw_html = str(page.content)
         if not raw_html:
-            logger.info(f"[scrape_page_content] Trying with http fetch...")
+            logger.info("[scrape_page_content] Trying with http fetch...")
             return fetch_page_content(
                 url=url, headers=headers, subdomains=subdomains, tld=tld
             )
 
         links = list(set(website.get_links()))
 
-        logger.info(f"[scrape_page_content] FETCHED")
+        logger.info("[scrape_page_content] FETCHED")
 
         return PageResult(url=url, raw_html=raw_html, links=links)
 
@@ -310,7 +310,7 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
         logger.warning("soup_html: HTML EMPTY")
         return "", "", []
     try:
-        logger.info(f"[soup_html] CLEANING HTML")
+        logger.info("[soup_html] CLEANING HTML")
 
         soup = bs4.BeautifulSoup(html, "html.parser")
         links: set[str] = set()
@@ -411,7 +411,6 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
 
         # 3. Soup Magic 🪄
         for tag in soup.find_all(True):
-
             # clean attributes
             if tag.attrs:
                 tag.attrs = {
@@ -427,7 +426,6 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
 
             # replace href with absolute url and apply regex filtering
             if (tag.has_attr("href") or tag.has_attr("src")) and baseurl:
-
                 # relative URL
                 if tag.has_attr("href"):
                     rel_url = tag["href"]
@@ -461,7 +459,7 @@ def soup_html(html: str, baseurl: Optional[str] = None) -> tuple[str, str, list[
         # Unescape html entities
         soup = unescape(soup)
 
-        logger.info(f"[soup_html] CLEANED")
+        logger.info("[soup_html] CLEANED")
 
     except Exception as e:
         logger.error(f"[soup_html] ERROR: {e}")
@@ -493,7 +491,7 @@ def html2md(html: str, instructions: Optional[str] = None) -> str:
         logger.warning("[html2md]: HTML EMPTY")
         return ""
     try:
-        logger.info(f"[html2md] HTML -> MARKDOWN")
+        logger.info("[html2md] HTML -> MARKDOWN")
 
         if not instructions:
             instructions = "Extract the main content from the given HTML and convert it to Markdown format."
@@ -502,7 +500,7 @@ def html2md(html: str, instructions: Optional[str] = None) -> str:
             completion(
                 base_url="http://localhost:11434/v1",
                 api_key="ollama",
-                model=f"openai/readerlm-v2",
+                model="openai/readerlm-v2",
                 messages=[
                     {
                         "role": "user",
@@ -520,13 +518,13 @@ def html2md(html: str, instructions: Optional[str] = None) -> str:
             r"^```markdown\s*|\s*```$", "", response, flags=re.DOTALL
         ).strip()
 
-        logger.info(f"[html2md] MARKDOWN GENERATED")
+        logger.info("[html2md] MARKDOWN GENERATED")
 
         return markdown
 
     except Exception as e:
         logger.error(f"[html2md] ERROR: {e}")
-        logger.info(f"[html2md] FALLBACK TO html2text")
+        logger.info("[html2md] FALLBACK TO html2text")
         markdown = html2text(html=html, bodywidth=0).strip()
         return markdown
 
@@ -579,7 +577,7 @@ def summarize_content(content: str, instructions: Optional[str] = None) -> str:
         logger.warning("summarize_content: CONTENT EMPTY")
         return ""
     try:
-        logger.info(f"[summarize_content] Summarizing Content...")
+        logger.info("[summarize_content] Summarizing Content...")
 
         if not instructions:
             instructions = dedent(
@@ -600,14 +598,17 @@ def summarize_content(content: str, instructions: Optional[str] = None) -> str:
                         "role": "system",
                         "content": dedent(f"{instructions}"),
                     },
-                    {"role": "user", "content": f"CONTENT:\n```markdown\n{content}\n```"},
+                    {
+                        "role": "user",
+                        "content": f"CONTENT:\n```markdown\n{content}\n```",
+                    },
                 ],
             )
             .choices[0]  # type: ignore
             .message.content  # type: ignore
         ).strip()
 
-        logger.info(f"[summarize_content] SUMMARISED")
+        logger.info("[summarize_content] SUMMARISED")
 
         return response
 
@@ -634,7 +635,7 @@ def jina_reader_api(url: str) -> str:
         logger.warning("JINA READER: NO URL PROVIDED")
         return ""
     try:
-        logger.info(f"[jina_reader_api] Initiating...")
+        logger.info("[jina_reader_api] Initiating...")
 
         JINA_URL = f"https://r.jina.ai/{url}"
 
@@ -644,7 +645,7 @@ def jina_reader_api(url: str) -> str:
         markdown = requests.get(JINA_URL, headers=headers, timeout=15)
         markdown = markdown.text
 
-        logger.info(f"[jina_reader_api] SCRAPED")
+        logger.info("[jina_reader_api] SCRAPED")
 
         return markdown
     except Exception as e:
@@ -990,19 +991,21 @@ if __name__ == "__main__":
     # url = "https://www.ndtv.com/lifestyle/unseen-pic-of-shubman-gill-with-rumoured-girlfriend-sara-tendulkar-from-london-event-is-crazy-viral-8861084"
     url = "https://spider.cloud/guides"
     # url = "https://arxiv.org/pdf/2511.23404"
-    url = "https://www.liquid.ai"
+    # url = "https://www.liquid.ai"
     # url = "https://en.wikipedia.org/wiki/Artificial_intelligence"
 
     result = scrape_page(
         url,
-        summarise=True,
+        summarise=False,
         use_reader_lm=False,
     )
     print("\n" + "=" * 100 + "\n")
-    print(result.markdown)
-    print("\n" + "=" * 100 + "\n")
-    print(result.summary)
-    print("\n" + "=" * 100 + "\n")
+    if md := result.markdown:
+        print(md)
+        print("\n" + "=" * 100 + "\n")
+    if summary := result.summary:
+        print(summary)
+        print("\n" + "=" * 100 + "\n")
     # with open("output.html", "w", encoding="utf-8") as f:
     #     f.write(result.raw_html)
     # with open("cleaned.html", "w", encoding="utf-8") as f:

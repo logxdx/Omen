@@ -10,7 +10,6 @@ from agents import (
     Button,
     ComputerTool,
     Environment,
-    FunctionTool,
     ModelSettings,
     Runner,
     set_tracing_disabled,
