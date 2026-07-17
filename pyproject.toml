@@ -3,49 +3,39 @@ name = "Omen"
 version = "1.3.0"
 description = "An AI assistant that can speak, and walk around the internet."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
-    "beautifulsoup4==4.14.3",
-    "browserforge==1.2.3",
-    "chromadb==1.4.0",
-    "crawl4ai==0.7.8",
-    "ddgs==9.10.0",
-    # "faster-whisper==1.2.1",
-    # "halo==0.0.31",
-    "html2text==2025.4.15",
-    "litellm==1.80.11",
-    "liteparse==2.0.4",
-    "markdown==3.10",
-    "matplotlib==3.10.8",
-    "numpy==2.1.3",
-    "openai-agents==0.6.5",
-    "openpyxl==3.1.5",
-    # "openwakeword==0.6.0",
-    "pandas==2.3.3",
-    # "piper-tts==1.3.0",
-    # "pyaudio==0.2.14",
-    "python-dotenv==1.2.1",
-    "requests==2.32.5",
-    "scikit-learn==1.5.2",
-    "scipy==1.14.1",
-    "seaborn==0.13.2",
-    "rich>=14.1.0",
-    # "silero-vad==6.2.0",
-    "spider-rs==0.0.57",
-    "statsmodels==0.14.4",
-    "yt-dlp==2025.12.8",
-    # "torch==2.9.1",
-    # "torchaudio==2.9.1",
-    # "torchvision==0.24.1",
-    # "onnx-asr[cpu,hub]==0.9.1",
+    "beautifulsoup4",
+    "browserforge",
+    "crawl4ai",
+    "ddgs",
+    "faster-whisper",
+    "halo",
+    "html2text",
+    "litellm",
+    "liteparse",
+    "markdown",
+    "numpy",
+    "openai-agents",
+    "piper-tts",
+    "pyaudio",
+    "python-dotenv",
+    "requests",
+    "scipy",
+    "spider_rs",
+    "rich",
+    "statsmodels",
+    "yt-dlp",
+    "openwakeword>=0.4.0",
 ]
 
 [[tool.uv.index]]
 name = "pytorch-cuda"
-url = "https://download.pytorch.org/whl/cu130"
+url = "https://download.pytorch.org/whl/cu132"
 explicit = true
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cuda" }]
 torchvision = [{ index = "pytorch-cuda" }]
 torchaudio = [{ index = "pytorch-cuda" }]
+spider_rs = { path = "spider-py" }
