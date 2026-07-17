@@ -1,10 +1,18 @@
 import asyncio
+import sys
 
-from cli.v1 import run_cli
+from dotenv import load_dotenv
+
+load_dotenv()  # picks up ANTHROPIC_API_KEY for the agent subprocess
+
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
+from cli import run_cli
 
 
 async def main():
-    """Main conversation loop"""
     await run_cli()
 
 
