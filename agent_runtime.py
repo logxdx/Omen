@@ -12,7 +12,6 @@ from typing import Dict, Tuple
 from agents import Agent
 
 from my_agents import (
-    analysis_agent,
     context_agent,
     resume_agent,
     filesystem_agent,
@@ -34,11 +33,7 @@ def _configure_agents() -> None:
     if _CONFIGURED:
         return
 
-    triage_agent.add_subagents([web_search_agent])
-    triage_agent.add_handoffs([filesystem_agent])
-
-    analysis_agent.add_handoffs([filesystem_agent])
-    ideation_agent.add_subagents([web_search_agent])
+    triage_agent.add_subagents([web_search_agent, filesystem_agent])
 
     _AGENT_REGISTRY = {
         "orc": triage_agent.agent,
@@ -46,7 +41,6 @@ def _configure_agents() -> None:
         "fs": filesystem_agent.agent,
         "idea": ideation_agent.agent,
         "tutor": study_agent.agent,
-        "analyst": analysis_agent.agent,
         "resume": resume_agent.agent,
         "memory": context_agent.agent,
     }
@@ -57,5 +51,6 @@ def _configure_agents() -> None:
 def get_agent_registry() -> Tuple[Dict[str, Agent], Agent]:
     """Return the configured agent registry and primary triage agent."""
     _configure_agents()
-    assert _PRIMARY_AGENT is not None
+    if _PRIMARY_AGENT is None:
+        raise RuntimeError("Primary agent failed to initialize")
     return dict(_AGENT_REGISTRY), _PRIMARY_AGENT

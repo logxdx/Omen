@@ -2,6 +2,7 @@ import asyncio
 
 from cli.v1 import run_cli
 
+
 async def main():
     """Main conversation loop"""
     await run_cli()
