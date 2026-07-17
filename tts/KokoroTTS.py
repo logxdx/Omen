@@ -8,7 +8,6 @@ from typing import Literal
 from textwrap import dedent
 
 from config.agent_config import AGENT_CONFIGS
-import config.agent_personality as personality
 
 config = AGENT_CONFIGS["tts_summarizer"]
 BASE_URL = config["BASE_URL"]
@@ -85,7 +84,7 @@ def summarise_response(query: str | None, response_text: str):
         )
         output = str(output.choices[0].message.content)
         return markdown_to_plaintext(output)
-    except Exception as e:
+    except Exception:
         output = "The output is on your screen."  # Fallback to original response if error occurs
 
     return markdown_to_plaintext(output)
@@ -274,7 +273,6 @@ class KokoroTTS:
 
 
 if __name__ == "__main__":
-
     voice1 = "af_nicole(0.5)"
     plus = "+"
     voice2 = "af_kore(1)"

@@ -191,6 +191,7 @@ spider = """
                                 ▒▒                      ▒▒       
 """
 
+
 def get_art():
     # import random
     # return random.choice(omen)

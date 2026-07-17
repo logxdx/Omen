@@ -72,7 +72,7 @@ def summarise_response(query: str | None, response_text: str):
         )
         output = str(output.choices[0].message.content)
         return markdown_to_plaintext(output)
-    except Exception as e:
+    except Exception:
         output = "The output is on your screen."  # Fallback to original response if error occurs
 
     return markdown_to_plaintext(output)

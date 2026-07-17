@@ -87,7 +87,6 @@ if platform.system() != "Darwin":
 
 
 class TranscriptionWorker:
-
     def __init__(
         self,
         conn,
@@ -750,7 +749,6 @@ class WhisperSTT:
             self.wakeword_backend = wakeword_backend
             self.wake_words_sensitivity = wake_words_sensitivity
             if self.wakeword_backend in ["oww", "openwakeword", "openwakewords"]:
-
                 from openwakeword.utils import download_models
 
                 download_models()
@@ -767,8 +765,7 @@ class WhisperSTT:
                             inference_framework=openwakeword_inference_framework,
                         )
                         logging.info(
-                            "Successfully loaded wakeword model(s): "
-                            f"{model_file_paths}"
+                            f"Successfully loaded wakeword model(s): {model_file_paths}"
                         )
                     else:
                         self.owwModel = OpenWakewordModel(
@@ -781,7 +778,7 @@ class WhisperSTT:
 
                     for model_key in self.owwModel.models.keys():
                         logging.info(
-                            "Successfully loaded openwakeword model: " f"{model_key}"
+                            f"Successfully loaded openwakeword model: {model_key}"
                         )
 
                 except Exception as e:
@@ -823,13 +820,12 @@ class WhisperSTT:
 
         except Exception as e:
             logging.exception(
-                f"Error initializing Silero VAD "
-                f"voice activity detection engine: {e}"
+                f"Error initializing Silero VAD voice activity detection engine: {e}"
             )
             raise
 
         logging.debug(
-            "Silero VAD voice activity detection " "engine initialized successfully"
+            "Silero VAD voice activity detection engine initialized successfully"
         )
 
         self.audio_buffer = collections.deque(
@@ -1123,7 +1119,7 @@ class WhisperSTT:
                     try:
                         default_device = audio_interface.get_default_input_device_info()
                         input_device_index = default_device["index"]
-                    except OSError as e:
+                    except OSError:
                         input_device_index = None
 
                 sample_rates_to_try = [16000]  # Try 16000 Hz first
@@ -1268,7 +1264,7 @@ class WhisperSTT:
                 if stream:
                     stream.stop_stream()
                     stream.close()
-            except Exception as e:
+            except Exception:
                 pass
             if audio_interface:
                 audio_interface.terminate()
@@ -1376,7 +1372,6 @@ class WhisperSTT:
         audio_copy = copy.deepcopy(self.audio)
         start_time = 0
         with self.transcription_lock:
-
             try:
                 if self.transcribe_count == 0:
                     logging.debug(
@@ -1453,7 +1448,7 @@ class WhisperSTT:
                 return max_index
             else:
                 if self.debug_mode:
-                    logging.info(f"wake words oww_index: -1")
+                    logging.info("wake words oww_index: -1")
                 return -1
 
         if self.debug_mode:
@@ -1512,7 +1507,7 @@ class WhisperSTT:
         # Ensure there's a minimum interval
         # between stopping and starting recording
         if time.time() - self.recording_stop_time < self.min_gap_between_recordings:
-            logging.info("Attempted to start recording " "too soon after stopping.")
+            logging.info("Attempted to start recording too soon after stopping.")
             return self
 
         logging.info("recording started")
@@ -1542,7 +1537,7 @@ class WhisperSTT:
         # Ensure there's a minimum interval
         # between starting and stopping recording
         if time.time() - self.recording_start_time < self.min_length_of_recording:
-            logging.info("Attempted to stop recording " "too soon after starting.")
+            logging.info("Attempted to stop recording too soon after starting.")
             return self
 
         logging.info("recording stopped")
@@ -1700,7 +1695,6 @@ class WhisperSTT:
 
             # Continuously monitor audio for voice activity
             while self.is_running:
-
                 # if self.use_extended_logging:
                 #     logging.debug('Debug: Entering inner try block')
                 if last_inner_try_time:
@@ -1756,7 +1750,6 @@ class WhisperSTT:
                         if self.use_extended_logging:
                             logging.debug("Debug: Discarding old chunks if necessary")
                         while self.audio_queue.qsize() > self.allowed_latency_limit:
-
                             data = self.audio_queue.get()
 
                 except BrokenPipeError:
@@ -1799,7 +1792,6 @@ class WhisperSTT:
                         logging.debug("Debug: Handling wake-word timeout callback")
                     # Handle wake-word timeout callback
                     if wake_word_activation_delay_passed and not delay_was_passed:
-
                         if self.use_wake_words and self.wake_word_activation_delay:
                             if self.on_wakeword_timeout:
                                 if self.use_extended_logging:
@@ -1839,8 +1831,7 @@ class WhisperSTT:
 
                         except struct.error:
                             logging.error(
-                                "Error unpacking audio data "
-                                "for wake word processing."
+                                "Error unpacking audio data for wake word processing."
                             )
                             continue
 
@@ -1879,7 +1870,6 @@ class WhisperSTT:
                         )
                         and self.start_recording_on_voice_activity
                     ) or self.wakeword_detected:
-
                         if self.use_extended_logging:
                             logging.debug("Debug: Checking if voice is active")
                         if self._is_voice_active():
@@ -1974,7 +1964,6 @@ class WhisperSTT:
                                 time.time() - self.recording_start_time
                                 > self.min_length_of_recording
                             ):
-
                                 self.speech_end_silence_start = time.time()
 
                             if self.use_extended_logging:
@@ -2037,7 +2026,6 @@ class WhisperSTT:
                             and time.time() - self.speech_end_silence_start
                             >= self.post_speech_silence_duration
                         ):
-
                             if self.use_extended_logging:
                                 logging.debug("Debug: Formatting silence start time")
                             # Get time in desired format (HH:MM:SS.nnn)
@@ -2105,7 +2093,6 @@ class WhisperSTT:
                     and time.time() - self.wake_word_detect_time
                     > self.wake_word_timeout
                 ):
-
                     self.wake_word_detect_time = 0
                     if self.wakeword_detected and self.on_wakeword_timeout:
                         if self.use_extended_logging:
@@ -2157,7 +2144,6 @@ class WhisperSTT:
         """
 
         try:
-
             logging.debug("Starting realtime worker")
 
             # Return immediately if real-time transcription is not enabled
@@ -2166,10 +2152,8 @@ class WhisperSTT:
 
             # Continue running as long as the main process is active
             while self.is_running:
-
                 # Check if the recording is active
                 if self.is_recording:
-
                     # Sleep for the duration of the transcription resolution
                     time.sleep(self.realtime_processing_pause)
 
@@ -2260,7 +2244,6 @@ class WhisperSTT:
                         and time.time() - self.recording_start_time
                         > self.init_realtime_after_seconds
                     ):
-
                         logging.debug("Starting realtime transcription")
                         self.realtime_transcription_text = realtime_text
                         self.realtime_transcription_text = (
@@ -2283,7 +2266,6 @@ class WhisperSTT:
                             # two times in the same way
                             # Store as "safely detected text"
                             if len(prefix) >= len(self.realtime_stabilized_safetext):
-
                                 # Only store when longer than the previous
                                 # as additional security
                                 self.realtime_stabilized_safetext = prefix
@@ -2669,7 +2651,6 @@ class WhisperSTT:
 
 
 if __name__ == "__main__":
-
     RESET_CURSOR = "\033[H"
     CLEAR_LINE = "\033[2K"
 
