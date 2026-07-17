@@ -10,7 +10,7 @@ MAX_TURNS = 20
 LOCAL = True
 
 # Individual configurations for each agent
-LOCAL_MODEL = "qwen3.5_4b"
+LOCAL_MODEL = "local"
 LOCAL_CONFIG = {
     "PERSONALITY": "jarvis",
     "triage_agent": {
@@ -56,7 +56,7 @@ LOCAL_CONFIG = {
     "tts_summarizer": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
-        "MODEL_NAME": f"lfm2.5",
+        "MODEL_NAME": "lfm2.5",
     },
     "scraper": {
         "BASE_URL": os.getenv("OLLAMA_BASE_URL"),
@@ -71,52 +71,52 @@ ONLINE_CONFIG = {
     "triage_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("TRIAGE_API_KEY"),
-        "MODEL_NAME": "openai/qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "openai/zai-glm-4.7",
     },
     "web_search_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("WEB_SEARCH_API_KEY"),
-        "MODEL_NAME": "openai/qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "openai/zai-glm-4.7",
     },
     "filesystem_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("FILESYSTEM_API_KEY"),
-        "MODEL_NAME": "openai/qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "openai/zai-glm-4.7",
     },
     "ideation_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("IDEATION_API_KEY"),
-        "MODEL_NAME": "openai/qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "openai/zai-glm-4.7",
     },
     "study_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("STUDY_API_KEY"),
-        "MODEL_NAME": "openai/qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "openai/zai-glm-4.7",
     },
     "analysis_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("ANALYSIS_API_KEY"),
-        "MODEL_NAME": "openai/qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "openai/zai-glm-4.7",
     },
     "context_manager_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
-        "MODEL_NAME": "openai/qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "openai/zai-glm-4.7",
     },
     "resume_agent": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("RESUME_API_KEY"),
-        "MODEL_NAME": "openai/qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "openai/zai-glm-4.7",
     },
     "tts_summarizer": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("CONTEXT_API_KEY"),
-        "MODEL_NAME": "qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "zai-glm-4.7",
     },
     "scraper": {
         "BASE_URL": os.getenv("CEREBRAS_BASE_URL"),
         "API_KEY": os.getenv("STUDY_API_KEY"),
-        "MODEL_NAME": "openai/qwen-3-235b-a22b-instruct-2507",
+        "MODEL_NAME": "openai/zai-glm-4.7",
     },
 }
 

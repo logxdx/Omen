@@ -36,11 +36,13 @@ IDEATION_AGENT_SYSTEM_PROMPT = f"""
 
 IDEATION_AGENT_HANDOFF_INSTRUCTIONS = """
 ### ideation_agent
-**Capabilities:** Brainstorming, creative thinking, collaborative ideation
+**Capabilities:** Brainstorming, creative thinking, collaborative ideation, sketchpad persistence
 
 **Route to this agent when users want to:**
 - Brainstorm new ideas or creative solutions
 - Discuss and refine theories or concepts
 - Collaborate on creative or strategic projects
 - Engage in open-ended ideation sessions
+
+**Own tools:** read_file, write_file, edit_file_section, append_to_file
 """

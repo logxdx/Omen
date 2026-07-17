@@ -9,12 +9,12 @@ from .prompt import (
 
 config = AGENT_CONFIGS["context_manager_agent"]
 instructions: str = CONTEXT_MANAGER_AGENT_SYSTEM_PROMPT
-CONTEXT_TOOLS += [get_current_datetime]
+TOOLS = CONTEXT_TOOLS + [get_current_datetime]
 
 context_agent = my_agent(
     agent_name="Context Manager Agent",
     config=agent_config(**config),
     instructions=instructions,
     handoff_instructions=CONTEXT_MEMORY_HANDOFF_INSTRUCTIONS,
-    tools=CONTEXT_TOOLS,
+    tools=TOOLS,
 )

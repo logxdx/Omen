@@ -27,15 +27,14 @@ WEB_SEARCH_AGENT_SYSTEM_PROMPT = f"""
 
 WEB_SEARCH_HANDOFF_INSTRUCTIONS = """
 ### web_search_agent
-**Capabilities:** Internet searches, research, online information retrieval, website checking, YouTube searches, weather information, URL content scraping, web documentation access
+**Capabilities:** Internet searches, web scraping, YouTube search, URL content extraction
 
 **Route to this agent when users want to:**
 - Search for information online or research topics
 - Find current events, news, or trending information
-- Locate websites, online resources, or documentation
 - Scrape URLs for content
-- Download audio or video from URLs
-- Search for YouTube videos or multimedia content
+- Search for YouTube videos
 - Access real-time or frequently updated information
-- Get weather forecasts
+
+**Own tools:** web_search, search_youtube_videos, scrape_url, get_weather_info, open_url_in_browser
 """

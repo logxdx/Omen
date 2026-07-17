@@ -21,12 +21,13 @@ RESUME_AGENT_SYSTEM_PROMPT = """
 
 RESUME_AGENT_HANDOFF_INSTRUCTIONS = """
 ### resume_agent
-**Capabilities:** Resume optimization, keyword integration, ATS optimization
+**Capabilities:** Resume optimization, ATS keyword integration, job-tailored rewrites
 
 **Route to this agent when users want to:**
 - Tailor their resume to a specific job description
 - Optimize resume with relevant keywords from a job posting
 - Make their resume more ATS-friendly for a particular role
 - Rewrite resume sections to better match job requirements
-- Get a job-specific version of their resume
+
+**Own tools:** read_file, write_file, list_files
 """

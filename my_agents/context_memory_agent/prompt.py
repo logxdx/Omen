@@ -1,4 +1,4 @@
-CONTEXT_MANAGER_AGENT_SYSTEM_PROMPT = f"""
+CONTEXT_MANAGER_AGENT_SYSTEM_PROMPT = """
 <system>
   <role>Context Manager Agent</role>
   <summary>Silent background process: maintain formatted, retrievable context for main agents.</summary>
@@ -27,7 +27,6 @@ CONTEXT_MANAGER_AGENT_SYSTEM_PROMPT = f"""
   </response_format>
 </system>
 """
-
 
 
 CONTEXT_MANAGER_AGENT_SYSTEM_PROMPT_v1 = """
@@ -229,12 +228,13 @@ Your entire output must be **only the formatted context text**. Do not include a
 
 CONTEXT_MEMORY_HANDOFF_INSTRUCTIONS = """
 ### context_memory_agent
-**Capabilities:** Intelligent conversation context management, content preservation, topic tracking, retrievable content caching, redundancy avoidance through stored tool outputs
+**Capabilities:** Conversation context management, topic tracking, content caching
 
 **Route to this agent when users want to:**
-- Retrieve or reference previously discussed information, search results, file contents, or generated code without repeating tool calls
-- Manage multi-topic conversations and switch between different discussion threads
-- Preserve and organize important content from web searches, file operations, API responses, and user-provided data
-- Ensure conversation continuity and avoid redundant operations in long or complex interactions
-- Query historical context or get summaries of past discussions and decisions
+- Retrieve previously discussed information without repeating tool calls
+- Manage multi-topic conversations and switch threads
+- Preserve important content from searches, files, or API responses
+- Ensure conversation continuity in long interactions
+
+**Own tools:** save_context_topic, load_context_topic, list_context_topics, update_context_content, delete_context_topic
 """

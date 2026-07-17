@@ -151,7 +151,18 @@ You are allowed to engage in generic conversation with the user which does not r
 """
 
 # List of all available personalities
-PERSONALITIES = [VANESSA, ALEX, SOPHIA, JORDAN, MARVIN, COSMO, SERAPHINA, REX, JARVIS, GLADOS]
+PERSONALITIES = [
+    VANESSA,
+    ALEX,
+    SOPHIA,
+    JORDAN,
+    MARVIN,
+    COSMO,
+    SERAPHINA,
+    REX,
+    JARVIS,
+    GLADOS,
+]
 
 # Dictionary for easy access by name
 PERSONALITY_DICT = {
@@ -164,13 +175,15 @@ PERSONALITY_DICT = {
     "SERAPHINA": SERAPHINA,
     "REX": REX,
     "JARVIS": JARVIS,
-    "GLADOS": GLADOS
+    "GLADOS": GLADOS,
 }
 
 
 import random
 from .agent_config import AGENT_CONFIGS
+
 PERSONALITY = str(AGENT_CONFIGS.get("PERSONALITY", "random")).upper()
+
 
 def get_personality():
     """

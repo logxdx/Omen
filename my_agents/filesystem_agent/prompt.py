@@ -35,16 +35,14 @@ FILESYSTEM_AGENT_SYSTEM_PROMPT = f"""
 
 FILESYSTEM_AGENT_HANDOFF_INSTRUCTIONS = """
 ### filesystem_agent
-**Capabilities:** File operations, data storage, local file management, directory organization, document handling, PDF/document parsing, page screenshots
+**Capabilities:** File CRUD, directory management, file search, document parsing
 
 **Route to this agent when users want to:**
 - Read, create, modify, save, or delete files
 - Organize directories or manage file structures
-- Store data locally or work with local documents
-- List, browse, or search file contents
+- Search file contents with grep
 - Move, copy, or backup files
-- Perform batch file operations
-- Parse PDFs or extract text/layout from documents
-- Generate page screenshots for documents
-- Work with various file formats and data types
+- Parse PDFs or extract text from documents
+
+**Own tools:** list_files, read_file, grep_file_content, write_file, edit_file_section, append_to_file, create_directory, delete_file, delete_directory, move_file, copy_file, parse_document, screenshot_document
 """

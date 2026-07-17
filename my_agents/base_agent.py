@@ -43,7 +43,6 @@ class agent_config:
 
 @dataclass
 class my_agent:
-
     agent_name: str
     instructions: str
     config: agent_config
