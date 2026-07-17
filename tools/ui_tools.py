@@ -41,16 +41,6 @@ def change_interaction_mode(new_mode: str):
     return f"Interaction mode changed to {new_mode}."
 
 
-@function_tool
-def change_heirarchy_mode(new_mode: str):
-    """
-    Change the heirarchy mode.
-    Args:
-        new_mode (str): The new heirarchy mode to set. ("managerial" or "collaborative")
-    """
-    ui_config.HEIRARCHY_MODE = new_mode
-    return f"Heirarchy mode changed to {new_mode}."
-
 
 @function_tool
 def use_context_manager(enable: bool):
@@ -68,6 +58,5 @@ UI_TOOLS = [
     quit_session,
     clear_conversation_history,
     change_interaction_mode,
-    change_heirarchy_mode,
     use_context_manager,
 ]

@@ -9,7 +9,6 @@ from openai.types.responses import (
 )
 from agents import (
     Agent,
-    AgentUpdatedStreamEvent,
     RawResponsesStreamEvent,
     Runner,
     RunConfig,
@@ -98,33 +97,6 @@ def welcome_panel():
         ),
         justify="center",
     )
-
-
-def select_hierarchy_mode(*args):
-    """
-    Prompt user to select hierarchy mode.
-    """
-    console.print("[title]\nChoose your preferred interaction mode:[/title]")
-    console.print(
-        "1. [accent]Collaborative[/accent] - Agents can handoff directly to each other [dim](default)[/dim]"
-    )
-    console.print(
-        "2. [accent]Managerial[/accent] - Triage agent manages all interactions behind the scenes"
-    )
-    console.print()
-
-    ui_config.SKIP_TURN = True
-
-    while True:
-        mode_choice = IntPrompt.ask("Mode", choices=["1", "2"], default="1")
-        if mode_choice == "1":
-            ui_config.HEIRARCHY_MODE = "collaborative"
-            console.print("[accent.bold]Collaborative mode[/accent.bold]")
-            break
-        else:
-            ui_config.HEIRARCHY_MODE = "managerial"
-            console.print("[accent.bold]Managerial mode[/accent.bold]")
-            break
 
 
 def select_interaction_mode(*args):
@@ -398,11 +370,6 @@ COMMANDS = {
         "description": "List and switch agents",
         "handler": handle_agents,
     },
-    "hierarchy": {
-        "aliases": ["/hierarchy", "/hmode"],
-        "description": "Change hierarchy mode",
-        "handler": select_hierarchy_mode,
-    },
     "interaction": {
         "aliases": ["/interaction", "/imode"],
         "description": "Change interaction mode",
@@ -446,10 +413,7 @@ async def stream_agent_response() -> RunResultStreaming:
     """
     Stream the agent's response and handle events.
 
-    :param agent: The current agent
-    :param inputs: List of input messages
-    :param hierarchy_mode: The current hierarchy mode
-    :return: Updated agent and run result
+    :return: The run result
     """
 
     global CURRENT_AGENT
@@ -487,13 +451,11 @@ async def stream_agent_response() -> RunResultStreaming:
             ),
         ),
         console=console,
-        refresh_per_second=4,
+        refresh_per_second=1,
     ) as live:
-
         try:
             # Stream the response
             async for event in result.stream_events():
-
                 # Handle the streamed text output
                 if isinstance(event, RawResponsesStreamEvent):
                     data = event.data
@@ -501,13 +463,11 @@ async def stream_agent_response() -> RunResultStreaming:
                     if isinstance(data, ResponseTextDeltaEvent):
                         delta = data.delta
 
-                        if any([tag in delta for tag in ["<think>", "[THINK]"]]):
-                            delta = delta.replace("<think>", "").replace("[THINK]", "")
+                        if "<think>" in delta:
+                            delta = delta.replace("<think>", "")
                             thinking = True
-                        elif any([tag in delta for tag in ["</think>", "[/THINK]"]]):
-                            delta = delta.replace("</think>", "").replace(
-                                "[/THINK]", ""
-                            )
+                        elif "</think>" in delta:
+                            delta = delta.replace("</think>", "")
                             thinking_text += delta
                             thinking = False
                             if thinking_text.strip():
@@ -535,29 +495,17 @@ async def stream_agent_response() -> RunResultStreaming:
 
                 # Handle tool calls and handoffs
                 elif isinstance(event, RunItemStreamEvent):
-
-                    # Handle handoff
-                    ###############
-                    # This here decides if you actually want to handoff to a new agent or let the orchestrator talk to it behind the scenes and return to you with the result.
-                    ###############
+                    # Handle handoff (for manual agent switching via /agents)
                     if (
                         event.name == "handoff_occured"
                     ):  # Note: This is misspelled in the library
-
-                        target_name = event.item.target_agent.name  # type: ignore
+                        target_name = event.item.target_agent.name
                         display_target = str(target_name).capitalize()
-
-                        if ui_config.HEIRARCHY_MODE == "collaborative":
-                            # Switch to the new agent for direct handoff
-                            CURRENT_AGENT = event.item.target_agent  # type: ignore
-                            handoff_msg = f"Handed-off to {display_target}."
-                        else:
-                            # Managerial mode: keep current agent, just notify
-                            handoff_msg = f"Delegated to {display_target}."
+                        CURRENT_AGENT = event.item.target_agent
                         events.append(
                             Panel(
-                                handoff_msg,
-                                title="Handoff",
+                                f"Switched to {display_target}.",
+                                title="Agent Switch",
                                 title_align="right",
                                 style="dim",
                                 padding=(0, 1),
@@ -704,19 +652,17 @@ async def run_cli():
     session_context: str = ""
 
     try:
-        select_hierarchy_mode()
         select_interaction_mode()
         select_context_agent_mode()
         console.print("\n\n")
         ui_config.SKIP_TURN = False
-    except Exception as e:
-        raise Exception(f"Error selecting modes")
+    except Exception:
+        raise Exception("Error selecting modes")
 
     welcome_panel()
     ui_config.CONVERSATION_HISTORY.clear()
 
     while True:
-
         if ui_config.QUIT_SESSION:
             if tts_client:
                 tts_client.shutdown()
@@ -730,7 +676,6 @@ async def run_cli():
             ]
 
         if ui_config.INTERACTION_MODE == "text":
-
             try:
                 user_msg = Prompt.ask("\n[dim]You[/dim]")
 
@@ -762,11 +707,10 @@ async def run_cli():
                 continue
 
         else:
-
             setup_voice_mode()
 
             try:
-                user_msg = stt_client.text()  # type: ignore
+                user_msg = stt_client.text()
                 console.print(f"\n[user]You:[/user] {user_msg}\n")
             except Exception as e:
                 console.print(f"[error]STT Error: {e}[/error]")
@@ -783,7 +727,6 @@ async def run_cli():
         ui_config.CONVERSATION_HISTORY.append({"content": user_msg, "role": "user"})
 
         if ui_config.USE_CONTEXT_MANAGER:
-
             try:
                 temp = CURRENT_AGENT
                 CURRENT_AGENT = context_agent.agent
@@ -795,7 +738,7 @@ async def run_cli():
 
             if context_result.final_output != session_context:
                 session_context = str(context_result.final_output).strip()
-                console.print(f"[dim]Context updated.[/dim]")
+                console.print("[dim]Context updated.[/dim]")
 
             if session_context:
                 ui_config.CONVERSATION_HISTORY = [
@@ -819,7 +762,6 @@ async def run_cli():
         if ui_config.USE_CONTEXT_MANAGER:
             for input_item in ui_config.CONVERSATION_HISTORY:
                 if input_item.get("type") in ["function_call", "function_call_output"]:
-
                     try:
                         temp = CURRENT_AGENT
                         CURRENT_AGENT = context_agent.agent
@@ -831,5 +773,5 @@ async def run_cli():
 
                     if context_result.final_output:
                         session_context = str(context_result.final_output).strip()
-                        console.print(f"[dim]Context updated.[/dim]")
+                        console.print("[dim]Context updated.[/dim]")
                     break
