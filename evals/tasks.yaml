@@ -1,0 +1,64 @@
+# Small-model eval tasks. Run with: python -m omen eval [--only id ...] [--repeat N]
+#
+# Fields:
+#   prompt           user message
+#   expect_tools     tools that must be called (order not enforced); [] = no tool calls allowed
+#   expect_args      per tool, argument values that must appear (case-insensitive substring)
+#   expect_answer    substrings that must all appear in the final answer (case-insensitive)
+#   max_steps        LLM steps allowed (default 4)
+
+- id: weather_simple
+  prompt: What's the weather in Paris right now?
+  expect_tools: [get_weather]
+  expect_args: {get_weather: {city: paris}}
+  expect_answer: ["18"]
+
+- id: weather_fahrenheit
+  prompt: How hot is it in Tokyo in Fahrenheit?
+  expect_tools: [get_weather]
+  expect_args: {get_weather: {city: tokyo, units: f}}
+  expect_answer: ["75"]
+
+- id: no_tool_needed
+  prompt: How do you say "good morning" in French?
+  expect_tools: []
+  expect_answer: [bonjour]
+
+- id: contact_lookup
+  prompt: What's Tom's email address?
+  expect_tools: [lookup_contact]
+  expect_args: {lookup_contact: {name: tom}}
+  expect_answer: [tom@becker.dev]
+
+- id: notes_search
+  prompt: What's the wifi password for the cabin? Check my notes.
+  expect_tools: [search_notes]
+  expect_answer: [pinecone-42]
+
+- id: currency_convert
+  prompt: Convert 100 euros to Indian rupees.
+  expect_tools: [convert_currency]
+  expect_args: {convert_currency: {from_currency: eur, to_currency: inr}}
+  expect_answer: ["9,000"]
+
+- id: reminder_simple
+  prompt: Remind me to water the plants tomorrow at 8am.
+  expect_tools: [create_reminder]
+  expect_args: {create_reminder: {text: plant, when: "8"}}
+
+- id: chain_contact_reminder
+  prompt: Look up Priya's phone number and set a reminder for Friday 6pm to call her on it.
+  expect_tools: [lookup_contact, create_reminder]
+  expect_args: {create_reminder: {text: "98200"}}
+  max_steps: 5
+
+- id: error_recovery_unknown_city
+  prompt: What's the weather in Atlantis?
+  expect_tools: [get_weather]
+  expect_answer: [atlantis]
+
+- id: two_cities
+  prompt: Is it warmer in Mumbai or Paris right now?
+  expect_tools: [get_weather]
+  expect_answer: [mumbai]
+  max_steps: 5

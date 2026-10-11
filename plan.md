@@ -306,18 +306,20 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 
 ### Phase 0 — Minimal fixes to the old app (only if you keep using it during the rebuild)
 
-- [ ] Sandbox: `full_path.resolve().is_relative_to(SANDBOX_PATH)` in one helper used by every filesystem op. (Do this regardless — it's a security hole.)
-- [ ] `RunConfig(tool_not_found_behavior="return_error_to_model")`; `MAX_TURNS` ≈ 10.
-- [ ] Skip everything else — the old code is deleted in Phase 7.
-- [ ] Create the `rebuild` branch and the empty `omen/` package with its own entry point (`[project.scripts] omen = "omen.__main__:main"`).
+- [x] Sandbox: `full_path.resolve().is_relative_to(SANDBOX_PATH)` in one helper used by every filesystem op. (Do this regardless — it's a security hole.)
+- [x] `RunConfig(tool_not_found_behavior="return_error_to_model")`; `MAX_TURNS` ≈ 10.
+- [x] Skip everything else — the old code is deleted in Phase 7.
+- [x] Create the `rebuild` branch and the `omen/` package. Entry point is `python -m omen` for now; `[project.scripts]` lands at the Phase 7 cut-over together with the dependency rework.
+- [x] Copy carry-over files unchanged into `skills/*/`, `omen/voice/`, `omen/tui/` (see §0).
 
 ### Phase 1 — Core loop
 
-- [ ] `core/llm.py`: LiteLLM streaming → internal events; compat table per backend (Ollama: `enable_thinking=false` for Qwen/Gemma tool calls, no developer role); temperature ≈ 0.3, `max_tokens` cap, `parallel_tool_calls=False`.
-- [ ] `core/tools.py`: `@tool` from type hints → JSON Schema; Pydantic validation; errors returned as `is_error` results; fuzzy-match near-miss tool names; `ToolResult(content, details)` with hard `content` cap.
-- [ ] `core/loop.py`: turns, tool execution, steering + follow-up queues, `abort()`, loop guard (2 identical calls → nudge, 3 → stop), `max_turns`.
-- [ ] `core/session.py`: append-only JSONL tree, branch from any entry, labels.
-- [ ] `evals/tasks.yaml` + runner: ~20 fixed tasks (search+answer, read file, edit file, weather, delegate, ask_user) run against the local model; report tool-call validity, task success, LLM calls per task. Run after every later phase.
+- [x] `core/llm.py`: LiteLLM streaming → deltas + one `Completion`; inline `<think>` routing; recovery of text-written tool calls (`<tool_call>` blocks, bare JSON); temperature 0.3, `max_tokens` cap, `parallel_tool_calls=False`. Compat is a pass-through `extra_body` (`OMEN_EXTRA_BODY`) — a per-backend table can grow from eval findings.
+- [x] `core/tools.py`: `@tool` from type hints + docstring → JSON Schema (titles stripped, optional collapsed); Pydantic validation; argument repair; errors returned as typed error results; fuzzy-match near-miss tool names; `ToolResult(content, details)` with hard `content` cap; hidden `ToolContext` injection.
+- [x] `core/loop.py`: turns, tool execution, steering + follow-up queues, immediate `abort()` (also while waiting for the first token or a slow tool), loop guard (2 identical calls → nudge, 3 → stop), `max_turns`.
+- [x] `core/session.py`: append-only JSONL tree, branch from any entry, labels.
+- [x] Tests: 47 unit tests (`python -m unittest discover -s tests -t .`) with a scripted fake LLM.
+- [~] `evals/tasks.yaml` + runner (`python -m omen eval`): 10 tasks on deterministic fake tools measuring tool-call validity, task success, steps, latency. Real-skill tasks (search, files, delegate, ask_user) are added in Phases 2–3. **Not yet run against the local model.**
 
 ### Phase 2 — Skills and core tools
 
