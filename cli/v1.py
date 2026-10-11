@@ -424,7 +424,10 @@ async def stream_agent_response() -> RunResultStreaming:
         starting_agent=CURRENT_AGENT,
         input=ui_config.CONVERSATION_HISTORY,
         max_turns=MAX_TURNS,
-        run_config=RunConfig(nest_handoff_history=False),
+        run_config=RunConfig(
+            nest_handoff_history=False,
+            tool_not_found_behavior="return_error_to_model",
+        ),
     )
 
     # Create a live display for streaming response
