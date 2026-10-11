@@ -1,0 +1,184 @@
+"""Session store: an append-only JSONL tree that implements the Agents SDK `Session` protocol.
+
+Each line is an entry `{id, parent_id, type, ts, data}`. The conversation the
+model sees is the path from the root to the current leaf. Branching moves the
+leaf to an earlier entry; the next append starts a new branch there and the old
+branch stays in the file. That makes "go back to before the model went off the
+rails" cheap, which matters with small models.
+
+Entry types:
+- "item": an SDK input item (message, function_call, function_call_output, ...).
+  Tool outputs may carry UI details under `_agents_custom_data` (fork patch).
+- "label": names an entry; never becomes the leaf.
+
+Delegation sub-runs are recorded with `fork()` as *detached* branches: they hang
+off the main conversation but never become its leaf, so the main agent never
+sees them unless you branch into them explicitly.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from agents.memory import SessionSettings
+
+CUSTOM_DATA_KEY = "_agents_custom_data"
+_SIDE_TYPES = {"label"}
+
+
+class Session:
+    session_settings: SessionSettings | None = None
+
+    def __init__(self, path: Path | None = None, session_id: str | None = None):
+        """Open (or create) a session file. `path=None` keeps it in memory only."""
+        self.path = path
+        self.session_id = session_id or (path.stem if path else uuid.uuid4().hex[:12])
+        self.entries: dict[str, dict] = {}
+        self.leaf: str | None = None
+        if path and path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    entry = json.loads(line)
+                    self.entries[entry["id"]] = entry
+                    if self._is_main(entry):
+                        self.leaf = entry["id"]
+
+    @classmethod
+    def create(cls, directory: Path) -> Session:
+        directory.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        return cls(directory / f"{stamp}-{uuid.uuid4().hex[:6]}.jsonl")
+
+    # -- SDK Session protocol ------------------------------------------------ #
+
+    async def get_items(self, limit: int | None = None) -> list[Any]:
+        items = self.items()
+        return items[-limit:] if limit else items
+
+    async def add_items(self, items: list[Any]) -> None:
+        for item in items:
+            self.append("item", _plain(item))
+
+    async def pop_item(self) -> Any | None:
+        if self.leaf is None:
+            return None
+        entry = self.entries[self.leaf]
+        self.leaf = entry["parent_id"]
+        return entry["data"] if entry["type"] == "item" else None
+
+    async def clear_session(self) -> None:
+        self.leaf = None
+
+    # -- tree operations ----------------------------------------------------- #
+
+    def append(
+        self,
+        type: str,
+        data: dict,
+        *,
+        parent_id: str | None | object = ...,
+        detached: bool = False,
+        meta: dict | None = None,
+    ) -> str:
+        """Add an entry. By default it extends the current leaf and becomes the new leaf."""
+        if parent_id is ...:
+            parent_id = data.get("target") if type in _SIDE_TYPES else self.leaf
+        entry: dict[str, Any] = {
+            "id": uuid.uuid4().hex[:12],
+            "parent_id": parent_id,
+            "type": type,
+            "ts": time.time(),
+            "data": data,
+        }
+        if detached:
+            entry["detached"] = True
+        if meta:
+            entry["meta"] = meta
+        self.entries[entry["id"]] = entry
+        if self._is_main(entry):
+            self.leaf = entry["id"]
+        if self.path:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+        return entry["id"]
+
+    def fork(self, items: list[Any], meta: dict | None = None, from_id: str | None | object = ...) -> str | None:
+        """Record `items` as a detached branch off `from_id` (default: current leaf). Returns its last id."""
+        parent = self.leaf if from_id is ... else from_id
+        last = None
+        for item in items:
+            last = self.append(
+                "item",
+                _plain(item),
+                parent_id=parent if last is None else last,
+                detached=True,
+                meta=meta if last is None else None,
+            )
+        return last
+
+    def label(self, entry_id: str, name: str) -> str:
+        if entry_id not in self.entries:
+            raise KeyError(entry_id)
+        return self.append("label", {"target": entry_id, "name": name})
+
+    def branch(self, entry_id: str | None) -> None:
+        """Make `entry_id` the current leaf (None = start over from the root)."""
+        if entry_id is not None and entry_id not in self.entries:
+            raise KeyError(entry_id)
+        self.leaf = entry_id
+
+    def path_to(self, entry_id: str | None = None) -> list[dict]:
+        """Entries from the root to `entry_id` (default: current leaf)."""
+        chain = []
+        current = entry_id if entry_id is not None else self.leaf
+        while current is not None:
+            entry = self.entries[current]
+            chain.append(entry)
+            current = entry["parent_id"]
+        return chain[::-1]
+
+    def items(self, entry_id: str | None = None) -> list[Any]:
+        """SDK input items along the current branch (or up to `entry_id`)."""
+        return [e["data"] for e in self.path_to(entry_id) if e["type"] == "item"]
+
+    def children(self, entry_id: str | None) -> list[dict]:
+        return [
+            e for e in self.entries.values()
+            if e["parent_id"] == entry_id and e["type"] not in _SIDE_TYPES
+        ]
+
+    def labels(self) -> dict[str, str]:
+        """{entry_id: label}; the latest label wins."""
+        return {
+            e["data"]["target"]: e["data"]["name"]
+            for e in self.entries.values() if e["type"] == "label"
+        }
+
+    def ui_details(self) -> dict[str, Any]:
+        """{tool call_id: UI details} along the current branch, for re-rendering components."""
+        out = {}
+        for item in self.items():
+            if isinstance(item, dict) and item.get("type") == "function_call_output":
+                ui = (item.get(CUSTOM_DATA_KEY) or {}).get("ui")
+                if ui is not None:
+                    out[item.get("call_id")] = ui
+        return out
+
+    # -- internals ----------------------------------------------------------- #
+
+    @staticmethod
+    def _is_main(entry: dict) -> bool:
+        return entry["type"] not in _SIDE_TYPES and not entry.get("detached")
+
+
+def _plain(item: Any) -> Any:
+    """SDK items may be pydantic models; store them as plain JSON-able dicts."""
+    if hasattr(item, "model_dump"):
+        return item.model_dump(exclude_unset=True)
+    return item

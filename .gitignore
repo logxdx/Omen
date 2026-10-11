@@ -255,3 +255,8 @@ node_modules/
 .coverage
 htmlcov/
 coverage.xml
+# Omen rebuild
+evals/results/
+!tests/
+!tests/**
+tests/**/__pycache__/

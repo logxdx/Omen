@@ -1,0 +1,4 @@
+# The root .gitignore has broad rules (models/, memory/, *test*) meant for app data.
+# Re-include everything in the vendored SDK fork.
+!*
+__pycache__/
