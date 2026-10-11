@@ -39,7 +39,7 @@ class DiscoverTests(unittest.TestCase):
 
     def test_repo_personas(self):
         personas = discover([REPO_ROOT / "personas"])
-        self.assertEqual(set(personas), {"omen", "researcher", "writer", "resume-writer"})
+        self.assertEqual(set(personas), {"omen", "researcher", "writer"})
         self.assertFalse(personas["omen"].delegate)
         self.assertEqual(personas["researcher"].skills, ["web"])
 

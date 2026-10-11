@@ -117,7 +117,7 @@ skills/
   media/    SKILL.md  tools.py   # download_audio, download_video
   resume/   SKILL.md  references/ ...
 personas/
-  researcher.md  tutor.md  ideator.md  resume-writer.md
+  omen.md  researcher.md  writer.md
 evals/
   tasks.yaml        # fixed small-model task set
 vendor/
@@ -348,14 +348,14 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 - [x] Memory: `remember` → `~/.omen/memory/facts.jsonl`; relevant facts recalled into the system prompt every turn.
 - [x] `OmenModel` (LitellmModel subclass) repairs small-model output: answer only in the reasoning channel → visible answer; `<tool_call>` text (JSON or GLM `<arg_key>` style) → real function calls; repetition loops → short "got stuck" reply instead of garbage.
 - [x] Tests: 72 unit tests. Evals: 20 tasks (8 full-assistant with real skills, 2 live-network opt-in via `OMEN_EVAL_NETWORK=1`). **Local `ling3`: 38/40 over 2 repeats, 100% valid tool calls; all files/memory/weather/skill-loading tasks pass.** Remaining misses: one live-web run where the model looped in its reasoning (now shown as "got stuck"), one flaky two-tool chain.
-- [ ] `resume` skill → moved to Phase 3 as the resume-writer persona (instructions + templates).
+- [x] `resume` skill (rules + inline template), loadable by the main agent.
 - [ ] `read_url` ranking favours short image captions on some pages; down-weight very short paragraphs.
 
 ### Phase 3 — Personas and delegation
 
 - [x] `core/personas.py`: `personas/*.md` (frontmatter: name, description, skills, max_turns, main, delegate, model) → SDK agents; user personas in `~/.omen/personas` override; broken files are skipped with a warning.
 - [x] Main persona: `omen` (default, `OMEN_PERSONA` / `--persona` to change). Its text + shared guidance form the system prompt; its skills stay loaded.
-- [x] Specialists (`delegate: true`): `researcher` (web), `writer` (files; drafts emails/messages/docs), `resume-writer` (files + new `resume` skill with rules and an inline template). Each runs with its skills' tools always on, its own `max_turns`, optional own model; no nested delegation.
+- [x] Specialists (`delegate: true`): `researcher` (web), `writer` (files; drafts emails/messages/docs). A `resume-writer` persona was tried and removed by the owner; the `resume` skill stays. Each runs with its skills' tools always on, its own `max_turns`, optional own model; no nested delegation.
 - [x] `delegate` lists specialists in its schema and the system prompt; `load_skill` with a persona's name points the model to `delegate`; guidance: delegate when the user names a specialist, relay the result itself.
 - [x] `/persona name` (keeps session and loaded skills) and `/personas` in the REPL.
 - [x] Old voices (Vanessa, Marvin, Rex, ...), tutor and ideator dropped by the owner; `config/agent_personality.py` is deleted with the old stack in Phase 7.
