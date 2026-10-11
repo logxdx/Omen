@@ -99,6 +99,8 @@ from .error_handlers import (
 )
 from .items import (
     REJECTION_MESSAGE,
+    prepare_model_input_items,
+    run_items_to_input_items,
     apply_patch_rejection_item,
     function_rejection_item,
     shell_rejection_item,
@@ -166,6 +168,16 @@ __all__ = [
     "get_single_step_result_from_response",
     "run_final_output_hooks",
 ]
+
+
+def _conversation_history(
+    original_input: str | list[TResponseInputItem], generated_items: list[RunItem]
+) -> list[TResponseInputItem]:
+    """Omen fork: model-visible history for `RunContextWrapper.conversation_history`."""
+    return prepare_model_input_items(
+        ItemHelpers.input_to_new_input_list(original_input),
+        run_items_to_input_items(generated_items),
+    )
 
 
 async def _maybe_finalize_from_tool_results(
@@ -659,6 +671,9 @@ async def execute_tools_and_side_effects(
     new_step_items = _dedupe_tool_call_items(
         existing_items=pre_step_items,
         new_items=processed_response.new_items,
+    )
+    context_wrapper.conversation_history = _conversation_history(
+        original_input, pre_step_items + new_step_items
     )
 
     (
@@ -1371,6 +1386,9 @@ async def resolve_interrupted_turn(
         custom_tool_calls=approved_custom_tool_calls,
         shell_calls=approved_shell_calls,
         apply_patch_calls=approved_apply_patch_calls,
+    )
+    context_wrapper.conversation_history = _conversation_history(
+        original_input, list(original_pre_step_items)
     )
 
     (

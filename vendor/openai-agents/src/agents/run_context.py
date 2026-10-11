@@ -62,6 +62,11 @@ class RunContextWrapper(Generic[TContext]):
     tool_input: Any | None = None
     """Structured input for the current agent tool run, when available."""
 
+    conversation_history: list[TResponseInputItem] = field(default_factory=list)
+    """Omen fork: the model-visible conversation at the moment tools run (caller input plus items
+    generated so far, with tool calls that have no output yet removed). Lets a tool fork the
+    current context, e.g. to start a sub-agent on a subtask."""
+
     @staticmethod
     def _to_str_or_none(value: Any) -> str | None:
         if isinstance(value, str):

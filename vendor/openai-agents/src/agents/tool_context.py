@@ -72,6 +72,7 @@ class ToolContext(RunContextWrapper[TContext]):
         turn_input: list[TResponseInputItem] | None = None,
         _approvals: dict[str, _ApprovalRecord] | None = None,
         tool_input: Any | None = None,
+        conversation_history: list[TResponseInputItem] | None = None,
     ) -> None:
         """Preserve the v0.7 positional constructor while accepting new context fields."""
         resolved_usage = Usage() if usage is _MISSING else cast(Usage, usage)
@@ -81,6 +82,7 @@ class ToolContext(RunContextWrapper[TContext]):
             turn_input=list(turn_input or []),
             _approvals={} if _approvals is None else _approvals,
             tool_input=tool_input,
+            conversation_history=list(conversation_history or []),
         )
         self.tool_name = (
             _assert_must_pass_tool_name() if tool_name is _MISSING else cast(str, tool_name)
