@@ -6,6 +6,31 @@ Generic harnesses (pi, Claude Code, Codex) assume a strong model. Omen should as
 
 ---
 
+## 0. Rebuild strategy: fresh core, same repo
+
+**Decision: write the new core from scratch as a new `omen/` package in this repo; port leaf code; delete the old stack at the end.** Not an incremental refactor.
+
+Why:
+- The new design replaces every structural layer — the openai-agents SDK (→ own loop), 7 agents + handoffs (→ personas + skills), `cli/v1.py` (→ Textual TUI + web), the scraper (→ crawlberg), the context manager (→ compaction). Refactoring in place means keeping the SDK, handoff wiring and CLI working at every step for a design that keeps none of them.
+- Measured: **~7,400 LOC is replaced outright** (runtime, agents, CLI, tool wrappers, scraper, context manager, unused modules). **~930 LOC of logic is worth porting**, plus the vendored WhisperSTT (2,672 LOC, moved as-is) and ~875 lines of prompt/persona text.
+
+Why the same repo rather than a new one: keeps the name, git history, `.env`, `root/` sandbox data and issue trail. The old app keeps running untouched while the new one is built.
+
+| Carry over | Into |
+|---|---|
+| `tools/utils/filesystem.py` (fix sandbox with `resolve()`) | `skills/files/tools.py` |
+| `tools/utils/weather.py`, `download.py`, `DuckDuckGoSearch.py`, `YoutubeSearch.py` | `skills/weather`, `skills/media`, `skills/web` |
+| `stt/WhisperSTT.py`, `tts/KokoroTTS.py` (fix `<think>` stripping, pass query) | `omen/voice/` |
+| `my_agents/*/prompt.py`, `config/agent_personality.py` (rewrite shorter) | `personas/*.md`, `skills/*/SKILL.md` |
+| `cli/art.py`, `config/ui_config.py` theme | `omen/tui/` |
+| `.env` keys, `config/agent_config.py` model settings | `omen/config.py` (one model block + extractor block) |
+
+Everything else (`my_agents/`, `agent_runtime.py`, `cli/v1.py`, `tools/*.py` wrappers, `tools/utils/scraper.py`, context manager, task/ui/computer/exec tools, Searx/Omni, Piper, Parakeet, `spider-py/`) is deleted in Phase 7 once the new TUI reaches parity.
+
+Workflow: build on a long-lived `rebuild` branch; `uv run omen` (new) and `uv run python main.py` (old) coexist until cut-over.
+
+---
+
 ## 1. Why the current harness struggles
 
 Prompt size is not the problem — fixed overhead is ~1–1.5k tokens per call. The problems are structural:
@@ -78,6 +103,7 @@ omen/
     compaction.py   # trigger + structured summary
   ui/
     components.py   # UIPayload models (single source of truth) → JSON Schema → TS types
+    extractor.py    # trigger rules + tiny JSON model (LFM2.5-350M) fills component props
   server.py         # FastAPI: POST /agent → AG-UI SSE; serves web build
   tui/              # Textual app + component renderers
   web/              # Vite + React + assistant-ui
@@ -201,7 +227,37 @@ class UIPayload(BaseModel):
 - Unknown `type` → render `text` as markdown. Invalid `show_*` args → validation error back to the model once, then fall back to text.
 - Later interop: the server can translate payloads to Google A2UI `updateComponents` without the model ever writing A2UI.
 
-### 5.4 Options considered
+### 5.4 Extractor sidecar: a tiny JSON model fills components
+
+Small main models are unreliable at authoring JSON; tiny specialised models with constrained decoding are not. So the main model mostly **talks**, and a sidecar model **structures**.
+
+**Component pipeline (per assistant turn):**
+
+1. **Trigger — no LLM.** Run only when (a) a tool with a known component mapping returned data (weather → weather card, search → link cards, list/CSV → table), (b) the main model ends with a one-token hint tag like `<ui:table>` / `<ui:choices>`, or (c) heuristics fire (markdown table, numbered options ending in "?", URLs).
+2. **Select — cheapest first.** Tool→component rule map → main model's hint tag → optional extractor classification call with `format={"enum": [..., "none"]}`. Never pick and fill in the same call.
+3. **Fill.** If the tool result is already structured (weather JSON), map it directly — no LLM. Otherwise call the extractor with the component's Pydantic schema.
+4. **Validate & render.** Pydantic validation → `UIPayload` → frontends. The text answer streams first; the component attaches when ready (~0.3–2 s). Extraction never blocks the chat answer.
+
+**Extractor setup:**
+
+- Model: **LFM2.5-350M** (Q8, `hf.co/LiquidAI/LFM2.5-350M-GGUF`, ~0.5 GB VRAM) via Ollama; escalate to **LFM2.5-1.2B-Instruct** if field accuracy is poor in evals. Licence: LFM Open v1.0 (free under $10M revenue — fine for personal use). Apache alternatives if needed: Osmosis-Structure-0.6B, Qwen3.5-0.8B (unverified for this task).
+- Always with **Ollama structured outputs**: `format=Model.model_json_schema()`, `temperature=0`, single turn, `keep_alive=-1` so it stays resident next to the main model. Grammar guarantees parseable JSON, not correct values — still validate.
+- Prompt: system = "Extract a `<component>` from CONTEXT. Use only values present in it. Use null or [] if absent. Schema: {…}"; user = `CONTEXT:` tool result first, then the assistant answer, truncated to ~2–4k tokens.
+- Schemas stay flat, with `enum` and `maxItems` caps (e.g. ≤ 20 rows). Strip `<think>` before parsing.
+- **Fallback chain:** validation fails → retry once with the error → escalate to 1.2B (or the main model with `format`) → give up and show the plain text / markdown table.
+
+**Evaluated and not chosen as the default:**
+
+| Model | Why not (yet) |
+|---|---|
+| Cactus **Needle** (25–121M, Apache-2.0, schema-constrained, confidence + empty-list output) | No GGUF; runs only in the Cactus runtime (pip `cactus-needle` / `--serve`), not Ollama/llama.cpp. Prototype later as the component **classifier** (step 2) — its confidence score and "nothing fits" output suit that job. |
+| LFM2-350M/1.2B-**Extract** | Deprecated by Liquid in favour of LFM2.5. |
+| NuExtract 2.0 / 3 | Best pure extraction quality, but 2–4B vision-language models (heavy for a sidecar) and template-based rather than JSON Schema. Candidate if LFM2.5 accuracy disappoints. |
+| xLAM-2 small, Arch-Function | Non-commercial / restrictive licences; function calling rather than extraction. |
+
+This makes `show_*` tools (§5.2) **optional**: keep them for models strong enough to call them, but the default path is tool-result mapping + hint tags + the extractor.
+
+### 5.5 Options considered
 
 | Option | Verdict |
 |---|---|
@@ -248,14 +304,12 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 
 ## 7. Phases
 
-### Phase 0 — Quick fixes to the current code (< 1 hour)
+### Phase 0 — Minimal fixes to the old app (only if you keep using it during the rebuild)
 
-Keeps today's Omen usable while the rebuild happens.
-
-- [ ] Sandbox: `full_path.resolve().is_relative_to(SANDBOX_PATH)` in one helper used by every filesystem op.
+- [ ] Sandbox: `full_path.resolve().is_relative_to(SANDBOX_PATH)` in one helper used by every filesystem op. (Do this regardless — it's a security hole.)
 - [ ] `RunConfig(tool_not_found_behavior="return_error_to_model")`; `MAX_TURNS` ≈ 10.
-- [ ] Fix prompt/tool name mismatches; drop "always scrape 3–5 sources" and the impossible subagent confirmation rule.
-- [ ] Fix `tools/__init__.py` `__all__`.
+- [ ] Skip everything else — the old code is deleted in Phase 7.
+- [ ] Create the `rebuild` branch and the empty `omen/` package with its own entry point (`[project.scripts] omen = "omen.__main__:main"`).
 
 ### Phase 1 — Core loop
 
@@ -284,7 +338,9 @@ Keeps today's Omen usable while the rebuild happens.
 ### Phase 4 — Event protocol and UI components
 
 - [ ] `core/events.py` mirroring AG-UI; `server.py` FastAPI `POST /agent` → SSE using `ag-ui-protocol` encoder.
-- [ ] `ui/components.py`: `UIPayload` + per-type props models; `details` for `search`, `read_url`, `weather`, `edit`, `read`; `ui` skill with `show_table`, `show_chart`, `show_choices`, `show_card`, `show_steps`.
+- [ ] `ui/components.py`: `UIPayload` + per-type props models; `details` for `search`, `read_url`, `weather`, `edit`, `read`.
+- [ ] `ui/extractor.py`: trigger rules, tool→component map, hint-tag parsing, LFM2.5-350M via Ollama `format` + fallback chain; eval field accuracy on a fixed set of contexts.
+- [ ] Optional `ui` skill with `show_table`, `show_chart`, `show_choices`, `show_card`, `show_steps` for stronger models.
 - [ ] Capability negotiation via `forwardedProps`; schema export + TS type generation.
 
 ### Phase 5 — TUI (Textual)
