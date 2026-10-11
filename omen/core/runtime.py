@@ -15,7 +15,7 @@ import asyncio
 import dataclasses
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 from agents import Agent, ItemHelpers, MaxTurnsExceeded, MessageQueue, RunConfig, Runner
 
@@ -35,18 +35,24 @@ from omen.core.events import (
     ToolCallEnd,
     ToolCallResult,
     ToolCallStart,
+    UserQuestion,
 )
 from omen.core.session import Session
 from omen.core.tools import classify_error
 
 
+async def _no_answer(question: str, options: list[str] | None) -> str:
+    raise RuntimeError("no user is available to answer")
+
+
 @dataclass
 class OmenContext:
-    """The SDK run context: what tools (e.g. delegation) can reach."""
+    """The SDK run context: what tools (delegation, skills, ask_user) can reach."""
 
     session: Session
     emit: Callable[[Event], None] = field(default=lambda event: None)
-    state: dict = field(default_factory=dict)
+    state: dict = field(default_factory=dict)  # persists across runs (loaded skills, ...)
+    ask: Callable[[str, list[str] | None], Awaitable[str]] = field(default=_no_answer)
 
 
 class EventMapper:
@@ -55,6 +61,7 @@ class EventMapper:
     def __init__(self) -> None:
         self.step = 0
         self._message_id: str | None = None  # Omen id of the text message being streamed
+        self._text = ""  # text of that message so far
         self._streamed_unmatched = 0  # streamed messages not yet matched to message_output_created
         self._tool_names: dict[str, str] = {}
 
@@ -76,7 +83,11 @@ class EventMapper:
             out: list[Event] = []
             if self._message_id is None:
                 self._message_id = uuid.uuid4().hex[:12]
+                self._text = ""
                 out.append(TextMessageStart(self._message_id))
+            self._text += data.delta
+            if "<tool_call>" in self._text:
+                return out  # a tool call written as text; OmenModel turns it into a real call
             out.append(TextMessageContent(self._message_id, data.delta))
             return out
         if kind in ("response.reasoning_summary_text.delta", "response.reasoning_text.delta"):
@@ -145,15 +156,29 @@ class Runtime:
         *,
         max_turns: int = MAX_TURNS,
         run_config: RunConfig | None = None,
+        prepare: Callable[[str, dict], list[Event]] | None = None,
+        ask_handler: Callable[[str, list[str] | None], Awaitable[str]] | None = None,
     ):
+        """
+        Args:
+            prepare: called with (user message, state) before each run, e.g. the skill
+                pre-router; the events it returns are yielded after RUN_STARTED.
+            ask_handler: answers `ask_user` questions programmatically (evals, scripts).
+                Without it, questions are emitted as USER_QUESTION and wait for `answer()`.
+        """
         self.agent = agent
         self.session = session or Session()
         self.max_turns = max_turns
         self.run_config = run_config or RunConfig(tracing_disabled=True)
+        self.prepare = prepare
+        self.ask_handler = ask_handler
         self.queue = MessageQueue()
+        self.state: dict = {}
         self.running = False
         self._result: Any = None
         self._aborted = False
+        self._question: tuple[UserQuestion, asyncio.Future] | None = None
+        self._emit: Callable[[Event], None] = lambda event: None
 
     def send(self, text: str) -> None:
         """Queue a user message while a run is in progress (delivered after the current turn)."""
@@ -164,18 +189,45 @@ class Runtime:
         if self._result is not None:
             self._result.cancel(mode="immediate")
 
+    @property
+    def pending_question(self) -> UserQuestion | None:
+        return self._question[0] if self._question else None
+
+    def answer(self, text: str) -> bool:
+        """Answer the pending `ask_user` question. Returns False if nothing is pending."""
+        if self._question is None or self._question[1].done():
+            return False
+        self._question[1].set_result(text)
+        return True
+
+    async def _ask(self, question: str, options: list[str] | None) -> str:
+        if self.ask_handler is not None:
+            return await self.ask_handler(question, options)
+        event = UserQuestion(uuid.uuid4().hex[:12], question, options)
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._question = (event, future)
+        self._emit(event)
+        try:
+            return await future
+        finally:
+            self._question = None
+
     async def run(self, user_input: str) -> AsyncIterator[Event]:
         run_id = uuid.uuid4().hex[:12]
         self.running = True
         self._aborted = False
         out: asyncio.Queue = asyncio.Queue()
-        context = OmenContext(session=self.session, emit=out.put_nowait)
+        self._emit = out.put_nowait
+        context = OmenContext(session=self.session, emit=out.put_nowait, state=self.state, ask=self._ask)
         config = dataclasses.replace(
             self.run_config,
             message_queue=self.queue,
             tool_not_found_behavior="return_error_to_model",
         )
         yield RunStarted(run_id)
+        self.state["user_message"] = user_input
+        for event in self.prepare(user_input, self.state) if self.prepare else []:
+            yield event
 
         reason = "done"
         next_input: str | list[dict] = user_input

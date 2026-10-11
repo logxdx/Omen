@@ -91,15 +91,31 @@ def tool(
                 except Exception as e:
                     return failed(e)
 
-        return function_tool(
+        built = function_tool(
             wrapper,
             name_override=tool_name,
             strict_mode=False,
             custom_data_extractor=extract_custom_data,
             failure_error_function=_invalid_arguments,
         )
+        built.params_json_schema = clean_schema(built.params_json_schema)
+        return built
 
     return build(fn) if fn is not None else build
+
+
+def clean_schema(schema: Any) -> Any:
+    """Drop what small models don't need: `title`s, and `anyOf [X, null]` → X (the field stays optional)."""
+    if isinstance(schema, dict):
+        any_of = schema.get("anyOf")
+        if isinstance(any_of, list) and len(any_of) == 2:
+            non_null = [s for s in any_of if s.get("type") != "null"]
+            if len(non_null) == 1:
+                schema = {**{k: v for k, v in schema.items() if k != "anyOf"}, **non_null[0]}
+        return {k: clean_schema(v) for k, v in schema.items() if k != "title"}
+    if isinstance(schema, list):
+        return [clean_schema(s) for s in schema]
+    return schema
 
 
 def extract_custom_data(data: FunctionToolCustomDataContext) -> dict[str, Any] | None:

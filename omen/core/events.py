@@ -108,6 +108,16 @@ class Custom(Event):
 
 
 @dataclass
+class UserQuestion(Event):
+    """The agent is waiting for the user to answer (frontends call `Runtime.answer`)."""
+
+    type: ClassVar[str] = "USER_QUESTION"
+    question_id: str
+    question: str
+    options: list[str] | None = None
+
+
+@dataclass
 class SubagentEvent(Event):
     """An event from a delegated persona's run, nested under the delegating tool call."""
 

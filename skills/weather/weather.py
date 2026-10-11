@@ -2,6 +2,16 @@ import json
 import requests
 
 
+# Raw wttr.in data (current_condition, weather[] forecast)
+def fetch_weather_json(city: str) -> dict:
+    city_encoded = city.replace(" ", "+")
+    base_url = f"http://wttr.in/{city_encoded}?format=j1"
+
+    response = requests.get(base_url, timeout=5)
+    response.raise_for_status()
+    return response.json()
+
+
 # Get current weather
 def get_weather(city: str) -> str:
     """
@@ -18,13 +28,7 @@ def get_weather(city: str) -> str:
         return error_msg
 
     try:
-        city_encoded = city.replace(" ", "+")
-        base_url = f"http://wttr.in/{city_encoded}?format=j1"
-
-        response = requests.get(base_url, timeout=5)
-        response.raise_for_status()
-
-        data = response.json()
+        data = fetch_weather_json(city)
 
     except requests.exceptions.RequestException as e:
         error_msg = f"Error fetching weather data: {str(e)}"

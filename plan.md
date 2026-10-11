@@ -338,13 +338,18 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 
 ### Phase 2 — Skills and core tools
 
-- [ ] `core/skills.py`: discover `skills/*/SKILL.md`, parse frontmatter, `load_skill`, per-turn tool exposure, `/skill:name`, `/reload`.
-- [ ] Pre-router (keyword first; embeddings if hit rate is poor in evals).
-- [ ] Port tools into skills:
-  - `web`: `search` (one backend, 5 results) + `read_url(url, query=None, max_chars=3500)` on crawlberg — `fit_content`, block detection returning one-line `BLOCKED (cloudflare)` / `NOT_FOUND` / `TIMEOUT` / `JS_REQUIRED`, JS render only when `js_render_hint`, query → BM25 paragraph ranking, no LLM call.
-  - `files`: `list`, `read(path, offset, limit)` plain text, `write`, `edit` (exact match), `grep` (lines, capped); destructive ops go through `ask_user`.
-  - `memory`, `weather`, `media`, `resume` (instructions + templates).
-- [ ] Automatic memory recall into the system prompt.
+- [x] `core/skills.py`: discover `skills/*/SKILL.md` (frontmatter: name, description, keywords) + optional `tools.py` (relative imports work); skill tools registered up front but gated by SDK `is_enabled` until loaded; `load_skill`; loaded skills' instructions go into the system prompt; up to 3 stay loaded across turns (LRU); `/skills`, `/skill name`, `/reload`. User skills in `~/.omen/skills` override repo skills.
+- [x] Keyword pre-router (`Assistant.prepare`) auto-loads the best-matching skill before each run; `--no-router` / eval `router: false` to test explicit `load_skill`.
+- [x] Core tools (always visible): `load_skill`, `remember`, `ask_user` (frontends answer via `Runtime.answer()`; evals via `ask_handler`).
+- [x] Skills (copied helpers adapted minimally: `OMEN_SANDBOX` override, `fetch_weather_json` split, yt-dlp quality fix):
+  - `web`: `search` (DuckDuckGo) + `read_url` on crawlberg — metadata/link-noise cleaning, BM25 paragraph ranking with `query`, one-line `BLOCKED (vendor)` / `NOT_FOUND` / `TIMEOUT` / `JS_REQUIRED` / `EMPTY` using the scraper-api's `blocking.py` (copied unchanged), ~3.5k char cap, no LLM call.
+  - `files`: `list_files`, `read_file(path, offset, limit)` plain text, `write_file` (confirms overwrite), `append_to_file`, `edit_file` (unique exact match), `grep` (lines, case/punctuation-insensitive fallback), `delete_file` (confirms); sandboxed with the resolved-path check.
+  - `weather` (wttr.in, weather card details), `media` (`search_youtube`, `download_audio`, `download_video`).
+- [x] Memory: `remember` → `~/.omen/memory/facts.jsonl`; relevant facts recalled into the system prompt every turn.
+- [x] `OmenModel` (LitellmModel subclass) repairs small-model output: answer only in the reasoning channel → visible answer; `<tool_call>` text (JSON or GLM `<arg_key>` style) → real function calls; repetition loops → short "got stuck" reply instead of garbage.
+- [x] Tests: 72 unit tests. Evals: 20 tasks (8 full-assistant with real skills, 2 live-network opt-in via `OMEN_EVAL_NETWORK=1`). **Local `ling3`: 38/40 over 2 repeats, 100% valid tool calls; all files/memory/weather/skill-loading tasks pass.** Remaining misses: one live-web run where the model looped in its reasoning (now shown as "got stuck"), one flaky two-tool chain.
+- [ ] `resume` skill → moved to Phase 3 as the resume-writer persona (instructions + templates).
+- [ ] `read_url` ranking favours short image captions on some pages; down-weight very short paragraphs.
 
 ### Phase 3 — Personas and delegation
 

@@ -6,7 +6,7 @@
 #   expect_args      per tool, argument values that must appear (case-insensitive substring)
 #   expect_answer    substrings that must all appear in the final answer (case-insensitive)
 #   expect_answer_any  at least one of these substrings must appear
-#   max_steps        LLM steps allowed (default 4)
+#   max_steps        LLM steps allowed (default 4; 6 for agent: omen)
 #   agent            "delegator": main agent only has `delegate` to a "researcher" persona
 
 - id: weather_simple
@@ -79,3 +79,63 @@
   prompt: Get the researcher to look up Priya's phone number.
   expect_tools: [delegate]
   expect_answer: ["98200"]
+
+# --- full assistant (agent: omen): real skills, fresh sandbox + memory per task, confirmations answered "yes" ---
+#   files: {path: content} seeds the sandbox; expect_files: {path: substring} checks the result
+#   router: false disables the keyword pre-router (the model must call load_skill itself)
+#   network: true tasks hit live services and run only with OMEN_EVAL_NETWORK=1
+
+- id: omen_write_note
+  agent: omen
+  prompt: Create a note at notes/shopping.md listing eggs and bread.
+  expect_tools: [write_file]
+  expect_files: {notes/shopping.md: eggs}
+
+- id: omen_read_note
+  agent: omen
+  files: {notes/plans.md: "Trip to Goa on 12 December. Book the train by Friday."}
+  prompt: What does my notes/plans.md file say?
+  expect_tools: [read_file]
+  expect_answer: [goa]
+
+- id: omen_edit_note
+  agent: omen
+  files: {notes/todo.md: "- buy milk\n- call Anna\n- pay rent\n"}
+  prompt: In notes/todo.md, change "call Anna" to "call Anna at 6pm".
+  expect_tools: [edit_file]
+  expect_files: {notes/todo.md: call Anna at 6pm}
+  max_steps: 5
+
+- id: omen_find_in_files
+  agent: omen
+  files: {notes/a.md: "Groceries: milk, rice", notes/b.md: "Wi-Fi password for the cabin: pinecone-42", notes/c.md: "Dentist on Friday"}
+  prompt: Which of my notes has the cabin wifi password, and what is it?
+  expect_answer: [pinecone-42]
+  max_steps: 5
+
+- id: omen_remember
+  agent: omen
+  prompt: Please remember that my sister's birthday is on May 3.
+  expect_tools: [remember]
+  expect_args: {remember: {fact: may 3}}
+
+- id: omen_load_skill_without_router
+  agent: omen
+  router: false
+  prompt: Create a file called hello.txt that says hi.
+  expect_tools: [load_skill, write_file]
+  expect_files: {hello.txt: hi}
+  max_steps: 5
+
+- id: omen_weather_live
+  agent: omen
+  network: true
+  prompt: What's the weather in Pune right now?
+  expect_tools: [get_weather]
+
+- id: omen_web_live
+  agent: omen
+  network: true
+  prompt: Search the web for what crawlberg is and tell me in one sentence.
+  expect_tools: [search]
+  max_steps: 5

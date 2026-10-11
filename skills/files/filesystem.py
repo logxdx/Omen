@@ -11,7 +11,7 @@ class AccessDeniedError(Exception):
     pass
 
 
-SANDBOX_PATH = Path(__file__).resolve().parent.parent.parent / "root"
+SANDBOX_PATH = Path(os.environ.get("OMEN_SANDBOX") or Path(__file__).resolve().parent.parent.parent / "root").resolve()
 SANDBOX_PATH.mkdir(parents=True, exist_ok=True)
 
 

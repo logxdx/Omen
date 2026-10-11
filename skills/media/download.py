@@ -1,7 +1,8 @@
+import os
 import yt_dlp
 from pathlib import Path
 
-SANDBOX_DIR = Path(__file__).resolve().parent.parent.parent / "root"
+SANDBOX_DIR = Path(os.environ.get("OMEN_SANDBOX") or Path(__file__).resolve().parent.parent.parent / "root").resolve()
 
 DOWNLOADS_DIR = SANDBOX_DIR / "downloads"
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -16,7 +17,7 @@ AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 def download_video(
     url: str,
     output_path: str | Path = VIDEO_DIR,
-    quality: str = "1080p",
+    quality: str = "1080",
     format: str = "mp4/mkv",
 ) -> str:
     """

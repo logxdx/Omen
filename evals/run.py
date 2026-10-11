@@ -9,6 +9,9 @@ harness changes.
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import tempfile
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -19,6 +22,7 @@ import yaml
 import omen  # noqa: F401  (puts the forked SDK on the path before `agents` is imported)
 from agents import Agent, Model
 from evals.tools import EVAL_TOOLS, lookup_contact, search_notes
+from omen.assistant import build_assistant
 from omen.config import main_model
 from omen.core import Runtime, delegate_tool
 from omen.core.events import (
@@ -53,6 +57,31 @@ class TaskResult:
     finish: str = ""
 
 
+async def _always_yes(question: str, options: list[str] | None) -> str:
+    return "yes"
+
+
+def build_omen(task: dict, model: Model, workdir: Path) -> Runtime:
+    """The real assistant (all repo skills) in a fresh sandbox and memory under `workdir`."""
+    sandbox = workdir / "sandbox"
+    for rel, content in (task.get("files") or {}).items():
+        (sandbox / rel).parent.mkdir(parents=True, exist_ok=True)
+        (sandbox / rel).write_text(content)
+    sandbox.mkdir(parents=True, exist_ok=True)
+    os.environ["OMEN_SANDBOX"] = str(sandbox)  # read when skills are imported
+    assistant = build_assistant(
+        model=model,
+        memory_path=workdir / "facts.jsonl",
+        use_router=task.get("router", True),
+    )
+    return Runtime(
+        assistant.agent,
+        max_turns=task.get("max_steps", 6),
+        prepare=assistant.prepare,
+        ask_handler=_always_yes,
+    )
+
+
 def build_agent(task: dict, model: Model) -> Agent:
     settings = make_settings(main_model())
     if task.get("agent") == "delegator":
@@ -71,8 +100,11 @@ def build_agent(task: dict, model: Model) -> Agent:
 
 
 async def run_task(task: dict, model: Model) -> TaskResult:
-    agent = build_agent(task, model)
-    runtime = Runtime(agent, max_turns=task.get("max_steps", 4))
+    workdir = Path(tempfile.mkdtemp(prefix="omen-eval-"))
+    if task.get("agent") == "omen":
+        runtime = build_omen(task, model, workdir)
+    else:
+        runtime = Runtime(build_agent(task, model), max_turns=task.get("max_steps", 4))
     result = TaskResult(id=task["id"], passed=False)
     args_by_id: dict[str, str] = {}
     names_by_id: dict[str, str] = {}
@@ -107,6 +139,13 @@ async def run_task(task: dict, model: Model) -> TaskResult:
 
     result.seconds = round(time.perf_counter() - started, 2)
     result.failures += check(task, result)
+    for rel, needle in (task.get("expect_files") or {}).items():
+        path = workdir / "sandbox" / rel
+        if not path.exists():
+            result.failures.append(f"file {rel} was not created")
+        elif str(needle).lower() not in path.read_text().lower():
+            result.failures.append(f"file {rel} lacks '{needle}'")
+    shutil.rmtree(workdir, ignore_errors=True)
     result.passed = not result.failures
     return result
 
@@ -148,6 +187,8 @@ async def run_suite(only: list[str] | None = None, repeat: int = 1, model: Model
     tasks = yaml.safe_load((HERE / "tasks.yaml").read_text())
     if only:
         tasks = [t for t in tasks if t["id"] in only]
+    if not os.environ.get("OMEN_EVAL_NETWORK"):
+        tasks = [t for t in tasks if not t.get("network")]  # live web/weather tasks are opt-in
     config = main_model()
     model = model or make_model(config)
     print(f"model: {config.model} @ {config.base_url}   tasks: {len(tasks)} × {repeat}\n")
