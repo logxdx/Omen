@@ -146,7 +146,7 @@ class RuntimeUITests(unittest.IsolatedAsyncioTestCase):
         model.add_multiple_turn_outputs([[get_text_message(REPLY_WITH_TABLE + "\n<ui:card>")]])
         complete, _ = fake_complete('{"title": "Prices", "body": "Eggs and bread."}')
 
-        async def components(text, ui):
+        async def components(text, ui, request=""):
             return await components_for(text, Extractor(complete=complete), ui)
 
         rt = Runtime(Agent(name="a", model=model), components=components)
@@ -185,3 +185,17 @@ class StreamingMarkerTests(unittest.TestCase):
     def test_lookalike_tail_is_flushed(self):
         visible, _ = self.run_deltas(["a < b and x <", "u"])
         self.assertEqual(visible, "a < b and x <u")
+
+
+class ChartRequestTests(unittest.IsolatedAsyncioTestCase):
+    async def test_asking_for_a_chart_extracts_one_without_a_hint(self):
+        complete, calls = fake_complete('{"title": "Spending", "kind": "bar", "labels": ["food", "rent"], "values": [1, 2]}')
+        found = await components_for("Food is 1, rent is 2.", Extractor(complete=complete), {"chart"}, "Chart my spending: food 1, rent 2")
+        self.assertEqual([p.type for p in found], ["chart"])
+        self.assertIn("Chart my spending", calls[0]["messages"][1]["content"])  # the request is part of the context
+
+    async def test_no_chart_without_a_request_or_numbers(self):
+        complete, calls = fake_complete("{}")
+        self.assertEqual(await components_for("Hello there.", Extractor(complete=complete), {"chart"}, "hi"), [])
+        self.assertEqual(await components_for("Sure.", Extractor(complete=complete), {"chart"}, "draw a chart of my mood"), [])
+        self.assertEqual(calls, [])

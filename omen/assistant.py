@@ -24,6 +24,7 @@ from omen.core.memory import Memory
 from omen.core.models import make_model, make_settings
 from omen.core.personas import Persona, discover
 from omen.core.skills import Skills, loaded
+from omen.ui.extract import CHART_REQUEST
 
 GUIDANCE = (
     "Answer in plain sentences. Use a tool only when you need information or an action you can't do "
@@ -39,13 +40,20 @@ DELEGATION = (
 UI_HINTS = (
     "The user's screen can show components. Write tables in markdown. ",
     {
-        "chart": "If numbers would read better as a chart, end your reply with <ui:chart> on its own line.",
+        "chart": (
+            "If numbers would read better as a chart, or the user asks for a chart, list the numbers in your reply "
+            "and end it with <ui:chart> on its own line; the screen draws it. Never create files for charts."
+        ),
         "card": "For a short summary of one thing (a place, product, person), end your reply with <ui:card> on its own line.",
     },
 )
 CONTEXT_NOTE = (
     "A user message may start with a <context> block (current time, things you know about the user, "
     "skill instructions). Use it silently; don't repeat it back."
+)
+CHART_NOTE = (
+    "This message asks for a chart. The screen draws it from your reply: answer with the numbers as a "
+    "short list (label: value) and end with <ui:chart>. Don't call tools, write files or draw it in text."
 )
 MEMORY_SHOWN_KEY = "memory_shown"
 FALLBACK_PERSONA = Persona(name="assistant", description="Default assistant.", body="You are a concise personal assistant.", path=Path())
@@ -84,6 +92,8 @@ class Assistant:
             shown.extend(f["id"] for f in facts)
             sections.append("Known about the user:\n" + "\n".join(f"- {f['fact']}" for f in facts))
         sections.extend(self.skills.pending_instructions(state))
+        if "chart" in (state.get("ui_hints") or []) and CHART_REQUEST.search(text):
+            sections.append(CHART_NOTE)  # small models otherwise draw ASCII charts into files
         return "<context>\n" + "\n\n".join(sections) + "\n</context>"
 
     def prepare(self, text: str, state: dict) -> list[Event]:

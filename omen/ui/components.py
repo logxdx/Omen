@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated, Any, Literal, Union, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
 
 logger = logging.getLogger(__name__)
 VERSION = 1
@@ -167,8 +167,14 @@ class Chart(Component):
     type: Literal["chart"]
     title: str | None = None
     kind: Literal["bar", "line"] = "bar"
-    labels: list[str] = Field(max_length=30)
-    values: list[float] = Field(max_length=30)
+    labels: list[str] = Field(max_length=30, description="One label per value: the item, category or date each number belongs to.")
+    values: list[float] = Field(max_length=30, description="The numbers, in the same order as labels.")
+
+    @model_validator(mode="after")
+    def _one_label_per_value(self) -> "Chart":
+        if len(self.labels) != len(self.values):
+            raise ValueError(f"{len(self.labels)} labels for {len(self.values)} values; give one label per value")
+        return self
 
 
 class Card(Component):

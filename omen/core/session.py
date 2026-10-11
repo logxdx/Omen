@@ -10,6 +10,8 @@ Entry types:
 - "item": an SDK input item (message, function_call, function_call_output, ...).
   Tool outputs may carry UI details under `_agents_custom_data` (fork patch).
 - "label": names an entry; never becomes the leaf.
+- "ui": a component extracted from an assistant reply (`{target, component}`), for
+  re-rendering; never becomes the leaf, so the model never sees it.
 
 Delegation sub-runs are recorded with `fork()` as *detached* branches: they hang
 off the main conversation but never become its leaf, so the main agent never
@@ -28,7 +30,7 @@ from typing import Any
 from agents.memory import SessionSettings
 
 CUSTOM_DATA_KEY = "_agents_custom_data"
-_SIDE_TYPES = {"label"}
+_SIDE_TYPES = {"label", "ui"}
 
 
 class Session:
@@ -160,6 +162,23 @@ class Session:
             for e in self.entries.values() if e["type"] == "label"
         }
 
+    def add_reply_component(self, reply_text: str, component: dict) -> str | None:
+        """Attach a UI component to the latest assistant message with this text on the current branch."""
+        for entry in reversed(self.path_to()):
+            data = entry["data"]
+            if entry["type"] == "item" and isinstance(data, dict) and data.get("role") == "assistant":
+                if message_text(data) == reply_text:
+                    return self.append("ui", {"target": entry["id"], "component": component})
+        return None
+
+    def reply_components(self) -> dict[str, list[dict]]:
+        """{assistant message entry id: [components]}."""
+        out: dict[str, list[dict]] = {}
+        for e in self.entries.values():
+            if e["type"] == "ui":
+                out.setdefault(e["data"]["target"], []).append(e["data"]["component"])
+        return out
+
     def ui_details(self) -> dict[str, Any]:
         """{tool call_id: UI details} along the current branch, for re-rendering components."""
         out = {}
@@ -175,6 +194,14 @@ class Session:
     @staticmethod
     def _is_main(entry: dict) -> bool:
         return entry["type"] not in _SIDE_TYPES and not entry.get("detached")
+
+
+def message_text(item: dict) -> str:
+    """The text of a message item (string content or a list of text parts)."""
+    content = item.get("content")
+    if isinstance(content, list):
+        return "".join(part.get("text", "") for part in content if isinstance(part, dict))
+    return content or ""
 
 
 def _plain(item: Any) -> Any:

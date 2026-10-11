@@ -1,0 +1,4 @@
+node_modules/
+# The root .gitignore drops dist/ and *test*; the built UI ships so `omen serve` works without npm.
+!dist/
+!*.test.ts

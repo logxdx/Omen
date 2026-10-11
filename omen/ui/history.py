@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 
-from omen.core.session import CUSTOM_DATA_KEY, Session
+from omen.core.session import CUSTOM_DATA_KEY, Session, message_text
 from omen.ui.components import payload
+from omen.ui.extract import strip_hints
 
 
 _CONTEXT = re.compile(r"^\s*<context>.*?</context>\s*", re.DOTALL)
@@ -19,23 +20,23 @@ def strip_context(text: str) -> str:
 def history(session: Session, entry_id: str | None = None) -> list[dict]:
     """Messages along the current branch (or up to `entry_id`); tool results carry their UI payloads.
 
-    Each message: {"role": "user"|"assistant", "content"} or
+    Each message: {"role": "user", "content"} or {"role": "assistant", "content", "components"} or
     {"role": "tool_call", "id", "name", "arguments"} or
     {"role": "tool", "id", "name", "content", "ui"}.
     """
     out: list[dict] = []
     names: dict[str, str] = {}
-    for item in session.items(entry_id):
-        if not isinstance(item, dict):
+    components = session.reply_components()
+    for entry in session.path_to(entry_id):
+        item = entry["data"]
+        if entry["type"] != "item" or not isinstance(item, dict):
             continue
         role, kind = item.get("role"), item.get("type")
-        if role in ("user", "assistant") and kind in (None, "message"):
-            content = item.get("content")
-            if isinstance(content, list):
-                content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-            if role == "user":
-                content = strip_context(content or "")
-            out.append({"role": role, "content": content or ""})
+        if role == "user" and kind in (None, "message"):
+            out.append({"role": role, "content": strip_context(message_text(item))})
+        elif role == "assistant" and kind in (None, "message"):
+            text = strip_hints(message_text(item))[0]  # the live stream hides <ui:…> tags too
+            out.append({"role": role, "content": text, "components": components.get(entry["id"], [])})
         elif kind == "function_call":
             names[item.get("call_id", "")] = item.get("name", "")
             out.append({"role": "tool_call", "id": item.get("call_id"), "name": item.get("name"), "arguments": item.get("arguments")})

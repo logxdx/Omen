@@ -400,8 +400,13 @@ llama.cpp reuses its KV cache only for an unchanged token prefix; the tool list 
 
 ### Phase 6 — Web UI
 
-- [ ] Vite + React + assistant-ui + `@assistant-ui/react-ag-ui`; tool UIs per payload type.
-- [ ] Sessions/branches sidebar, persona picker; build step bundled into `omen serve`.
+- [x] `web/`: Vite 8 + React 19 + TypeScript, no chat framework: `src/agui.ts` is a typed reducer from AG-UI events to transcript blocks (user, assistant, reasoning, tool, component, question, subagent, note, error), an SSE parser over `fetch`, and `fromHistory()` for saved threads. Chosen over assistant-ui to keep `ACTIVITY_SNAPSHOT` components, questions and nested subagent runs fully under our control with one small dependency-free module.
+- [x] `src/components/registry.tsx`: a React renderer for all 18 component types (SVG bar/line chart, sortable table, weather, files, diff, choices, …); invalid/unknown payloads fall back to their text. The client advertises what it renders via `forwardedProps.omen.components`. Types come from the Pydantic models: `python -m omen schema --ts > web/src/generated/components.ts` (`omen/ui/tsgen.py`).
+- [x] Sidebar (threads, persona picker, tokens + prompt-cache rate), composer (Enter sends; while running it steers via the message queue; Stop aborts), questions answered inline, delegated personas as nested blocks. `npm run build` → `web/dist`, committed and served by `omen serve` at `/` (API routes win).
+- [x] Reply components persist: extracted charts/cards are stored as `ui` side entries on the session (never the leaf, never sent to the model) and come back in `GET /threads/{id}` → reloading a thread (web or TUI) re-renders them. History strips `<ui:…>` hint tags like the live stream does.
+- [x] Charts on request: asking for a chart/graph/plot with numbers adds a one-line note to that message's `<context>` block (not the frozen system prompt) and makes the extractor build a chart even if the model forgets `<ui:chart>`; the server extracts only what markdown can't show (chart, card).
+- [x] Found live and fixed: ling3 drew ASCII charts into files and once looped `█` until llama.cpp rejected the tool call (500 "Failed to parse tool call arguments") → `OmenModel` retries that once; the extractor reasoned past `max_tokens` (empty JSON, `finish_reason=length`) → local extractor calls send `chat_template_kwargs.enable_thinking=false` (`OMEN_EXTRACTOR_THINKING=1` to keep it) and now forward `extra_body` (side slot); chart labels/values must have equal length (one retry with the error).
+- [x] Live on `ling3` (headless Chromium): weather card, file components, two chart requests rendered, thread reload keeps the chart, no console errors, cache 95–97 %. Extractor eval 12/12 (≈0.3–0.6 s per call, was 2–5 s). Tests: 122 Python + 9 vitest.
 
 ### Phase 7 — Voice, compaction, cleanup
 

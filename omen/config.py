@@ -65,6 +65,9 @@ def extractor_model() -> ModelConfig:
     """Model that fills UI components from text (JSON schema mode). Defaults to the main model."""
     main = main_model()
     extra = {k: v for k, v in main.extra_body.items() if k != "id_slot"}
+    if os.getenv("OMEN_LOCAL", "1") != "0" and os.getenv("OMEN_EXTRACTOR_THINKING", "0") == "0":
+        # Thinking models (ling3, Qwen3) can reason past max_tokens before writing any JSON.
+        extra.setdefault("chat_template_kwargs", {"enable_thinking": False})
     return side_config(ModelConfig(
         model=os.getenv("OMEN_EXTRACTOR_MODEL", main.model),
         base_url=os.getenv("OMEN_EXTRACTOR_BASE_URL", main.base_url or ""),

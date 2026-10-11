@@ -79,6 +79,8 @@ class ServerTests(unittest.TestCase):
             )
 
         async def no_llm(messages, schema):
+            if schema["name"] == "chart":
+                return '{"title": "Spending", "kind": "bar", "labels": ["food", "rent"], "values": [4200, 9000]}'
             return "{}"
 
         app = create_app(sessions_dir=root / "sessions", assistant_factory=factory, extractor=Extractor(complete=no_llm))
@@ -113,14 +115,26 @@ class ServerTests(unittest.TestCase):
         activities = [e for e in events if e["type"] == "ACTIVITY_SNAPSHOT"]
         kinds = [a["activityType"] for a in activities]
         self.assertIn("alpha", kinds)  # use_alpha's details
-        self.assertIn("table", kinds)  # extracted from the reply
-        table = [a for a in activities if a["activityType"] == "table"][0]
-        self.assertEqual(table["content"]["props"]["rows"], [["1", "2"]])
+        self.assertNotIn("table", kinds)  # the reply's markdown already shows the table
 
         history = self.client.get("/threads/thread-1").json()["messages"]
         tool = [m for m in history if m["role"] == "tool" and m["name"] == "use_alpha"][0]
         self.assertEqual(tool["ui"]["type"], "alpha")
         self.assertIn("thread-1", [t["id"] for t in self.client.get("/threads").json()])
+
+    def test_chart_request_yields_a_chart_without_a_hint_tag(self):
+        self.model.add_multiple_turn_outputs([[get_text_message("Food is 4200 and rent is 9000.\n<ui:chart>")], [get_text_message("ok")]])
+        events = self.run_agent("My spending: food 4200, rent 9000. Show it as a chart.")
+        charts = [e for e in events if e["type"] == "ACTIVITY_SNAPSHOT" and e["activityType"] == "chart"]
+        self.assertEqual(charts[0]["content"]["props"]["values"], [4200.0, 9000.0])
+
+        # Saved with the reply for re-rendering, without the hint tag, and never sent back to the model.
+        history = self.client.get("/threads/thread-1").json()["messages"]
+        reply = [m for m in history if m["role"] == "assistant"][0]
+        self.assertEqual(reply["content"], "Food is 4200 and rent is 9000.")
+        self.assertEqual(reply["components"][0]["type"], "chart")
+        self.run_agent("thanks")
+        self.assertNotIn("4200.0", json.dumps(self.model.last_turn_args["input"]))
 
     def test_capabilities_limit_components(self):
         self.model.add_multiple_turn_outputs([[get_text_message("| A | B |\n|---|---|\n| 1 | 2 |")]])

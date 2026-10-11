@@ -183,7 +183,8 @@ def main() -> None:
     serve_p = sub.add_parser("serve", help="AG-UI server for the web UI")
     serve_p.add_argument("--host", default="127.0.0.1")
     serve_p.add_argument("--port", type=int, default=8765)
-    sub.add_parser("schema", help="print the UI component JSON Schema")
+    schema_p = sub.add_parser("schema", help="print the UI component JSON Schema")
+    schema_p.add_argument("--ts", action="store_true", help="print TypeScript types instead")
     eval_p = sub.add_parser("eval", help="run the small-model eval suite")
     eval_p.add_argument("--only", nargs="*", help="task ids to run")
     eval_p.add_argument("--repeat", type=int, default=1, help="runs per task")
@@ -196,6 +197,11 @@ def main() -> None:
         serve(args.host, args.port)
         return
     if args.command == "schema":
+        if args.ts:
+            from omen.ui.tsgen import typescript
+
+            print(typescript(), end="")
+            return
         import json
 
         from omen.ui.components import json_schema

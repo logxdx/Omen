@@ -84,6 +84,8 @@ class EmptyRetryTests(unittest.IsolatedAsyncioTestCase):
             output = responses[len(calls)]
             calls.append(1)
             yield NS(type="response.created")
+            if isinstance(output, Exception):
+                raise output
             yield NS(type="response.completed", response=NS(output=list(output)))
 
         with mock.patch.object(LitellmModel, "stream_response", fake_stream):
@@ -101,6 +103,16 @@ class EmptyRetryTests(unittest.IsolatedAsyncioTestCase):
     async def test_normal_response_is_not_retried(self):
         events, calls = await self.collect([[_message("Hi")], [_message("never")]])
         self.assertEqual(len(calls), 1)
+
+    async def test_unparseable_tool_call_is_retried_once(self):
+        bad = RuntimeError("OpenAIException - Failed to parse tool call arguments as JSON")
+        events, calls = await self.collect([bad, [_message("Food: 4200")]])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([e for e in events if e.type == "response.completed"][0].response.output[0].content[0].text, "Food: 4200")
+        with self.assertRaises(RuntimeError):
+            await self.collect([bad, bad])
+        with self.assertRaises(ConnectionError):  # other errors are not retried
+            await self.collect([ConnectionError("down"), [_message("never")]])
 
     def test_is_empty(self):
         from omen.core.models import is_empty

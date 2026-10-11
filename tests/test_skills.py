@@ -134,6 +134,26 @@ class SkillsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Skill 'alpha' instructions", last_user)
         self.assertNotIn("Skill 'beta' instructions", last_user)
 
+    async def test_chart_request_adds_a_note_to_the_context_only(self):
+        from omen.assistant import CHART_NOTE
+
+        model = FakeModel()
+        model.add_multiple_turn_outputs([[get_text_message("Food: 1")], [get_text_message("hi")], [get_text_message("x")]])
+        assistant = build_assistant(model=model, skills_dirs=[self.root], personas_dirs=[], memory_path=self.root / "m.jsonl")
+        async def no_components(text, ui, request=""):
+            return []
+
+        rt = Runtime.for_assistant(assistant, components=no_components)
+        [e async for e in rt.run("Chart my spending: food 1")]
+        self.assertIn(CHART_NOTE, model.last_turn_args["input"][-1]["content"])
+        system = model.last_turn_args["system_instructions"]
+        [e async for e in rt.run("hello")]
+        self.assertNotIn(CHART_NOTE, model.last_turn_args["input"][-1]["content"])
+        self.assertEqual(model.last_turn_args["system_instructions"], system)
+        rt.ui = {"table"}  # the client can't draw charts
+        [e async for e in rt.run("plot this: 1, 2")]
+        self.assertNotIn(CHART_NOTE, model.last_turn_args["input"][-1]["content"])
+
     async def test_unknown_skill_is_an_actionable_error(self):
         model = FakeModel()
         model.add_multiple_turn_outputs([

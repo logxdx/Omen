@@ -30,7 +30,7 @@ from omen.core import events as ev
 from omen.core.skills import loaded
 from omen.tui.art import omen as OMEN_ART
 from omen.tui.render import RENDERERS, render
-from omen.ui.extract import Extractor, components_for
+from omen.ui.extract import TEXT_COMPONENTS, Extractor, components_for
 from omen.ui.history import history
 
 HELP = (
@@ -39,7 +39,6 @@ HELP = (
 )
 
 
-TEXT_COMPONENTS = {"chart", "card"}  # components extracted from replies in the TUI
 
 
 class Plain(Static):
@@ -306,9 +305,9 @@ class OmenApp(App):
         self.usage: dict = {}
         self.transcript: Transcript | None = None
 
-    async def _components(self, text: str, ui: set[str] | None):
+    async def _components(self, text: str, ui: set[str] | None, request: str = ""):
         # The Markdown widget already shows tables and option lists; only add what it can't draw.
-        return await components_for(text, self.extractor, TEXT_COMPONENTS)
+        return await components_for(text, self.extractor, TEXT_COMPONENTS, request)
 
     # -- layout ------------------------------------------------------------------ #
 
@@ -433,8 +432,11 @@ class OmenApp(App):
             role = message["role"]
             if role == "user":
                 await self.transcript.mount(UserMessage(f"› {message['content']}"))
-            elif role == "assistant" and message["content"]:
-                await self.transcript.mount(Markdown(message["content"], classes="assistant"))
+            elif role == "assistant":
+                if message["content"]:
+                    await self.transcript.mount(Markdown(message["content"], classes="assistant"))
+                for component in message.get("components", []):
+                    await self.transcript.handle(ev.UIComponent("history", component))
             elif role == "tool_call":
                 await self.transcript.handle(ev.ToolCallStart(message["id"], message["name"]))
                 await self.transcript.handle(ev.ToolCallArgs(message["id"], message.get("arguments") or ""))

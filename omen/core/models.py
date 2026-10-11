@@ -41,11 +41,17 @@ def make_settings(config: ModelConfig) -> ModelSettings:
 
 
 class OmenModel(LitellmModel):
-    """LitellmModel + output repair, and one retry when a response comes back completely empty."""
+    """LitellmModel + output repair, and one retry when a response comes back empty or with a tool
+    call the server could not parse."""
 
     async def get_response(self, system_instructions, input, model_settings, tools, *args: Any, **kwargs: Any):
         for attempt in range(2):
-            response = await super().get_response(system_instructions, input, model_settings, tools, *args, **kwargs)
+            try:
+                response = await super().get_response(system_instructions, input, model_settings, tools, *args, **kwargs)
+            except Exception as e:
+                if attempt or not is_bad_tool_call(e):
+                    raise
+                continue
             response.output = repair_output(list(response.output), _tool_names(tools))
             if attempt or not is_empty(response.output):
                 return response
@@ -56,14 +62,27 @@ class OmenModel(LitellmModel):
     ) -> AsyncIterator[Any]:
         names = _tool_names(tools)
         for attempt in range(2):
-            async for event in super().stream_response(system_instructions, input, model_settings, tools, *args, **kwargs):
-                if getattr(event, "type", "") == "response.completed":
-                    event.response.output = repair_output(list(event.response.output), names)
-                    if attempt == 0 and is_empty(event.response.output):
-                        break  # nothing visible was streamed, so asking again is safe
+            texted = False
+            try:
+                async for event in super().stream_response(system_instructions, input, model_settings, tools, *args, **kwargs):
+                    kind = getattr(event, "type", "")
+                    texted = texted or kind == "response.output_text.delta"
+                    if kind == "response.completed":
+                        event.response.output = repair_output(list(event.response.output), names)
+                        if attempt == 0 and is_empty(event.response.output):
+                            break  # nothing visible was streamed, so asking again is safe
+                        yield event
+                        return
                     yield event
-                    return
-                yield event
+            except Exception as e:
+                # Tool calls reach the UI only once complete, so a rejected one left nothing on screen.
+                if attempt or texted or not is_bad_tool_call(e):
+                    raise
+
+
+def is_bad_tool_call(error: Exception) -> bool:
+    """llama.cpp rejected the model's tool call (degenerate or truncated arguments): worth one retry."""
+    return "failed to parse tool call" in str(error).lower()
 
 
 def is_empty(items: list[Any]) -> bool:

@@ -135,6 +135,7 @@ class Extractor:
             temperature=0,
             max_tokens=800,
             response_format={"type": "json_schema", "json_schema": json_schema},
+            extra_body=config.extra_body or None,
         )
         return response.choices[0].message.content or ""
 
@@ -156,10 +157,20 @@ def _json_text(raw: str) -> str:
     return text[start : end + 1] if start >= 0 and end > start else text
 
 
+CHART_REQUEST = re.compile(r"\b(chart|graph|plot|visuali[sz]e)\b", re.IGNORECASE)
+
+# What clients that render markdown want extracted from replies (markdown already shows tables/options).
+TEXT_COMPONENTS = {"chart", "card"}
+
+
 async def components_for(
-    text: str, extractor: Extractor | None, supported: set[str] | None = None
+    text: str, extractor: Extractor | None, supported: set[str] | None = None, request: str = ""
 ) -> list[UIPayload]:
-    """All components for one assistant reply. `supported=None` means every type."""
+    """All components for one assistant reply. `supported=None` means every type.
+
+    `request` is the user's message: asking for a chart/graph/plot (with numbers) yields a
+    chart even when the model forgot the `<ui:chart>` hint.
+    """
 
     def wanted(kind: str) -> bool:
         return supported is None or kind in supported
@@ -170,11 +181,14 @@ async def components_for(
         found.append(payload(table.model_dump(), text=f"Table: {', '.join(table.columns)}"))
     if wanted("choice") and (choice := choices_from_text(clean)):
         found.append(payload(choice.model_dump(), text=choice.question))
+    if "chart" not in hints and CHART_REQUEST.search(request) and re.search(r"\d", request + clean):
+        hints.append("chart")
     have = {p.type for p in found}
     for kind in hints:
         if kind in have or not wanted(kind) or extractor is None:
             continue
-        extracted = await extractor.extract(kind, clean)
+        context = f"{request}\n\n{clean}" if kind == "chart" and request else clean
+        extracted = await extractor.extract(kind, context)
         if extracted is not None:
             found.append(extracted)
     return [p for p in found if p is not None]

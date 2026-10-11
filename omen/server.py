@@ -10,6 +10,8 @@ POST /threads/{id}/abort          stop the current run
 GET  /threads                     saved threads (newest first)
 GET  /threads/{id}                the thread's messages + UI payloads, for re-rendering history
 GET  /ui/schema                   JSON Schema of every UI component (TypeScript generation)
+GET  /personas                    personas (main / delegate)
+GET  /                            the web UI (web/dist, built with `npm run build` in web/)
 GET  /health
 """
 
@@ -25,14 +27,15 @@ from ag_ui.core import RunAgentInput
 from ag_ui.encoder import EventEncoder
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from omen.agui import AgUiMapper
 from omen.assistant import Assistant, build_assistant
-from omen.config import SESSIONS_DIR
+from omen.config import REPO_ROOT, SESSIONS_DIR
 from omen.core import Runtime, Session
 from omen.ui.components import json_schema
-from omen.ui.extract import Extractor, components_for
+from omen.ui.extract import TEXT_COMPONENTS, Extractor, components_for
 from omen.ui.history import history
 
 _THREAD_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -55,13 +58,16 @@ def create_app(
     sessions_dir: Path = SESSIONS_DIR,
     assistant_factory: Callable[..., Assistant] = build_assistant,
     extractor: Extractor | None = None,
+    web_dir: Path | None = REPO_ROOT / "web" / "dist",
 ) -> FastAPI:
     app = FastAPI(title="Omen", version="0.1")
     threads: dict[str, Thread] = {}
     extractor = extractor if extractor is not None else Extractor()
 
-    async def build_components(text: str, ui: set[str] | None):
-        return await components_for(text, extractor, ui)
+    async def build_components(text: str, ui: set[str] | None, request: str = ""):
+        # Clients render markdown, so only add what it can't show (charts, cards).
+        wanted = TEXT_COMPONENTS if ui is None else ui & TEXT_COMPONENTS
+        return await components_for(text, extractor, wanted, request)
 
     def thread(thread_id: str, persona: str | None = None) -> Thread:
         if not _THREAD_ID.match(thread_id):
@@ -81,6 +87,14 @@ def create_app(
         if thread_id not in threads:
             raise HTTPException(404, "no such thread")
         return threads[thread_id]
+
+    @app.get("/personas")
+    async def list_personas() -> list[dict]:
+        personas = assistant_factory().personas
+        return [
+            {"name": p.name, "description": p.description, "main": p.main, "delegate": p.delegate}
+            for p in personas.values()
+        ]
 
     @app.get("/health")
     async def health() -> dict:
@@ -147,6 +161,8 @@ def create_app(
             raise HTTPException(404, "no such thread")
         return {"id": thread_id, "messages": history(session)}
 
+    if web_dir is not None and (web_dir / "index.html").exists():
+        app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")  # last: API routes win
     return app
 
 

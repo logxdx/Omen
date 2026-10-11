@@ -192,7 +192,7 @@ class Runtime:
         run_config: RunConfig | None = None,
         prepare: Callable[[str, dict], list[Event]] | None = None,
         ask_handler: Callable[[str, list[str] | None], Awaitable[str]] | None = None,
-        components: Callable[[str, set[str] | None], Awaitable[list[UIPayload]]] | None = None,
+        components: Callable[[str, set[str] | None, str], Awaitable[list[UIPayload]]] | None = None,
         ui: set[str] | None = None,
         context: Callable[[str, dict], str | None] | None = None,
     ):
@@ -202,7 +202,8 @@ class Runtime:
                 pre-router; the events it returns are yielded after RUN_STARTED.
             ask_handler: answers `ask_user` questions programmatically (evals, scripts).
                 Without it, questions are emitted as USER_QUESTION and wait for `answer()`.
-            components: builds UI components from each assistant reply (omen.ui.extract);
+            components: builds UI components from each assistant reply, given (reply, ui, user request)
+                (omen.ui.extract.components_for);
                 they are emitted as UI_COMPONENT before RUN_FINISHED.
             ui: component types the frontend renders (None = all). Tool results of other
                 types lose their details (the text stays) and only these are extracted.
@@ -357,7 +358,7 @@ class Runtime:
         yield RunStarted(run_id)
         self.state["user_message"] = user_input
         self.state["ui_hints"] = self._hint_kinds()
-        replies: list[tuple[str, asyncio.Task]] = []
+        replies: list[tuple[str, str, asyncio.Task]] = []
         for event in self.prepare(user_input, self.state) if self.prepare else []:
             yield event
 
@@ -400,7 +401,9 @@ class Runtime:
                         raise event.error
                     event = self._filter_ui(event)
                     if isinstance(event, TextMessageEnd) and self.components and event.text.strip():
-                        replies.append((event.message_id, asyncio.create_task(self.components(event.text, self.ui))))
+                        request = self.state.get("user_message", "")
+                        extraction = asyncio.create_task(self.components(event.text, self.ui, request))
+                        replies.append((event.message_id, event.text, extraction))
                     yield event
                 await task
                 usage = result.context_wrapper.usage
@@ -432,9 +435,10 @@ class Runtime:
             self.running = False
             self._result = None
 
-        for message_id, task in replies:
+        for message_id, text, extraction in replies:
             try:
-                for component in await task:
+                for component in await extraction:
+                    self.session.add_reply_component(text, component.model_dump())  # for re-rendering history
                     yield UIComponent(message_id, component.model_dump())
             except Exception:  # a failed extraction never fails the run
                 logger.exception("component extraction failed")
