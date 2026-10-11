@@ -20,6 +20,8 @@ from ..tool import DEFAULT_APPROVAL_REJECTION_MESSAGE
 REJECTION_MESSAGE = DEFAULT_APPROVAL_REJECTION_MESSAGE
 TOOL_CALL_SESSION_DESCRIPTION_KEY = "_agents_tool_description"
 TOOL_CALL_SESSION_TITLE_KEY = "_agents_tool_title"
+# Omen fork: SDK-only tool output data (e.g. UI details) persisted alongside session items.
+TOOL_OUTPUT_SESSION_CUSTOM_DATA_KEY = "_agents_custom_data"
 _TOOL_CALL_TO_OUTPUT_TYPE: dict[str, str] = {
     "function_call": "function_call_output",
     "custom_tool_call": "custom_tool_call_output",
@@ -35,6 +37,7 @@ __all__ = [
     "REJECTION_MESSAGE",
     "TOOL_CALL_SESSION_DESCRIPTION_KEY",
     "TOOL_CALL_SESSION_TITLE_KEY",
+    "TOOL_OUTPUT_SESSION_CUSTOM_DATA_KEY",
     "copy_input_items",
     "drop_orphan_function_calls",
     "ensure_input_item_format",
@@ -302,6 +305,7 @@ def strip_internal_input_item_metadata(item: TResponseInputItem) -> TResponseInp
     cleaned = dict(item)
     cleaned.pop(TOOL_CALL_SESSION_DESCRIPTION_KEY, None)
     cleaned.pop(TOOL_CALL_SESSION_TITLE_KEY, None)
+    cleaned.pop(TOOL_OUTPUT_SESSION_CUSTOM_DATA_KEY, None)
     return cast(TResponseInputItem, cleaned)
 
 

@@ -25,6 +25,7 @@ from ..memory import (
 from ..memory.openai_conversations_session import OpenAIConversationsSession
 from ..run_state import RunState
 from .items import (
+    TOOL_OUTPUT_SESSION_CUSTOM_DATA_KEY,
     ReasoningItemIdPolicy,
     copy_input_items,
     deduplicate_input_items_preferring_latest,
@@ -303,7 +304,17 @@ async def save_result_to_session(
         converted = run_item_to_input_item(run_item, persistence_reasoning_item_id_policy)
         if converted is None:
             continue
-        new_items_as_input.append(ensure_input_item_format(converted))
+        converted = ensure_input_item_format(converted)
+        if (
+            isinstance(run_item, ToolCallOutputItem)
+            and run_item.custom_data
+            and isinstance(converted, dict)
+        ):
+            converted = cast(
+                TResponseInputItem,
+                {**converted, TOOL_OUTPUT_SESSION_CUSTOM_DATA_KEY: run_item.custom_data},
+            )
+        new_items_as_input.append(converted)
 
     ignore_ids_for_matching = _ignore_ids_for_matching(session)
 
