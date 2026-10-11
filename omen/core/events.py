@@ -97,11 +97,29 @@ class ToolCallResult(Event):
     name: str
     content: str  # what the model sees
     details: Any = None  # what the UI renders (UIPayload from Phase 4)
-    error: str | None = None  # "unknown_tool" | "invalid_args" | "exception" | "loop" | "aborted"
+    error: str | None = None  # "unknown_tool" | "invalid_args" | "exception"
 
 
 @dataclass
 class Custom(Event):
     type: ClassVar[str] = "CUSTOM"
-    name: str  # e.g. "usage"
+    name: str  # "usage" | "message_injected" | "agent"
     value: Any = None
+
+
+@dataclass
+class SubagentEvent(Event):
+    """An event from a delegated persona's run, nested under the delegating tool call."""
+
+    type: ClassVar[str] = "SUBAGENT_EVENT"
+    tool_call_id: str
+    persona: str
+    event: Event
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.type,
+            "tool_call_id": self.tool_call_id,
+            "persona": self.persona,
+            "event": self.event.to_dict(),
+        }

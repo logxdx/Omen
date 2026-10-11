@@ -5,7 +5,9 @@
 #   expect_tools     tools that must be called (order not enforced); [] = no tool calls allowed
 #   expect_args      per tool, argument values that must appear (case-insensitive substring)
 #   expect_answer    substrings that must all appear in the final answer (case-insensitive)
+#   expect_answer_any  at least one of these substrings must appear
 #   max_steps        LLM steps allowed (default 4)
+#   agent            "delegator": main agent only has `delegate` to a "researcher" persona
 
 - id: weather_simple
   prompt: What's the weather in Paris right now?
@@ -22,7 +24,7 @@
 - id: no_tool_needed
   prompt: How do you say "good morning" in French?
   expect_tools: []
-  expect_answer: [bonjour]
+  expect_answer_any: [bonjour, bonne matinée]
 
 - id: contact_lookup
   prompt: What's Tom's email address?
@@ -62,3 +64,18 @@
   expect_tools: [get_weather]
   expect_answer: [mumbai]
   max_steps: 5
+
+# --- delegation (main agent only has `delegate`; persona "researcher" has notes + contacts) ---
+
+- id: delegate_lookup
+  agent: delegator
+  prompt: Ask the researcher to find the Wi-Fi password for the cabin in my notes.
+  expect_tools: [delegate]
+  expect_args: {delegate: {persona: researcher}}
+  expect_answer: [pinecone-42]
+
+- id: delegate_contact
+  agent: delegator
+  prompt: Get the researcher to look up Priya's phone number.
+  expect_tools: [delegate]
+  expect_answer: ["98200"]

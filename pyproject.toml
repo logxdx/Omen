@@ -39,3 +39,5 @@ torch = [{ index = "pytorch-cuda" }]
 torchvision = [{ index = "pytorch-cuda" }]
 torchaudio = [{ index = "pytorch-cuda" }]
 spider_rs = { path = "spider-py" }
+# Omen fork of the OpenAI Agents SDK (see vendor/openai-agents/FORK.md)
+openai-agents = { path = "vendor/openai-agents", editable = true }

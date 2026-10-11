@@ -11,7 +11,7 @@ Generic harnesses (pi, Claude Code, Codex) assume a strong model. Omen should as
 **Decision: write the new core from scratch as a new `omen/` package in this repo; port leaf code; delete the old stack at the end.** Not an incremental refactor.
 
 Why:
-- The new design replaces every structural layer — the openai-agents SDK (→ own loop), 7 agents + handoffs (→ personas + skills), `cli/v1.py` (→ Textual TUI + web), the scraper (→ crawlberg), the context manager (→ compaction). Refactoring in place means keeping the SDK, handoff wiring and CLI working at every step for a design that keeps none of them.
+- The new design replaces every structural layer — the agent wiring (→ a forked SDK with a thin Omen runtime), 7 agents + handoffs (→ personas + skills), `cli/v1.py` (→ Textual TUI + web), the scraper (→ crawlberg), the context manager (→ compaction). Refactoring in place means keeping the SDK, handoff wiring and CLI working at every step for a design that keeps none of them.
 - Measured: **~7,400 LOC is replaced outright** (runtime, agents, CLI, tool wrappers, scraper, context manager, unused modules). **~930 LOC of logic is worth porting**, plus the vendored WhisperSTT (2,672 LOC, moved as-is) and ~875 lines of prompt/persona text.
 
 Why the same repo rather than a new one: keeps the name, git history, `.env`, `root/` sandbox data and issue trail. The old app keeps running untouched while the new one is built.
@@ -57,10 +57,10 @@ pi (now `github.com/earendil-works/pi`) is a deliberately minimal coding agent. 
 | pi idea | Omen adoption |
 |---|---|
 | System prompt + tools < 1k tokens; 4 core tools | **Adopt.** ≤ 8 tools visible per turn, core prompt ≤ 400 tokens. |
-| Own provider layer (`pi-ai`) with per-backend `compat` flags, streaming events, partial-JSON tool args | **Adopt.** Thin LiteLLM wrapper + compat table (`enable_thinking`, developer role, `max_tokens` field, tool-call-in-reasoning quirks). |
+| Own provider layer (`pi-ai`) with per-backend `compat` flags, streaming events, partial-JSON tool args | **Via the SDK.** `LitellmModel` + `ModelSettings` (`extra_body` for backend quirks such as `enable_thinking`). |
 | Validate tool args (JSON Schema/AJV); return errors as `isError` tool results so the model retries | **Adopt** with Pydantic. Never crash on a bad call. |
 | Tool result = `content` (for LLM) + `details` (for UI/state) | **Adopt.** This is the backbone of generative UI (§5). |
-| Agent loop events (`turn_*`, `message_*`, `tool_execution_*`); steering + follow-up queues; `abort()` | **Adopt.** User can type while the agent runs; voice barge-in = abort. |
+| Agent loop events (`turn_*`, `message_*`, `tool_execution_*`); steering + follow-up queues; `abort()` | **Adopt** via the fork: a mid-run message queue (delivered after the current turn) and `cancel()`. Voice barge-in = abort. |
 | Skills: `SKILL.md` (agentskills.io spec), only name + description in prompt, read on demand, `/skill:name` to force | **Adopt and extend** — Omen skills also carry typed tools (§4). |
 | Sub-agents as an example extension: persona markdown files (`name`, `description`, `tools`, `model`), single/parallel/chain | **Adopt** as personas (§4). |
 | JSONL session tree (`id`/`parentId`), branching, structured compaction (Goal / Progress / Decisions / Next steps), never split a tool call from its result | **Adopt.** Branching is cheap recovery when a small model drifts. |
@@ -81,10 +81,10 @@ pi (now `github.com/earendil-works/pi`) is a deliberately minimal coding agent. 
                 ┌──────▼───────────────▼────────▼────┐
                 │  omen.server (FastAPI) / event bus │
                 ├────────────────────────────────────┤
-                │  omen.core.loop   ← personas/*.md  │
-                │   tool registry   ← skills/*/      │
+                │  omen.core.runtime ← personas/*.md │
+                │   tools / delegate ← skills/*/     │
                 │   session (JSONL tree) + compaction│
-                │  omen.core.llm  (LiteLLM + compat) │
+                │  forked Agents SDK + LitellmModel  │
                 └────────────────────────────────────┘
 ```
 
@@ -93,13 +93,14 @@ Proposed layout:
 ```
 omen/
   core/
-    llm.py          # LiteLLM wrapper, compat table, streaming → events
-    loop.py         # agent loop: turns, tool exec, steering/follow-up queues, abort, loop guard
+    runtime.py      # drives the forked SDK: message queue, abort, SDK stream → Omen events
+    models.py       # LitellmModel + ModelSettings from config
     events.py       # internal event types (mirror AG-UI)
-    tools.py        # @tool decorator, Pydantic validation, ToolResult(content, details)
+    tools.py        # @tool over function_tool: ToolResult(content, details), error labels
+    delegate.py     # delegate(persona, task, share_context) — optional forked context
     skills.py       # discover skills/, load_skill → expose tools
-    personas.py     # discover personas/, delegate()
-    session.py      # JSONL tree, branching, labels
+    personas.py     # discover personas/*.md → SDK Agents
+    session.py      # JSONL tree implementing the SDK Session protocol; detached delegation branches
     compaction.py   # trigger + structured summary
   ui/
     components.py   # UIPayload models (single source of truth) → JSON Schema → TS types
@@ -119,9 +120,19 @@ personas/
   researcher.md  tutor.md  ideator.md  resume-writer.md
 evals/
   tasks.yaml        # fixed small-model task set
+vendor/
+  openai-agents/    # forked OpenAI Agents SDK v0.17.6 (FORK.md lists the patches)
 ```
 
-**Decision: own the loop, drop the openai-agents SDK.** The new requirements — tools exposed dynamically per turn, `content`/`details` split, steering queue, AG-UI events, persona delegation with a shared session tree — all fight the SDK. A plain loop on LiteLLM is ~300 lines and gives full control over malformed-call repair (fuzzy-match near-miss tool names, retry once with the validation error). This reverses the earlier "stay on the SDK" call.
+**Decision: fork the OpenAI Agents SDK** (`vendor/openai-agents`, base v0.17.6) instead of writing our own loop. The SDK keeps the loop, tool calling, validation, LiteLLM, sessions and cancellation; Omen's models call tools well but plan poorly over long contexts, so what we need is control over *context*, added as small patches:
+
+| Patch | Why |
+|---|---|
+| Mid-run message queue (`RunConfig.message_queue`) | Messages typed while the agent works are delivered after the current tool call/turn; a pending message turns a final answer into another turn. |
+| `ToolContext.conversation_history` | Lets `delegate` fork the current conversation into a persona run. |
+| Tool `custom_data` persisted with session items | UI details (generative UI) survive reload; stripped before the model sees them. |
+
+Already possible without a patch: a tool returning an object whose `str()` is the model text keeps the object for the UI (`ToolResult(content, details)`). Each patch is a separate commit with its own tests; the upstream suite still passes (see `FORK.md`). An earlier hand-written loop (Phase 1, first pass) was replaced by this.
 
 ---
 
@@ -134,7 +145,7 @@ Three mechanisms, each doing one job:
 | Tool | Purpose |
 |---|---|
 | `load_skill(name)` | Load a skill's instructions and expose its tools from the next step on |
-| `delegate(persona, task)` | Hand a self-contained task to a persona; get its final answer back |
+| `delegate(persona, task, share_context)` | Hand a subtask to a persona; get its result back. The main model decides whether the persona also sees the conversation so far |
 | `ask_user(question, options)` | Ask for a choice/confirmation (renders as a choice component) |
 | `remember(fact)` | Long-term memory write (recall is automatic, §4.4) |
 
@@ -175,7 +186,8 @@ max_turns: 8
 You research one question thoroughly and return a short, cited answer...
 ```
 
-- **Delegate:** `delegate("researcher", task)` runs a fresh loop with the persona's prompt and **only its skills pre-loaded**, sees just the task (not the whole conversation), returns the final answer as `content`; its transcript goes in `details` (collapsible in the UI) and into the session tree as a child branch.
+- **Delegate:** `delegate("researcher", task, share_context=false)` runs the persona as its own short SDK run with its own prompt and **only its skills**, and returns only its final answer as `content`. **The main model decides what the persona sees:** by default just the task (short, clean context — write the task self-contained); with `share_context: true` a *fork* of the main conversation (via the fork's `conversation_history`, minus the in-flight call) plus the task.
+- The persona's run streams to the UI as `SUBAGENT_EVENT`s nested under the delegate call, and is stored in the session as a **detached branch** — off the main conversation, never part of the main agent's context.
 - **One level only.** Personas cannot `delegate`. `max_turns` defaults to 8. This replaces the 50×50 nested loops.
 - **Switch:** `/persona tutor` makes a persona the main agent for the conversation (replaces `/agents`). The default persona is Jarvis.
 - **Dynamic personas (later):** the agent can draft a new `personas/*.md` or `skills/*/SKILL.md`; it's written only after the user approves via `ask_user`. Same for agent-written `tools.py` — it's code execution, so always gated.
@@ -261,7 +273,7 @@ This makes `show_*` tools (§5.2) **optional**: keep them for models strong enou
 
 | Option | Verdict |
 |---|---|
-| **AG-UI** (CopilotKit protocol, MIT, Python `ag-ui-protocol`) | **Wire protocol.** Event families for text, tool calls/results, state, reasoning. No openai-agents integration yet — irrelevant since we own the loop. |
+| **AG-UI** (CopilotKit protocol, MIT, Python `ag-ui-protocol`) | **Wire protocol.** Event families for text, tool calls/results, state, reasoning. No openai-agents integration yet — Omen maps SDK stream events to AG-UI-shaped events itself (`core/runtime.py`). |
 | **assistant-ui** + `@assistant-ui/react-ag-ui` | **Web frontend.** One `makeAssistantToolUI` per payload type. |
 | Google A2UI (v0.9/1.0-rc) | Too heavy for the model to author (ID-linked component trees + JSON Pointer bindings). Future server-side export target. |
 | vercel-labs json-render | Same authoring problem; no Python. Its Ink renderer is a useful TUI reference. |
@@ -312,14 +324,17 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 - [x] Create the `rebuild` branch and the `omen/` package. Entry point is `python -m omen` for now; `[project.scripts]` lands at the Phase 7 cut-over together with the dependency rework.
 - [x] Copy carry-over files unchanged into `skills/*/`, `omen/voice/`, `omen/tui/` (see §0).
 
-### Phase 1 — Core loop
+### Phase 1 — Core on a forked Agents SDK
 
-- [x] `core/llm.py`: LiteLLM streaming → deltas + one `Completion`; inline `<think>` routing; recovery of text-written tool calls (`<tool_call>` blocks, bare JSON); temperature 0.3, `max_tokens` cap, `parallel_tool_calls=False`. Compat is a pass-through `extra_body` (`OMEN_EXTRA_BODY`) — a per-backend table can grow from eval findings.
-- [x] `core/tools.py`: `@tool` from type hints + docstring → JSON Schema (titles stripped, optional collapsed); Pydantic validation; argument repair; errors returned as typed error results; fuzzy-match near-miss tool names; `ToolResult(content, details)` with hard `content` cap; hidden `ToolContext` injection.
-- [x] `core/loop.py`: turns, tool execution, steering + follow-up queues, immediate `abort()` (also while waiting for the first token or a slow tool), loop guard (2 identical calls → nudge, 3 → stop), `max_turns`.
-- [x] `core/session.py`: append-only JSONL tree, branch from any entry, labels.
-- [x] Tests: 47 unit tests (`python -m unittest discover -s tests -t .`) with a scripted fake LLM.
-- [~] `evals/tasks.yaml` + runner (`python -m omen eval`): 10 tasks on deterministic fake tools measuring tool-call validity, task success, steps, latency. Real-skill tasks (search, files, delegate, ask_user) are added in Phases 2–3. **Not yet run against the local model.**
+- [x] Vendor the OpenAI Agents SDK v0.17.6 into `vendor/openai-agents` (pristine commit, then one commit per patch); `pyproject` points `openai-agents` at it (editable path source).
+- [x] Fork patches with tests: mid-run message queue, `conversation_history` for tools, tool `custom_data` persisted with session items. Upstream suite: 2351 passed (2 failures need the non-vendored `examples/`).
+- [x] `core/runtime.py`: `Runtime.run()` streams Omen events from the SDK stream; `send()` queues a message mid-run (delivered after the current turn, or as a follow-up run if it arrives after the last turn); `abort()`; usage events; error/max-turns handling.
+- [x] `core/tools.py`: `@tool` over `function_tool` (non-strict schemas, `ToolResult(content, details)`, capped content, exceptions → error results, error labels `invalid_args` / `exception` / `unknown_tool`).
+- [x] `core/delegate.py`: `delegate(persona, task, share_context)` — the main model decides whether the persona gets a fork of the conversation; persona events stream as `SUBAGENT_EVENT`; its run is stored as a detached session branch.
+- [x] `core/session.py`: JSONL tree implementing the SDK `Session` protocol; branching, labels, detached forks, `ui_details()`.
+- [x] Tests: 33 unit tests on the SDK's `FakeModel` (`python -m unittest discover -s tests -t .`).
+- [x] Evals: 12 tasks (incl. 2 delegation tasks). **Local `ling3` (7.9B Q5_K_M, llama.cpp): 36/36 passed over 3 repeats, 38/38 valid tool calls, ~2.1 steps and ~1.2 s per task.**
+- [ ] Multi-turn eval tasks (needed to measure when the model chooses `share_context`).
 
 ### Phase 2 — Skills and core tools
 
@@ -333,7 +348,7 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 
 ### Phase 3 — Personas and delegation
 
-- [ ] `core/personas.py`: discover `personas/*.md`; `delegate(persona, task)` with fresh context, pre-loaded skills, `max_turns` 8, no nested delegation; transcript → `details` + session child branch.
+- [ ] `core/personas.py`: discover `personas/*.md` → SDK `Agent`s (prompt, skills, model, `max_turns`) and register them with `delegate` (Phase 1); no nested delegation.
 - [ ] `/persona name` switch; default Jarvis persona from `config/agent_personality.py`.
 - [ ] Port prompts to personas (researcher, tutor, ideator, resume-writer), each ≤ 250 tokens of plain instructions with exact tool names.
 
@@ -361,7 +376,7 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 - [ ] Voice as a frontend (lazy STT/TTS, barge-in, text fallback).
 - [ ] Compaction: trigger at window − reserve; keep recent turns verbatim, never split call/result; structured summary (Goal / Constraints / Progress / Decisions / Next steps / Files touched).
 - [ ] Delete the old stack: `my_agents/`, `agent_runtime.py`, `cli/v1.py`, handoff code, task/ui/computer/exec tools, Searx/Omni search, Piper, Parakeet, old scraper paths, `spider-py/`.
-- [ ] Dependencies: drop `openai-agents`, `crawl4ai`, `liteparse`, `statsmodels`, `spider_rs`, `piper-tts`; add `crawlberg`, `textual`, `fastapi`, `ag-ui-protocol`. Torch only in a `voice` extra.
+- [ ] Dependencies: keep `openai-agents` (the vendored fork); drop `crawl4ai`, `liteparse`, `statsmodels`, `spider_rs`, `piper-tts`; add `crawlberg`, `textual`, `fastapi`, `ag-ui-protocol`. Torch only in a `voice` extra.
 - [ ] Rewrite docs to match.
 
 ---

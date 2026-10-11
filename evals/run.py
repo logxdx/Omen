@@ -16,12 +16,22 @@ from pathlib import Path
 
 import yaml
 
-from evals.tools import EVAL_TOOLS
+import omen  # noqa: F401  (puts the forked SDK on the path before `agents` is imported)
+from agents import Agent, Model
+from evals.tools import EVAL_TOOLS, lookup_contact, search_notes
 from omen.config import main_model
-from omen.core import Agent, ToolRegistry
-from omen.core.events import RunError, RunFinished, StepStarted, ToolCallArgs, ToolCallResult, ToolCallStart
-from omen.core.llm import LLM, LiteLLMClient
-from omen.core.tools import parse_arguments
+from omen.core import Runtime, delegate_tool
+from omen.core.events import (
+    RunError,
+    RunFinished,
+    StepStarted,
+    TextMessageContent,
+    TextMessageEnd,
+    ToolCallArgs,
+    ToolCallResult,
+    ToolCallStart,
+)
+from omen.core.models import make_model, make_settings
 
 HERE = Path(__file__).parent
 SYSTEM = (
@@ -43,16 +53,39 @@ class TaskResult:
     finish: str = ""
 
 
-async def run_task(task: dict, llm: LLM) -> TaskResult:
-    agent = Agent(llm, ToolRegistry(EVAL_TOOLS), SYSTEM, max_turns=task.get("max_steps", 4))
+def build_agent(task: dict, model: Model) -> Agent:
+    settings = make_settings(main_model())
+    if task.get("agent") == "delegator":
+        researcher = Agent(
+            name="researcher",
+            handoff_description="Looks things up in the user's notes and contacts.",
+            instructions="You look things up with your tools and report exactly what you found.",
+            model=model,
+            model_settings=settings,
+            tools=[search_notes, lookup_contact],
+        )
+        tools = [delegate_tool([researcher], max_turns=4)]
+    else:
+        tools = EVAL_TOOLS
+    return Agent(name="eval", instructions=SYSTEM, model=model, model_settings=settings, tools=tools)
+
+
+async def run_task(task: dict, model: Model) -> TaskResult:
+    agent = build_agent(task, model)
+    runtime = Runtime(agent, max_turns=task.get("max_steps", 4))
     result = TaskResult(id=task["id"], passed=False)
     args_by_id: dict[str, str] = {}
     names_by_id: dict[str, str] = {}
+    text: list[str] = []
     started = time.perf_counter()
 
-    async for event in agent.run(task["prompt"]):
+    async for event in runtime.run(task["prompt"]):
         if isinstance(event, StepStarted):
-            result.steps = event.step
+            result.steps += 1
+        elif isinstance(event, TextMessageContent):
+            text.append(event.delta)
+        elif isinstance(event, TextMessageEnd):
+            result.answer, text = "".join(text).strip(), []
         elif isinstance(event, ToolCallStart):
             names_by_id[event.tool_call_id] = event.name
         elif isinstance(event, ToolCallArgs):
@@ -73,8 +106,6 @@ async def run_task(task: dict, llm: LLM) -> TaskResult:
             result.finish = event.reason
 
     result.seconds = round(time.perf_counter() - started, 2)
-    final = [m for m in agent.messages if m["role"] == "assistant" and not m.get("tool_calls")]
-    result.answer = (final[-1]["content"] or "") if final else ""
     result.failures += check(task, result)
     result.passed = not result.failures
     return result
@@ -82,9 +113,10 @@ async def run_task(task: dict, llm: LLM) -> TaskResult:
 
 def _args(raw: str) -> dict:
     try:
-        return parse_arguments(raw)
-    except ValueError:
+        value = json.loads(raw or "{}")
+    except json.JSONDecodeError:
         return {}
+    return value if isinstance(value, dict) else {}
 
 
 def check(task: dict, r: TaskResult) -> list[str]:
@@ -106,21 +138,24 @@ def check(task: dict, r: TaskResult) -> list[str]:
     for needle in task.get("expect_answer", []):
         if str(needle).lower() not in r.answer.lower():
             failures.append(f"answer missing '{needle}'")
+    any_of = task.get("expect_answer_any") or []
+    if any_of and not any(str(n).lower() in r.answer.lower() for n in any_of):
+        failures.append(f"answer has none of {any_of}")
     return failures
 
 
-async def run_suite(only: list[str] | None = None, repeat: int = 1, llm: LLM | None = None) -> int:
+async def run_suite(only: list[str] | None = None, repeat: int = 1, model: Model | None = None) -> int:
     tasks = yaml.safe_load((HERE / "tasks.yaml").read_text())
     if only:
         tasks = [t for t in tasks if t["id"] in only]
     config = main_model()
-    llm = llm or LiteLLMClient(config)
+    model = model or make_model(config)
     print(f"model: {config.model} @ {config.base_url}   tasks: {len(tasks)} × {repeat}\n")
 
     results: list[TaskResult] = []
     for task in tasks:
         for _ in range(repeat):
-            r = await run_task(task, llm)
+            r = await run_task(task, model)
             results.append(r)
             mark = "PASS" if r.passed else "FAIL"
             print(f"{mark}  {r.id:<28} steps={r.steps} calls={len(r.calls)} invalid={r.invalid_calls} {r.seconds:>6.2f}s")
