@@ -319,7 +319,7 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 ### Phase 0 — Minimal fixes to the old app (only if you keep using it during the rebuild)
 
 - [x] Sandbox: `full_path.resolve().is_relative_to(SANDBOX_PATH)` in one helper used by every filesystem op. (Do this regardless — it's a security hole.)
-- [x] `RunConfig(tool_not_found_behavior="return_error_to_model")`; `MAX_TURNS` ≈ 10.
+- [x] `RunConfig(tool_not_found_behavior="return_error_to_model")`; `MAX_TURNS` set to 50 (old app and new core default; override with `OMEN_MAX_TURNS`).
 - [x] Skip everything else — the old code is deleted in Phase 7.
 - [x] Create the `rebuild` branch and the `omen/` package. Entry point is `python -m omen` for now; `[project.scripts]` lands at the Phase 7 cut-over together with the dependency rework.
 - [x] Copy carry-over files unchanged into `skills/*/`, `omen/voice/`, `omen/tui/` (see §0).

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Global max turns for agent interactions
-MAX_TURNS = 10
+MAX_TURNS = 50
 
 # Online or Local
 LOCAL = True
