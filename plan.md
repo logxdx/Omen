@@ -353,9 +353,14 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 
 ### Phase 3 — Personas and delegation
 
-- [ ] `core/personas.py`: discover `personas/*.md` → SDK `Agent`s (prompt, skills, model, `max_turns`) and register them with `delegate` (Phase 1); no nested delegation.
-- [ ] `/persona name` switch; default Jarvis persona from `config/agent_personality.py`.
-- [ ] Port prompts to personas (researcher, tutor, ideator, resume-writer), each ≤ 250 tokens of plain instructions with exact tool names.
+- [x] `core/personas.py`: `personas/*.md` (frontmatter: name, description, skills, max_turns, main, delegate, model) → SDK agents; user personas in `~/.omen/personas` override; broken files are skipped with a warning.
+- [x] Main persona: `omen` (default, `OMEN_PERSONA` / `--persona` to change). Its text + shared guidance form the system prompt; its skills stay loaded.
+- [x] Specialists (`delegate: true`): `researcher` (web), `writer` (files; drafts emails/messages/docs), `resume-writer` (files + new `resume` skill with rules and an inline template). Each runs with its skills' tools always on, its own `max_turns`, optional own model; no nested delegation.
+- [x] `delegate` lists specialists in its schema and the system prompt; `load_skill` with a persona's name points the model to `delegate`; guidance: delegate when the user names a specialist, relay the result itself.
+- [x] `/persona name` (keeps session and loaded skills) and `/personas` in the REPL.
+- [x] Old voices (Vanessa, Marvin, Rex, ...), tutor and ideator dropped by the owner; `config/agent_personality.py` is deleted with the old stack in Phase 7.
+- [x] Evals: multi-turn task (`history`) for context passing — the model writes the needed context into the task (`expect_context_passed`); writer and live researcher delegation tasks. **Local `ling3`: 45/46 over 2 repeats, 98% valid tool calls.** Eval answers are compared without markdown emphasis; the stand-in user only says "yes" to yes/no questions.
+- [x] Tests: 80 unit tests.
 
 ### Phase 4 — Event protocol and UI components
 

@@ -50,7 +50,7 @@ class AssistantMemoryTests(unittest.IsolatedAsyncioTestCase):
                 [get_text_message("Noted.")],
                 [get_text_message("Your sister is Anna.")],
             ])
-            assistant = build_assistant(model=model, skills_dirs=[], memory_path=path)
+            assistant = build_assistant(model=model, skills_dirs=[], personas_dirs=[], memory_path=path)
             rt = Runtime(assistant.agent, prepare=assistant.prepare)
             [e async for e in rt.run("My sister is called Anna.")]
             [e async for e in rt.run("What's my sister's name?")]
@@ -68,7 +68,7 @@ class AskUserTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_question_waits_for_answer(self):
         model = self.model()
-        assistant = build_assistant(model=model, skills_dirs=[], memory_path=Path(tempfile.mkdtemp()) / "m.jsonl")
+        assistant = build_assistant(model=model, skills_dirs=[], personas_dirs=[], memory_path=Path(tempfile.mkdtemp()) / "m.jsonl")
         rt = Runtime(assistant.agent)
         events = []
         async for event in rt.run("order me a drink"):
@@ -89,7 +89,7 @@ class AskUserTests(unittest.IsolatedAsyncioTestCase):
         async def handler(question, options):
             return options[1]
 
-        assistant = build_assistant(model=model, skills_dirs=[], memory_path=Path(tempfile.mkdtemp()) / "m.jsonl")
+        assistant = build_assistant(model=model, skills_dirs=[], personas_dirs=[], memory_path=Path(tempfile.mkdtemp()) / "m.jsonl")
         events = [e async for e in Runtime(assistant.agent, ask_handler=handler).run("drink?")]
         self.assertFalse(any(isinstance(e, UserQuestion) for e in events))
         result = [e for e in events if isinstance(e, ToolCallResult)][0]

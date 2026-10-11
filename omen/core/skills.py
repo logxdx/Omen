@@ -21,6 +21,7 @@ import dataclasses
 import importlib
 import importlib.machinery
 import importlib.util
+import logging
 import re
 import sys
 from dataclasses import dataclass, field
@@ -32,6 +33,7 @@ from agents import FunctionTool, RunContextWrapper
 
 from omen.core.tools import ToolResult, tool
 
+logger = logging.getLogger(__name__)
 MAX_LOADED = 3
 STATE_KEY = "skills"  # OmenContext.state[STATE_KEY] = [loaded skill names, most recent last]
 _PACKAGE = "omen_skills"
@@ -48,11 +50,16 @@ class Skill:
 
 
 def parse_skill_md(text: str) -> tuple[dict[str, Any], str]:
-    """Split `---` YAML frontmatter from the markdown body."""
+    """Split `---` YAML frontmatter from the markdown body. Raises ValueError on bad YAML."""
     match = re.match(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", text, re.DOTALL)
     if not match:
         return {}, text.strip()
-    meta = yaml.safe_load(match.group(1)) or {}
+    try:
+        meta = yaml.safe_load(match.group(1)) or {}
+    except yaml.YAMLError as e:
+        raise ValueError(f"invalid frontmatter: {e}") from e
+    if not isinstance(meta, dict):
+        raise ValueError("frontmatter must be a mapping")
     return meta, match.group(2).strip()
 
 
@@ -83,16 +90,19 @@ def discover(directories: list[Path]) -> dict[str, Skill]:
         if not directory.is_dir():
             continue
         for skill_md in sorted(directory.glob("*/SKILL.md")):
-            meta, body = parse_skill_md(skill_md.read_text(encoding="utf-8"))
-            name = str(meta.get("name") or skill_md.parent.name)
-            skills[name] = Skill(
-                name=name,
-                description=str(meta.get("description", "")).strip(),
-                body=body,
-                path=skill_md.parent,
-                keywords=[str(k).lower() for k in meta.get("keywords", [])],
-                tools=_load_tools(skill_md.parent, name),
-            )
+            try:
+                meta, body = parse_skill_md(skill_md.read_text(encoding="utf-8"))
+                name = str(meta.get("name") or skill_md.parent.name)
+                skills[name] = Skill(
+                    name=name,
+                    description=str(meta.get("description", "")).strip(),
+                    body=body,
+                    path=skill_md.parent,
+                    keywords=[str(k).lower() for k in meta.get("keywords", [])],
+                    tools=_load_tools(skill_md.parent, name),
+                )
+            except Exception as e:  # one broken skill must not take the assistant down
+                logger.warning("skipping skill %s: %s", skill_md.parent, e)
     return skills
 
 
@@ -159,8 +169,10 @@ class Skills:
                 gated.append(dataclasses.replace(t, is_enabled=_enabled_when_loaded(skill.name)))
         return gated
 
-    def load_skill_tool(self) -> FunctionTool:
+    def load_skill_tool(self, redirects: dict[str, str] | None = None) -> FunctionTool:
+        """`redirects` maps names that aren't skills (e.g. personas) to a hint for the model."""
         skills = self
+        redirects = redirects or {}
 
         @tool
         def load_skill(ctx: RunContextWrapper[Any], name: str) -> ToolResult:
@@ -170,7 +182,10 @@ class Skills:
                 name: Skill name from the skills list.
             """
             state = _state(ctx)
-            skill = skills.load(name.strip().lower(), state)
+            key = name.strip().lower()
+            skill = skills.load(key, state)
+            if skill is None and key in redirects:
+                return ToolResult(f"Error: '{name}' is not a skill. {redirects[key]}", error="invalid_args")
             if skill is None:
                 return ToolResult(
                     f"Error: no skill named '{name}'. Skills: {', '.join(skills.skills)}.",

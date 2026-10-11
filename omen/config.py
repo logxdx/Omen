@@ -18,9 +18,11 @@ load_dotenv()
 OMEN_HOME = Path(os.getenv("OMEN_HOME", Path.home() / ".omen"))
 SESSIONS_DIR = OMEN_HOME / "sessions"
 
-# Skill folders: the repo's skills/, then the user's own (same name overrides).
+# Skill and persona folders: the repo's, then the user's own (same name overrides).
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIRS = [REPO_ROOT / "skills", OMEN_HOME / "skills"]
+PERSONAS_DIRS = [REPO_ROOT / "personas", OMEN_HOME / "personas"]
+DEFAULT_PERSONA = os.getenv("OMEN_PERSONA", "omen")
 
 # Upper bound on LLM steps per user message.
 MAX_TURNS = int(os.getenv("OMEN_MAX_TURNS", "50"))

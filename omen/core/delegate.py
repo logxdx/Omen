@@ -50,12 +50,18 @@ def _as_bool(value: Any) -> bool:
 def delegate_tool(
     personas: list[Agent],
     *,
-    max_turns: int = 8,
+    max_turns: int | dict[str, int] = 8,
     max_history_items: int | None = None,
     name: str = "delegate",
 ) -> FunctionTool:
-    """A tool that hands subtasks to `personas` (agents with their own instructions and tools)."""
+    """A tool that hands subtasks to `personas` (agents with their own instructions and tools).
+
+    `max_turns` caps each delegated run; pass a dict to set it per persona name.
+    """
     by_name = {p.name: p for p in personas}
+
+    def turns_for(persona_name: str) -> int:
+        return max_turns.get(persona_name, 8) if isinstance(max_turns, dict) else max_turns
     roster = "\n".join(f"- {p.name}: {p.handoff_description or 'general help'}" for p in personas)
     description = (
         "Hand a subtask to a specialist and get its result back. By default the specialist sees "
@@ -115,7 +121,7 @@ def delegate_tool(
             persona,
             history + [subtask],
             context=app,
-            max_turns=max_turns,
+            max_turns=turns_for(persona.name),
             run_config=run_config,
         )
         finished = True
@@ -144,7 +150,7 @@ def delegate_tool(
         }
         if not finished:
             return ToolResult(
-                f"Error: {persona.name} did not finish within {max_turns} steps.",
+                f"Error: {persona.name} did not finish within {turns_for(persona.name)} steps.",
                 details=details,
                 error="exception",
             )

@@ -32,7 +32,7 @@ from omen.core.events import (
 from omen.core.skills import loaded
 
 DIM, RED, BOLD, RESET = "\033[2m", "\033[31m", "\033[1m", "\033[0m"
-HELP = "/skills  /skill <name>  /reload  /quit   ·   type while it works to steer   ·   Ctrl+C stops"
+HELP = "/personas  /persona <name>  /skills  /skill <name>  /reload  /quit   ·   type while it works to steer   ·   Ctrl+C stops"
 
 
 def render(event: object, show_reasoning: bool) -> None:
@@ -63,34 +63,50 @@ def render(event: object, show_reasoning: bool) -> None:
         print(f"{DIM}[{event.reason}]{RESET}")
 
 
-def command(text: str, assistant: Assistant, runtime: Runtime) -> bool:
-    """Handle a slash command. Returns True if `text` was one."""
+def command(text: str, assistant: Assistant, runtime: Runtime) -> Assistant | None:
+    """Handle a slash command. Returns the (possibly new) assistant, or None if `text` wasn't one."""
+    if text == "/personas":
+        for persona in assistant.personas.values():
+            mark = "*" if persona.name == assistant.persona.name else " "
+            roles = "/".join(r for r, on in (("main", persona.main), ("delegate", persona.delegate)) if on)
+            print(f"{mark} {persona.name} [{roles}]: {persona.description}")
+        return assistant
+    if text.startswith("/persona "):
+        name = text.split(maxsplit=1)[1].strip().lower()
+        try:
+            switched = assistant.switch(name)
+        except KeyError:
+            print(f"{RED}no main persona named {name}{RESET}")
+            return assistant
+        runtime.agent, runtime.prepare = switched.agent, switched.prepare
+        print(f"{DIM}(persona: {name}){RESET}")
+        return switched
     if text == "/skills":
         active = loaded(runtime.state)
         for skill in assistant.skills.skills.values():
             mark = "*" if skill.name in active else " "
             print(f"{mark} {skill.name}: {skill.description}")
-        return True
+        return assistant
     if text.startswith("/skill "):
         name = text.split(maxsplit=1)[1].strip()
         if assistant.skills.load(name, runtime.state):
             print(f"{DIM}(skill: {name}){RESET}")
         else:
             print(f"{RED}no skill named {name}{RESET}")
-        return True
+        return assistant
     if text == "/reload":
         assistant.reload()
         print(f"{DIM}(reloaded {len(assistant.skills.skills)} skills){RESET}")
-        return True
+        return assistant
     if text in ("/help", "/?"):
         print(HELP)
-        return True
-    return False
+        return assistant
+    return None
 
 
-async def chat(session_path: Path | None, show_reasoning: bool, use_router: bool) -> None:
+async def chat(session_path: Path | None, show_reasoning: bool, use_router: bool, persona: str | None) -> None:
     session = Session(session_path) if session_path else Session.create(SESSIONS_DIR)
-    assistant = build_assistant(use_router=use_router)
+    assistant = build_assistant(use_router=use_router, persona=persona)
     runtime = Runtime(assistant.agent, session, prepare=assistant.prepare)
     loop = asyncio.get_running_loop()
     lines: asyncio.Queue[str | None] = asyncio.Queue()
@@ -118,8 +134,13 @@ async def chat(session_path: Path | None, show_reasoning: bool, use_router: bool
             if line is None or line.strip() in ("/quit", "/exit"):
                 return
             text = line.strip()
-            if not text or command(text, assistant, runtime):
+            if not text:
                 continue
+            if text.startswith("/"):
+                handled = command(text, assistant, runtime)
+                if handled is not None:
+                    assistant = handled
+                    continue
 
         async def forward_typing() -> None:
             nonlocal quitting
@@ -154,6 +175,7 @@ def main() -> None:
     chat_p.add_argument("--session", type=Path, help="resume a session file")
     chat_p.add_argument("--reasoning", action="store_true", help="show model reasoning")
     chat_p.add_argument("--no-router", action="store_true", help="don't auto-load skills by keyword")
+    chat_p.add_argument("--persona", help="main persona (default: OMEN_PERSONA or omen)")
     eval_p = sub.add_parser("eval", help="run the small-model eval suite")
     eval_p.add_argument("--only", nargs="*", help="task ids to run")
     eval_p.add_argument("--repeat", type=int, default=1, help="runs per task")
@@ -168,6 +190,7 @@ def main() -> None:
             getattr(args, "session", None),
             getattr(args, "reasoning", False),
             not getattr(args, "no_router", False),
+            getattr(args, "persona", None),
         )
     )
 

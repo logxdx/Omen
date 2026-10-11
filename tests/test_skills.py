@@ -92,7 +92,7 @@ class SkillsTests(unittest.IsolatedAsyncioTestCase):
             [get_function_tool_call("use_alpha", json.dumps({"thing": "x"}), call_id="u1")],
             [get_text_message("done")],
         ])
-        assistant = build_assistant(model=model, skills_dirs=[self.root], memory_path=self.root / "m.jsonl", use_router=False)
+        assistant = build_assistant(model=model, skills_dirs=[self.root], personas_dirs=[], memory_path=self.root / "m.jsonl", use_router=False)
         rt = Runtime(assistant.agent, prepare=assistant.prepare)
         events = [e async for e in rt.run("do something")]
 
@@ -109,7 +109,7 @@ class SkillsTests(unittest.IsolatedAsyncioTestCase):
     async def test_router_preloads_before_the_first_call(self):
         model = FakeModel()
         model.add_multiple_turn_outputs([[get_text_message("ok")]])
-        assistant = build_assistant(model=model, skills_dirs=[self.root], memory_path=self.root / "m.jsonl")
+        assistant = build_assistant(model=model, skills_dirs=[self.root], personas_dirs=[], memory_path=self.root / "m.jsonl")
         rt = Runtime(assistant.agent, prepare=assistant.prepare)
         events = [e async for e in rt.run("use beta on this")]
         self.assertIn("use_beta", tool_names(model.first_turn_args))
@@ -122,14 +122,14 @@ class SkillsTests(unittest.IsolatedAsyncioTestCase):
             [get_function_tool_call("load_skill", json.dumps({"name": "gamma"}), call_id="l1")],
             [get_text_message("sorry")],
         ])
-        assistant = build_assistant(model=model, skills_dirs=[self.root], memory_path=self.root / "m.jsonl", use_router=False)
+        assistant = build_assistant(model=model, skills_dirs=[self.root], personas_dirs=[], memory_path=self.root / "m.jsonl", use_router=False)
         events = [e async for e in Runtime(assistant.agent).run("x")]
         result = [e for e in events if isinstance(e, ToolCallResult)][0]
         self.assertEqual(result.error, "invalid_args")
         self.assertIn("alpha", result.content)
 
     def test_reload_picks_up_new_skills(self):
-        assistant = build_assistant(model=FakeModel(), skills_dirs=[self.root], memory_path=self.root / "m.jsonl")
+        assistant = build_assistant(model=FakeModel(), skills_dirs=[self.root], personas_dirs=[], memory_path=self.root / "m.jsonl")
         make_skill(self.root, "gamma", ["gamma"], tool_name="use_gamma")
         assistant.reload()
         self.assertIn("gamma", assistant.skills.skills)

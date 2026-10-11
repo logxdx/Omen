@@ -8,6 +8,8 @@
 #   expect_answer_any  at least one of these substrings must appear
 #   max_steps        LLM steps allowed (default 4; 6 for agent: omen)
 #   agent            "delegator": main agent only has `delegate` to a "researcher" persona
+#   history          earlier conversation (list of {role, content}) seeded before the prompt
+#   expect_context_passed  a delegate call must set share_context or mention this text in its task
 
 - id: weather_simple
   prompt: What's the weather in Paris right now?
@@ -80,6 +82,16 @@
   expect_tools: [delegate]
   expect_answer: ["98200"]
 
+- id: delegate_needs_context
+  agent: delegator
+  history:
+    - {role: user, content: "My friend Tom is visiting next week and I want to send him the plan."}
+    - {role: assistant, content: "Sounds good. What do you need?"}
+  prompt: Ask the researcher to find his email address.
+  expect_tools: [delegate]
+  expect_context_passed: tom
+  expect_answer: [tom@becker.dev]
+
 # --- full assistant (agent: omen): real skills, fresh sandbox + memory per task, confirmations answered "yes" ---
 #   files: {path: content} seeds the sandbox; expect_files: {path: substring} checks the result
 #   router: false disables the keyword pre-router (the model must call load_skill itself)
@@ -139,3 +151,18 @@
   prompt: Search the web for what crawlberg is and tell me in one sentence.
   expect_tools: [search]
   max_steps: 5
+
+- id: omen_delegate_writer
+  agent: omen
+  prompt: Ask the writer to draft a two-sentence message to Anna saying I'll be 20 minutes late for dinner.
+  expect_tools: [delegate]
+  expect_args: {delegate: {persona: writer}}
+  expect_answer: [anna]
+
+- id: omen_delegate_researcher_live
+  agent: omen
+  network: true
+  prompt: Have the researcher find out what crawlberg is.
+  expect_tools: [delegate]
+  expect_args: {delegate: {persona: researcher}}
+  max_steps: 4

@@ -57,8 +57,16 @@ class TaskResult:
     finish: str = ""
 
 
-async def _always_yes(question: str, options: list[str] | None) -> str:
-    return "yes"
+async def _auto_answer(question: str, options: list[str] | None) -> str:
+    """Stand-in user: confirms yes/no questions, otherwise asks the assistant to proceed."""
+    if options and any(o.lower() in ("yes", "y") for o in options):
+        return "yes"
+    return "I don't know, just do your best."
+
+
+def _plain(text: str) -> str:
+    """Answer text as a reader sees it (markdown emphasis removed)."""
+    return text.replace("*", "").replace("`", "").replace("_", "")
 
 
 def build_omen(task: dict, model: Model, workdir: Path) -> Runtime:
@@ -78,7 +86,7 @@ def build_omen(task: dict, model: Model, workdir: Path) -> Runtime:
         assistant.agent,
         max_turns=task.get("max_steps", 6),
         prepare=assistant.prepare,
-        ask_handler=_always_yes,
+        ask_handler=_auto_answer,
     )
 
 
@@ -106,6 +114,8 @@ async def run_task(task: dict, model: Model) -> TaskResult:
     else:
         runtime = Runtime(build_agent(task, model), max_turns=task.get("max_steps", 4))
     result = TaskResult(id=task["id"], passed=False)
+    if task.get("history"):
+        await runtime.session.add_items(task["history"])
     args_by_id: dict[str, str] = {}
     names_by_id: dict[str, str] = {}
     text: list[str] = []
@@ -174,11 +184,21 @@ def check(task: dict, r: TaskResult) -> list[str]:
         for key, value in want.items():
             if not any(str(value).lower() in str(a.get(key, "")).lower() for a in attempts):
                 failures.append(f"{name}: no call with {key}~'{value}'")
+    answer = _plain(r.answer).lower()
     for needle in task.get("expect_answer", []):
-        if str(needle).lower() not in r.answer.lower():
+        if str(needle).lower() not in answer:
             failures.append(f"answer missing '{needle}'")
+    needle = task.get("expect_context_passed")
+    if needle:
+        delegations = [_args(c["arguments"]) for c in r.calls if c["name"] == "delegate"]
+        passed = any(
+            str(a.get("share_context")).lower() == "true" or str(needle).lower() in str(a.get("task", "")).lower()
+            for a in delegations
+        )
+        if not passed:
+            failures.append(f"delegate got neither share_context nor '{needle}' in the task")
     any_of = task.get("expect_answer_any") or []
-    if any_of and not any(str(n).lower() in r.answer.lower() for n in any_of):
+    if any_of and not any(str(n).lower() in answer for n in any_of):
         failures.append(f"answer has none of {any_of}")
     return failures
 
