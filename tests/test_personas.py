@@ -105,7 +105,7 @@ class AssistantPersonaTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("use_alpha", [e.event.name for e in nested if hasattr(e.event, "name")])
         delegated = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
         self.assertEqual(delegated.content, "alpha says alpha-value: x")
-        self.assertEqual(delegated.details["persona"], "helper")
+        self.assertEqual(delegated.details["props"]["persona"], "helper")
 
     async def test_specialist_turn_limit(self):
         model = FakeModel()

@@ -67,3 +67,44 @@ class RepairOutputTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EmptyRetryTests(unittest.IsolatedAsyncioTestCase):
+    async def collect(self, responses):
+        from types import SimpleNamespace as NS
+        from unittest import mock
+
+        from agents.extensions.models.litellm_model import LitellmModel
+
+        from omen.core.models import OmenModel
+
+        calls = []
+
+        async def fake_stream(self, *args, **kwargs):
+            output = responses[len(calls)]
+            calls.append(1)
+            yield NS(type="response.created")
+            yield NS(type="response.completed", response=NS(output=list(output)))
+
+        with mock.patch.object(LitellmModel, "stream_response", fake_stream):
+            model = OmenModel(model="openai/x", base_url="http://x", api_key="k")
+            events = [e async for e in model.stream_response(None, [], None, [], None, [], None)]
+        return events, calls
+
+    async def test_empty_response_is_retried_once(self):
+        events, calls = await self.collect([[], [_message("Here you go.")]])
+        self.assertEqual(len(calls), 2)
+        completed = [e for e in events if e.type == "response.completed"]
+        self.assertEqual(len(completed), 1)
+        self.assertEqual(completed[0].response.output[0].content[0].text, "Here you go.")
+
+    async def test_normal_response_is_not_retried(self):
+        events, calls = await self.collect([[_message("Hi")], [_message("never")]])
+        self.assertEqual(len(calls), 1)
+
+    def test_is_empty(self):
+        from omen.core.models import is_empty
+
+        self.assertTrue(is_empty([]))
+        self.assertTrue(is_empty([reasoning("thinking"), _message("  ")]))
+        self.assertFalse(is_empty([_message("hi")]))

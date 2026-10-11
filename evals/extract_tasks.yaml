@@ -1,0 +1,35 @@
+# Extractor eval: can the JSON model fill a component from text? Run with: python -m omen eval --extract
+#
+#   kind      chart | card | table
+#   context   the assistant reply to extract from
+#   expect    props that must match (strings: case-insensitive substring; lists: exact length + values)
+
+- id: chart_steps
+  kind: chart
+  context: "Your step counts this week: Monday 6,200, Tuesday 8,900, Wednesday 4,100, Thursday 10,300, Friday 7,500."
+  expect: {labels: [Monday, Tuesday, Wednesday, Thursday, Friday], values: [6200, 8900, 4100, 10300, 7500]}
+
+- id: chart_spending
+  kind: chart
+  context: "In September you spent 4,200 on groceries, 1,800 on transport, 2,500 on eating out and 900 on subscriptions."
+  expect: {labels: [groceries, transport, eating out, subscriptions], values: [4200, 1800, 2500, 900]}
+
+- id: chart_temperatures
+  kind: chart
+  context: "Forecast highs for Pune: Monday 33, Tuesday 32, Wednesday 30, Thursday 29."
+  expect: {values: [33, 32, 30, 29]}
+
+- id: card_city
+  kind: card
+  context: "Pune is a city in Maharashtra, India, known for its universities and IT industry. It is currently 26 degrees and overcast."
+  expect: {title: pune}
+
+- id: card_book
+  kind: card
+  context: "The Left Hand of Darkness is a 1969 novel by Ursula K. Le Guin about an envoy on the planet Gethen. More at https://example.org/le-guin"
+  expect: {title: left hand of darkness, url: "https://example.org/le-guin"}
+
+- id: card_no_invented_url
+  kind: card
+  context: "Mount Everest is the highest mountain on Earth at 8,849 metres, on the border of Nepal and China."
+  expect: {title: everest, url: null}

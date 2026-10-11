@@ -6,10 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4",
+    "ag-ui-protocol",
     "browserforge",
     "crawlberg",
     "crawl4ai",
     "ddgs",
+    "fastapi",
     "faster-whisper",
     "halo",
     "html2text",
@@ -26,6 +28,7 @@ dependencies = [
     "spider_rs",
     "rich",
     "statsmodels",
+    "uvicorn",
     "yt-dlp",
     "openwakeword>=0.4.0",
 ]

@@ -364,11 +364,16 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 
 ### Phase 4 — Event protocol and UI components
 
-- [ ] `core/events.py` mirroring AG-UI; `server.py` FastAPI `POST /agent` → SSE using `ag-ui-protocol` encoder.
-- [ ] `ui/components.py`: `UIPayload` + per-type props models; `details` for `search`, `read_url`, `weather`, `edit`, `read`.
-- [ ] `ui/extractor.py`: trigger rules, tool→component map, hint-tag parsing, LFM2.5-350M via Ollama `format` + fallback chain; eval field accuracy on a fixed set of contexts.
-- [ ] Optional `ui` skill with `show_table`, `show_chart`, `show_choices`, `show_card`, `show_steps` for stronger models.
-- [ ] Capability negotiation via `forwardedProps`; schema export + TS type generation.
+- [x] `ui/components.py`: 18 typed components (weather, link_preview, search_results, video_results, file, file_list, file_write, file_delete, diff, grep, choice, delegation, memory_saved, skill_loaded, download, table, chart, card). Tool `details` → `UIPayload {type, version, valid, props, text}`; invalid/unknown props still delivered with `valid: false` and a text fallback. `json_schema()` / `GET /ui/schema` / `python -m omen schema` for TypeScript generation (Phase 6).
+- [x] `ui/extract.py`: components from assistant text — rules first (markdown table → `table`, closing question + options → `choice`), hint tags `<ui:chart>` / `<ui:card>` (hidden from the stream) → JSON-schema-constrained extractor model (`OMEN_EXTRACTOR_MODEL`, default the main model), Pydantic validation, one retry with the error, invented URLs dropped, otherwise text only. Emitted as `UI_COMPONENT` before `RUN_FINISHED`.
+- [x] `omen/agui.py`: Omen events → AG-UI 1.0 (`ag-ui-protocol`): paired step/reasoning events; tool-result payloads, extracted components and `ask_user` questions → `ACTIVITY_SNAPSHOT`; delegated personas → `SUBAGENT_STARTED/FINISHED/ERROR` with every nested event tagged `subagent_run_id`.
+- [x] `omen/server.py` (`python -m omen serve`): `POST /agent` (AG-UI SSE), `POST /threads/{id}/messages|answer|abort`, `GET /threads`, `GET /threads/{id}` (history with UI payloads), `GET /ui/schema`. Capability negotiation via `forwardedProps.omen.components`; persona via `forwardedProps.omen.persona`.
+- [x] `OmenModel` retries once when a response is completely empty (seen live after a delegation); memory guidance narrowed to lasting personal facts; delegation guidance discourages over-delegating simple questions.
+- [x] Extractor eval (`python -m omen eval --extract`, `evals/extract_tasks.yaml`, 6 contexts). Live spot-checks on `ling3`: chart (5 values, 4.8 s) and card (2 s) valid; invented URL caught. **Full extractor eval not yet run** (the local model server went down during the phase).
+- [x] Live server check on `ling3`: weather question → paired AG-UI stream with a `weather` ACTIVITY_SNAPSHOT; numbers question → `table` component extracted from the markdown reply.
+- [x] Tests: 105 unit tests (server/AG-UI tests skip if `fastapi`/`ag-ui-protocol` aren't installed).
+- [ ] Optional `ui` skill with `show_*` tools for stronger models — not needed so far: tables come from markdown and charts/cards from hint tags.
+- [ ] Re-run the main and extractor evals on the local model after the empty-response retry and guidance changes.
 
 ### Phase 5 — TUI (Textual)
 

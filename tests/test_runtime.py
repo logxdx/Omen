@@ -104,7 +104,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(json.loads(of(events, ToolCallArgs)[0].delta), {"city": "Paris"})
         result = of(events, ToolCallResult)[0]
         self.assertEqual((result.tool_call_id, result.name, result.content), ("w1", "get_weather", "Paris: 18°C"))
-        self.assertEqual(result.details["temp_c"], 18)
+        self.assertEqual(result.details["props"]["temp_c"], 18)
         self.assertIsNone(result.error)
         self.assertEqual(len(of(events, StepStarted)), 2)
 

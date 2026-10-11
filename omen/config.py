@@ -43,6 +43,18 @@ class ModelConfig:
     extra_body: dict = field(default_factory=dict)
 
 
+def extractor_model() -> ModelConfig:
+    """Model that fills UI components from text (JSON schema mode). Defaults to the main model."""
+    main = main_model()
+    return ModelConfig(
+        model=os.getenv("OMEN_EXTRACTOR_MODEL", main.model),
+        base_url=os.getenv("OMEN_EXTRACTOR_BASE_URL", main.base_url or ""),
+        api_key=os.getenv("OMEN_EXTRACTOR_API_KEY", main.api_key or ""),
+        temperature=0.0,
+        max_tokens=800,
+    )
+
+
 def main_model() -> ModelConfig:
     local = os.getenv("OMEN_LOCAL", "1") != "0"
     extra_body = json.loads(os.getenv("OMEN_EXTRA_BODY", "{}"))

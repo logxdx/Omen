@@ -61,6 +61,7 @@ class TextMessageContent(Event):
 class TextMessageEnd(Event):
     type: ClassVar[str] = "TEXT_MESSAGE_END"
     message_id: str
+    text: str = ""  # the full reply, including parts hidden from the stream (hint tags)
 
 
 @dataclass
@@ -96,7 +97,7 @@ class ToolCallResult(Event):
     tool_call_id: str
     name: str
     content: str  # what the model sees
-    details: Any = None  # what the UI renders (UIPayload from Phase 4)
+    details: Any = None  # what the UI renders: a UIPayload dict (omen.ui.components)
     error: str | None = None  # "unknown_tool" | "invalid_args" | "exception"
 
 
@@ -105,6 +106,15 @@ class Custom(Event):
     type: ClassVar[str] = "CUSTOM"
     name: str  # "usage" | "message_injected" | "agent"
     value: Any = None
+
+
+@dataclass
+class UIComponent(Event):
+    """A component extracted from an assistant reply (table, choices, chart, card)."""
+
+    type: ClassVar[str] = "UI_COMPONENT"
+    message_id: str
+    payload: dict
 
 
 @dataclass

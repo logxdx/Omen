@@ -79,7 +79,7 @@ class AskUserTests(unittest.IsolatedAsyncioTestCase):
                 asyncio.get_running_loop().call_later(0.01, rt.answer, "tea")
         result = [e for e in events if isinstance(e, ToolCallResult)][0]
         self.assertEqual(result.content, "The user answered: tea")
-        self.assertEqual(result.details["answer"], "tea")
+        self.assertEqual(result.details["props"]["answer"], "tea")
         self.assertIsNone(rt.pending_question)
         self.assertFalse(rt.answer("late"))
 

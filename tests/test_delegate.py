@@ -66,9 +66,9 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
 
         result = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
         self.assertEqual(result.content, "The cabin Wi-Fi password is pinecone-42.")
-        self.assertEqual(result.details["persona"], "researcher")
-        self.assertFalse(result.details["shared_context"])
-        self.assertEqual(result.details["steps"], 2)
+        self.assertEqual(result.details["props"]["persona"], "researcher")
+        self.assertFalse(result.details["props"]["shared_context"])
+        self.assertEqual(result.details["props"]["steps"], 2)
 
         # The persona's run streams to the UI, nested under the delegate call.
         nested = [e for e in events if isinstance(e, SubagentEvent)]
@@ -83,7 +83,7 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(output["output"], "The cabin Wi-Fi password is pinecone-42.")
 
         # The persona's run is kept as a detached branch.
-        branch = rt.session.items(result.details["branch"])
+        branch = rt.session.items(result.details["props"]["branch"])
         self.assertIn("search_notes", json.dumps(branch))
         self.assertEqual(rt.session.items(), main_items)
 
@@ -98,7 +98,7 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("function_call", [i.get("type") for i in persona_input])  # in-flight call excluded
 
         result = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
-        self.assertTrue(result.details["shared_context"])
+        self.assertTrue(result.details["props"]["shared_context"])
 
     async def test_string_boolean_is_accepted(self):
         rt, _ = self.main_runtime({"persona": "researcher", "task": "Find it.", "share_context": "true"})

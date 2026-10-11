@@ -20,12 +20,21 @@ from omen.core.skills import Skills, loaded
 
 GUIDANCE = (
     "Answer in plain sentences. Use a tool only when you need information or an action you can't do "
-    "yourself. If the user tells you something worth keeping (names, dates, preferences), call remember."
+    "yourself. Call remember only for lasting personal facts (names, birthdays, preferences), not for data "
+    "the user gives you for the current question."
 )
 DELEGATION = (
     "Specialists: hand them a subtask with delegate (they are not skills; don't load_skill them). "
-    "If the user names a specialist, delegate to it. When delegate returns, give the user the result "
+    "Delegate only when a subtask needs a specialist's tools or a substantial piece of writing; answer simple "
+    "questions yourself. If the user names a specialist, delegate to it. When delegate returns, give the user the result "
     "itself (the full draft, the facts), not just a note that it's done."
+)
+UI_HINTS = (
+    "The user's screen can show components. Write tables in markdown. ",
+    {
+        "chart": "If numbers would read better as a chart, end your reply with <ui:chart> on its own line.",
+        "card": "For a short summary of one thing (a place, product, person), end your reply with <ui:card> on its own line.",
+    },
 )
 FALLBACK_PERSONA = Persona(name="assistant", description="Default assistant.", body="You are a concise personal assistant.", path=Path())
 
@@ -114,6 +123,9 @@ def build_assistant(
         active = skills.active_instructions(state)
         if active:
             parts.append(active)
+        hints = state.get("ui_hints") or []
+        if hints:
+            parts.append(UI_HINTS[0] + " ".join(UI_HINTS[1][k] for k in hints if k in UI_HINTS[1]))
         return "\n\n".join(parts)
 
     redirects = {p.name: f"It is a specialist: use delegate with persona '{p.name}'." for p in specialists}

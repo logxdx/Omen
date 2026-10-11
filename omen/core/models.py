@@ -41,19 +41,38 @@ def make_settings(config: ModelConfig) -> ModelSettings:
 
 
 class OmenModel(LitellmModel):
+    """LitellmModel + output repair, and one retry when a response comes back completely empty."""
+
     async def get_response(self, system_instructions, input, model_settings, tools, *args: Any, **kwargs: Any):
-        response = await super().get_response(system_instructions, input, model_settings, tools, *args, **kwargs)
-        response.output = repair_output(list(response.output), _tool_names(tools))
+        for attempt in range(2):
+            response = await super().get_response(system_instructions, input, model_settings, tools, *args, **kwargs)
+            response.output = repair_output(list(response.output), _tool_names(tools))
+            if attempt or not is_empty(response.output):
+                return response
         return response
 
     async def stream_response(
         self, system_instructions, input, model_settings, tools, *args: Any, **kwargs: Any
     ) -> AsyncIterator[Any]:
         names = _tool_names(tools)
-        async for event in super().stream_response(system_instructions, input, model_settings, tools, *args, **kwargs):
-            if getattr(event, "type", "") == "response.completed":
-                event.response.output = repair_output(list(event.response.output), names)
-            yield event
+        for attempt in range(2):
+            async for event in super().stream_response(system_instructions, input, model_settings, tools, *args, **kwargs):
+                if getattr(event, "type", "") == "response.completed":
+                    event.response.output = repair_output(list(event.response.output), names)
+                    if attempt == 0 and is_empty(event.response.output):
+                        break  # nothing visible was streamed, so asking again is safe
+                    yield event
+                    return
+                yield event
+
+
+def is_empty(items: list[Any]) -> bool:
+    """No visible text and no tool call: the model said nothing at all."""
+    for item in items:
+        kind = getattr(item, "type", None)
+        if kind == "function_call" or (kind == "message" and _message_text(item).strip()):
+            return False
+    return True
 
 
 def _tool_names(tools: list[Any]) -> set[str]:

@@ -176,12 +176,33 @@ def main() -> None:
     chat_p.add_argument("--reasoning", action="store_true", help="show model reasoning")
     chat_p.add_argument("--no-router", action="store_true", help="don't auto-load skills by keyword")
     chat_p.add_argument("--persona", help="main persona (default: OMEN_PERSONA or omen)")
+    serve_p = sub.add_parser("serve", help="AG-UI server for the web UI")
+    serve_p.add_argument("--host", default="127.0.0.1")
+    serve_p.add_argument("--port", type=int, default=8765)
+    sub.add_parser("schema", help="print the UI component JSON Schema")
     eval_p = sub.add_parser("eval", help="run the small-model eval suite")
     eval_p.add_argument("--only", nargs="*", help="task ids to run")
     eval_p.add_argument("--repeat", type=int, default=1, help="runs per task")
+    eval_p.add_argument("--extract", action="store_true", help="run the UI extractor eval instead")
     args = parser.parse_args()
 
+    if args.command == "serve":
+        from omen.server import serve
+
+        serve(args.host, args.port)
+        return
+    if args.command == "schema":
+        import json
+
+        from omen.ui.components import json_schema
+
+        print(json.dumps(json_schema(), indent=2))
+        return
     if args.command == "eval":
+        if args.extract:
+            from evals.extract import run_extract_suite
+
+            sys.exit(asyncio.run(run_extract_suite(repeat=args.repeat)))
         from evals.run import run_suite
 
         sys.exit(asyncio.run(run_suite(only=args.only, repeat=args.repeat)))
