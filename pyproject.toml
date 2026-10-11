@@ -28,6 +28,7 @@ dependencies = [
     "spider_rs",
     "rich",
     "statsmodels",
+    "textual",
     "uvicorn",
     "yt-dlp",
     "openwakeword>=0.4.0",

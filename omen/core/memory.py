@@ -78,7 +78,8 @@ class Memory:
 
         @tool
         def remember(ctx: RunContextWrapper[Any], fact: str) -> ToolResult:
-            """Save a fact about the user to long-term memory, e.g. names, dates, preferences.
+            """Save a lasting fact about the user for future conversations (names, birthdays, preferences).
+            Never use it for data the user gives you for the current request (lists, numbers, drafts).
 
             Args:
                 fact: One short, self-contained sentence, e.g. "The user's sister is called Anna."

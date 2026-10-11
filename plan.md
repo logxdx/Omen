@@ -373,13 +373,17 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 - [x] Live server check on `ling3`: weather question → paired AG-UI stream with a `weather` ACTIVITY_SNAPSHOT; numbers question → `table` component extracted from the markdown reply.
 - [x] Tests: 105 unit tests (server/AG-UI tests skip if `fastapi`/`ag-ui-protocol` aren't installed).
 - [ ] Optional `ui` skill with `show_*` tools for stronger models — not needed so far: tables come from markdown and charts/cards from hint tags.
-- [ ] Re-run the main and extractor evals on the local model after the empty-response retry and guidance changes.
+- [x] Re-ran on `ling3` after the changes: extractor eval 12/12, main suite 44/46 (same level as before). Extractor now returns no component on model/API errors (seen: 503 "Loading model").
 
 ### Phase 5 — TUI (Textual)
 
-- [ ] App shell, streaming transcript, live input → steering, Esc → abort, status bar.
-- [ ] Renderer registry for every payload type + markdown fallback; interactive choices.
-- [ ] Slash commands + command palette; `/tree` branch browser.
+- [x] `omen/tui/app.py` (`python -m omen`, or `omen tui --persona/--session/--no-router`; `omen chat` keeps the line REPL): header (persona, model, loaded skills), scrolling transcript, live input, status bar (state, tokens, session file).
+- [x] Transcript: streamed markdown answers (`Markdown.get_stream`), collapsed "thinking", collapsible tool rows (✓/✗, args, result) with the component rendered below, delegated personas as nested blocks (same renderer, collapsed when done), routed-skill notes, injected-message notes, errors.
+- [x] Input: Enter sends; while working Enter steers (queued); with a pending question Enter or picking an option answers; Esc stops. Messages typed after the run's last delivery point start a follow-up run.
+- [x] `omen/tui/render.py`: a renderer for all 18 component types (weather panel, link/search/video lists, file views, red/green diff, grep, choices, delegation, memory, skill, download, DataTable, bar chart, card); invalid/unknown → markdown text. Reply extraction in the TUI is limited to chart/card (markdown already shows tables and option lists).
+- [x] Slash commands (`/help /personas /persona /skills /skill /reload /new /tree /quit`), Ctrl+P command palette (personas, skills, new session, branches), Ctrl+T branch tree: pick any entry (incl. delegation side branches) to continue from; transcript re-renders from the session (`omen/ui/history.py`, shared with the server).
+- [x] Live on `ling3` (headless pilot screenshots): weather card + answer; delegation to the writer as a nested block; table in the reply. Fixed from those: duplicate table, `remember` used for request data (rule moved into the tool description), unbounded nested-block height.
+- [x] Tests: 115 unit tests (Textual pilot tests skip if textual isn't installed).
 
 ### Phase 6 — Web UI
 

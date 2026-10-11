@@ -31,8 +31,9 @@ from omen.agui import AgUiMapper
 from omen.assistant import Assistant, build_assistant
 from omen.config import SESSIONS_DIR
 from omen.core import Runtime, Session
-from omen.ui.components import json_schema, payload
+from omen.ui.components import json_schema
 from omen.ui.extract import Extractor, components_for
+from omen.ui.history import history
 
 _THREAD_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -144,7 +145,7 @@ def create_app(
         session = threads[thread_id].session if thread_id in threads else Session(sessions_dir / f"{thread_id}.jsonl")
         if not session.entries:
             raise HTTPException(404, "no such thread")
-        return {"id": thread_id, "messages": _history(session)}
+        return {"id": thread_id, "messages": history(session)}
 
     return app
 
@@ -159,31 +160,6 @@ def _last_user_text(messages: list[Any]) -> str:
         parts = [getattr(p, "text", "") for p in content or [] if getattr(p, "type", "") == "text"]
         return "\n".join(p for p in parts if p).strip()
     return ""
-
-
-def _history(session: Session) -> list[dict]:
-    """The current branch as simple messages; tool results carry their UI payloads."""
-    out: list[dict] = []
-    names: dict[str, str] = {}
-    for item in session.items():
-        if not isinstance(item, dict):
-            continue
-        role, kind = item.get("role"), item.get("type")
-        if role in ("user", "assistant") and kind in (None, "message"):
-            content = item.get("content")
-            if isinstance(content, list):
-                content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-            out.append({"role": role, "content": content or ""})
-        elif kind == "function_call":
-            names[item.get("call_id", "")] = item.get("name", "")
-            out.append({"role": "tool_call", "id": item.get("call_id"), "name": item.get("name"), "arguments": item.get("arguments")})
-        elif kind == "function_call_output":
-            ui = payload((item.get("_agents_custom_data") or {}).get("ui"), text=str(item.get("output", ""))[:500])
-            out.append({
-                "role": "tool", "id": item.get("call_id"), "name": names.get(item.get("call_id", ""), ""),
-                "content": item.get("output"), "ui": ui.model_dump() if ui else None,
-            })
-    return out
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:

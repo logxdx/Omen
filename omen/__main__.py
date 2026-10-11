@@ -1,6 +1,6 @@
-"""Entry point: `python -m omen` (chat) or `python -m omen eval` (small-model evals).
+"""Entry point: `python -m omen` (TUI), `omen chat` (line chat), `omen serve` (AG-UI server), `omen eval`.
 
-The line-based chat here is a stopgap until the Textual TUI (Phase 5). Lines you
+`python -m omen` opens the Textual TUI; `omen chat` is the plain line chat. In it, lines you
 type while Omen is working are queued and delivered after the current step;
 when Omen asks a question, the next line you type answers it.
 """
@@ -171,7 +171,11 @@ async def chat(session_path: Path | None, show_reasoning: bool, use_router: bool
 def main() -> None:
     parser = argparse.ArgumentParser(prog="omen")
     sub = parser.add_subparsers(dest="command")
-    chat_p = sub.add_parser("chat", help="chat in the terminal (default)")
+    tui_p = sub.add_parser("tui", help="terminal UI (default)")
+    tui_p.add_argument("--session", type=Path, help="resume a session file")
+    tui_p.add_argument("--persona", help="main persona (default: OMEN_PERSONA or omen)")
+    tui_p.add_argument("--no-router", action="store_true", help="don't auto-load skills by keyword")
+    chat_p = sub.add_parser("chat", help="line-based chat (no TUI)")
     chat_p.add_argument("--session", type=Path, help="resume a session file")
     chat_p.add_argument("--reasoning", action="store_true", help="show model reasoning")
     chat_p.add_argument("--no-router", action="store_true", help="don't auto-load skills by keyword")
@@ -206,6 +210,20 @@ def main() -> None:
         from evals.run import run_suite
 
         sys.exit(asyncio.run(run_suite(only=args.only, repeat=args.repeat)))
+    if args.command in (None, "tui"):
+        try:
+            from omen.tui.app import run_tui
+        except ImportError:
+            if args.command == "tui":
+                sys.exit("The TUI needs textual: run `uv sync`.")
+            print("(textual not installed; using the line chat — run `uv sync` for the TUI)")
+        else:
+            run_tui(
+                getattr(args, "persona", None),
+                getattr(args, "session", None),
+                not getattr(args, "no_router", False),
+            )
+            return
     asyncio.run(
         chat(
             getattr(args, "session", None),
