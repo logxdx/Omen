@@ -627,6 +627,8 @@ class Agent(AgentBase, Generic[TContext]):
             resolved_run_config = run_config
             if resolved_run_config is None and isinstance(context, ToolContext):
                 resolved_run_config = context.run_config
+            if resolved_run_config is not None and resolved_run_config.message_queue is not None:
+                resolved_run_config = dataclasses.replace(resolved_run_config, message_queue=None)
             tool_state_scope_id = get_agent_tool_state_scope(context)
             if isinstance(context, ToolContext):
                 # Use a fresh ToolContext to avoid sharing approval state with parent runs.

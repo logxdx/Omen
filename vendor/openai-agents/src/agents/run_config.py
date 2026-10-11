@@ -12,6 +12,7 @@ from .handoffs import HandoffHistoryMapper, HandoffInputFilter
 from .items import TResponseInputItem
 from .lifecycle import RunHooks
 from .memory import Session, SessionInputCallback, SessionSettings
+from .message_queue import MessageQueue
 from .model_settings import ModelSettings
 from .models.interface import Model, ModelProvider
 from .models.multi_provider import MultiProvider
@@ -336,6 +337,11 @@ class RunConfig:
     - ``"return_error_to_model"`` returns a model-visible ``function_call_output`` error and lets
       the run continue.
     """
+
+    message_queue: MessageQueue | None = None
+    """Omen fork: user messages queued while the run is in progress. They are injected after the
+    current turn's tool outputs, and a pending message turns a final output into another turn.
+    Not inherited by agents run as tools."""
 
 
 class RunOptions(TypedDict, Generic[TContext]):

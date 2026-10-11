@@ -60,6 +60,7 @@ from .guardrail import (
 from .handoffs import Handoff
 from .items import (
     CompactionItem,
+    UserMessageItem,
     HandoffCallItem,
     HandoffOutputItem,
     MCPApprovalRequestItem,
@@ -3273,6 +3274,9 @@ def _deserialize_items(
                 except ValidationError:
                     raw_item_compaction = normalized_raw_item  # type: ignore[assignment]
                 result.append(CompactionItem(agent=agent, raw_item=raw_item_compaction))
+
+            elif item_type == "user_message_item":
+                result.append(UserMessageItem(agent=agent, raw_item=normalized_raw_item))
 
             elif item_type == "mcp_list_tools_item":
                 raw_item_mcp_list = McpListTools(**normalized_raw_item)

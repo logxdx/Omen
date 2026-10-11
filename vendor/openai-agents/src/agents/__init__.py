@@ -51,8 +51,10 @@ from .handoffs import (
     reset_conversation_history_wrappers,
     set_conversation_history_wrappers,
 )
+from .message_queue import MessageQueue
 from .items import (
     CompactionItem,
+    UserMessageItem,
     HandoffCallItem,
     HandoffOutputItem,
     ItemHelpers,
@@ -441,6 +443,8 @@ __all__ = [
     "OpenAIResponsesCompactionAwareSession",
     "is_openai_responses_compaction_aware_session",
     "CompactionItem",
+    "MessageQueue",
+    "UserMessageItem",
     "AgentHookContext",
     "RunContextWrapper",
     "TContext",

@@ -39,6 +39,7 @@ class RunItemStreamEvent:
         "mcp_approval_requested",
         "mcp_approval_response",
         "mcp_list_tools",
+        "user_message_injected",
     ]
     """The name of the event."""
 

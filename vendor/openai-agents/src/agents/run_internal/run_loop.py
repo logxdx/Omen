@@ -41,6 +41,7 @@ from ..exceptions import (
 )
 from ..handoffs import Handoff
 from ..items import (
+    UserMessageItem,
     HandoffCallItem,
     ItemHelpers,
     ModelResponse,
@@ -1661,6 +1662,7 @@ async def run_single_turn_streamed(
         event_queue=streamed_result._event_queue,
         before_side_effects=raise_if_input_guardrail_tripwire_known,
     )
+    _inject_queued_messages(single_step_result, run_config, public_agent)
 
     items_to_filter = session_items_for_turn(single_step_result)
 
@@ -1703,6 +1705,28 @@ async def run_single_turn_streamed(
     filtered_result = _dc.replace(single_step_result, new_step_items=items_to_filter)
     stream_step_result_to_queue(filtered_result, streamed_result._event_queue)
     return single_step_result
+
+
+def _inject_queued_messages(
+    turn_result: SingleStepResult, run_config: RunConfig, agent: Agent[Any]
+) -> None:
+    """Omen fork: append queued user messages to this turn and make sure the run continues."""
+    queue = run_config.message_queue
+    if queue is None or not queue.pending():
+        return
+    if not isinstance(turn_result.next_step, NextStepRunAgain | NextStepFinalOutput):
+        return  # handoffs and interruptions pick the messages up on a later turn
+    messages = queue.drain()
+    if not messages:
+        return
+    items = [
+        UserMessageItem(agent=agent, raw_item={"role": "user", "content": text})
+        for text in messages
+    ]
+    turn_result.new_step_items.extend(items)
+    if turn_result.session_step_items is not None:
+        turn_result.session_step_items.extend(items)
+    turn_result.next_step = NextStepRunAgain()
 
 
 async def run_single_turn(
@@ -1778,7 +1802,7 @@ async def run_single_turn(
         prompt_cache_key_resolver=prompt_cache_key_resolver,
     )
 
-    return await get_single_step_result_from_response(
+    turn_result = await get_single_step_result_from_response(
         bindings=bindings,
         original_input=original_input,
         pre_step_items=generated_items,
@@ -1793,6 +1817,8 @@ async def run_single_turn(
         tool_use_tracker=tool_use_tracker,
         server_manages_conversation=server_conversation_tracker is not None,
     )
+    _inject_queued_messages(turn_result, run_config, public_agent)
+    return turn_result
 
 
 async def get_new_response(

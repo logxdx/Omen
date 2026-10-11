@@ -17,6 +17,7 @@ from ..items import (
     ToolCallOutputItem,
     ToolSearchCallItem,
     ToolSearchOutputItem,
+    UserMessageItem,
 )
 from ..logger import logger
 from ..stream_events import RunItemStreamEvent, StreamEvent
@@ -55,6 +56,8 @@ def stream_step_items_to_queue(
             event = RunItemStreamEvent(item=item, name="mcp_list_tools")
         elif isinstance(item, ToolApprovalItem):
             event = None  # approvals represent interruptions, not streamed items
+        elif isinstance(item, UserMessageItem):
+            event = RunItemStreamEvent(item=item, name="user_message_injected")
         elif isinstance(item, CompactionItem):
             event = None  # compaction items are session bookkeeping, not streamed items
         else:
