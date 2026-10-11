@@ -19,7 +19,7 @@ OMEN_HOME = Path(os.getenv("OMEN_HOME", Path.home() / ".omen"))
 SESSIONS_DIR = OMEN_HOME / "sessions"
 
 # Upper bound on LLM steps per user message.
-MAX_TURNS = int(os.getenv("OMEN_MAX_TURNS", "10"))
+MAX_TURNS = int(os.getenv("OMEN_MAX_TURNS", "50"))
 
 # Default cap on the text a tool returns to the model (~1k tokens).
 TOOL_CONTENT_MAX_CHARS = int(os.getenv("OMEN_TOOL_MAX_CHARS", "4000"))
