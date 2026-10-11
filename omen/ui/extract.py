@@ -100,7 +100,11 @@ class Extractor:
             {"role": "user", "content": f"CONTEXT:\n{context[:6000]}"},
         ]
         for attempt in range(2):
-            raw = await self._complete(messages, {"name": kind, "schema": schema})
+            try:
+                raw = await self._complete(messages, {"name": kind, "schema": schema})
+            except Exception as e:  # model unavailable, timeout, ...: no component, the text stands
+                logger.warning("extractor call failed for %s: %s", kind, e)
+                return None
             try:
                 data = json.loads(_json_text(raw))
                 if isinstance(data, dict) and data.get("url") and str(data["url"]) not in context:

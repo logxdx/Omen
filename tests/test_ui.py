@@ -93,6 +93,12 @@ class ExtractorTests(unittest.IsolatedAsyncioTestCase):
         p = await Extractor(complete=complete).extract("card", "See https://docs.example.org for docs.")
         self.assertEqual(p.props["url"], "https://docs.example.org")
 
+    async def test_model_errors_mean_no_component(self):
+        async def down(messages, schema):
+            raise ConnectionError("Loading model")
+
+        self.assertIsNone(await Extractor(complete=down).extract("chart", "x"))
+
     async def test_gives_up_after_two_failures(self):
         complete, calls = fake_complete("nope", "still nope")
         self.assertIsNone(await Extractor(complete=complete).extract("card", "x"))
