@@ -72,11 +72,45 @@ class AssistantPersonaTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(assistant.agent.name, "boss")
         delegate = [t for t in assistant.core_tools if t.name == "delegate"][0]
         self.assertEqual(delegate.params_json_schema["properties"]["persona"]["enum"], ["helper"])
-        [e async for e in Runtime(assistant.agent, prepare=assistant.prepare).run("hi")]
+        [e async for e in Runtime.for_assistant(assistant).run("hi")]
         prompt = model.first_turn_args["system_instructions"]
         self.assertTrue(prompt.startswith("You are Boss. Be brief."))
         self.assertIn("Specialists: hand them a subtask with delegate", prompt)
         self.assertIn("- helper: Uses alpha.", prompt)
+
+    def test_named_specialist(self):
+        assistant = self.build(FakeModel())
+        cases = {
+            "ask the helper to check the logs": "Check the logs",
+            "Have helper find the file": "Find the file",
+            "@helper, summarise this": "Summarise this",
+            "please use my helper for the report": "Please for the report",
+        }
+        for text, task in cases.items():
+            self.assertEqual(assistant.named_specialist(text), ("helper", task), text)
+        for text in ("I need help", "the helpers are busy", "ask boss"):
+            self.assertIsNone(assistant.named_specialist(text), text)
+
+    async def test_naming_a_specialist_delegates_before_the_model_runs(self):
+        model = FakeModel()
+        model.add_multiple_turn_outputs([
+            [get_text_message("helper's findings")],  # the helper runs first (harness-made call)
+            [get_text_message("Here is what the helper found.")],  # then the main agent replies
+        ])
+        assistant = self.build(model)
+        rt = Runtime.for_assistant(assistant)
+        events = [e async for e in rt.run("ask the helper to check the logs")]
+
+        self.assertIn(Custom("delegate_hint", {"persona": "helper"}), events)
+        helper_input = model.first_turn_args["input"]
+        self.assertEqual(len(helper_input), 1)
+        self.assertIn("Check the logs", helper_input[0]["content"])
+        result = [e for e in events if isinstance(e, ToolCallResult)][0]
+        self.assertEqual((result.name, result.content), ("delegate", "helper's findings"))
+        self.assertTrue([e for e in events if isinstance(e, SubagentEvent)])
+        kinds = [i.get("role") or i.get("type") for i in rt.session.items()]
+        self.assertEqual(kinds, ["user", "function_call", "function_call_output", "assistant"])
+        self.assertEqual(model.last_turn_args["system_instructions"].split("\n")[0], "You are Boss. Be brief.")
 
     async def test_load_skill_with_a_persona_name_points_to_delegate(self):
         model = FakeModel()
@@ -99,7 +133,7 @@ class AssistantPersonaTests(unittest.IsolatedAsyncioTestCase):
             [get_text_message("Done: alpha-value: x")],  # main agent's answer
         ])
         assistant = self.build(model)
-        events = [e async for e in Runtime(assistant.agent, prepare=assistant.prepare).run("please use the helper")]
+        events = [e async for e in Runtime.for_assistant(assistant).run("please run alpha on x")]
 
         nested = [e for e in events if isinstance(e, SubagentEvent)]
         self.assertIn("use_alpha", [e.event.name for e in nested if hasattr(e.event, "name")])

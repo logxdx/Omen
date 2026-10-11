@@ -78,7 +78,7 @@ def command(text: str, assistant: Assistant, runtime: Runtime) -> Assistant | No
         except KeyError:
             print(f"{RED}no main persona named {name}{RESET}")
             return assistant
-        runtime.agent, runtime.prepare = switched.agent, switched.prepare
+        runtime.attach(switched)
         print(f"{DIM}(persona: {name}){RESET}")
         return switched
     if text == "/skills":
@@ -107,7 +107,7 @@ def command(text: str, assistant: Assistant, runtime: Runtime) -> Assistant | No
 async def chat(session_path: Path | None, show_reasoning: bool, use_router: bool, persona: str | None) -> None:
     session = Session(session_path) if session_path else Session.create(SESSIONS_DIR)
     assistant = build_assistant(use_router=use_router, persona=persona)
-    runtime = Runtime(assistant.agent, session, prepare=assistant.prepare)
+    runtime = Runtime.for_assistant(assistant, session)
     loop = asyncio.get_running_loop()
     lines: asyncio.Queue[str | None] = asyncio.Queue()
 

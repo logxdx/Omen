@@ -1,7 +1,14 @@
-"""Assembles the main assistant from a persona: prompt, core tools, skills, memory, delegation."""
+"""Assembles the main assistant from a persona: prompt, core tools, skills, memory, delegation.
+
+Prompt-cache layout: the system prompt and tool list are identical on every request of a
+session (no clock, no recalled memory, no per-turn skill text), so llama.cpp / Ollama /
+API prompt caches stay warm. Everything that changes goes into a `<context>` block at
+the start of each user message (`Assistant.context`), stored once and never rewritten.
+"""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -9,7 +16,7 @@ from typing import Any
 
 from agents import Agent, FunctionTool, Model
 
-from omen.config import DEFAULT_PERSONA, OMEN_HOME, PERSONAS_DIRS, SKILLS_DIRS, ModelConfig, main_model
+from omen.config import DEFAULT_PERSONA, OMEN_HOME, PERSONAS_DIRS, SKILLS_DIRS, ModelConfig, main_model, side_config
 from omen.core.ask import ask_user
 from omen.core.delegate import delegate_tool
 from omen.core.events import Custom, Event
@@ -36,6 +43,11 @@ UI_HINTS = (
         "card": "For a short summary of one thing (a place, product, person), end your reply with <ui:card> on its own line.",
     },
 )
+CONTEXT_NOTE = (
+    "A user message may start with a <context> block (current time, things you know about the user, "
+    "skill instructions). Use it silently; don't repeat it back."
+)
+MEMORY_SHOWN_KEY = "memory_shown"
 FALLBACK_PERSONA = Persona(name="assistant", description="Default assistant.", body="You are a concise personal assistant.", path=Path())
 
 
@@ -48,6 +60,7 @@ class Assistant:
     memory: Memory
     use_router: bool = True
     core_tools: list[FunctionTool] = field(default_factory=list)
+    specialists: list[str] = field(default_factory=list)  # delegation targets
     options: dict[str, Any] = field(default_factory=dict)  # build_assistant kwargs, for switch()
 
     def switch(self, name: str) -> Assistant:
@@ -61,6 +74,18 @@ class Assistant:
         self.skills.reload()
         self.agent.tools = self.core_tools + self.skills.gated_tools()
 
+    def context(self, text: str, state: dict) -> str:
+        """The `<context>` block for a new user message: time, new memories, new skill instructions."""
+        now = datetime.now().astimezone()
+        sections = [f"Now: {now:%A, %d %B %Y, %H:%M %Z}"]
+        shown = state.setdefault(MEMORY_SHOWN_KEY, [])
+        facts = [f for f in self.memory.recall(text) if f["id"] not in shown]
+        if facts:
+            shown.extend(f["id"] for f in facts)
+            sections.append("Known about the user:\n" + "\n".join(f"- {f['fact']}" for f in facts))
+        sections.extend(self.skills.pending_instructions(state))
+        return "<context>\n" + "\n\n".join(sections) + "\n</context>"
+
     def prepare(self, text: str, state: dict) -> list[Event]:
         """Runs before each user message: keep the persona's skills loaded, then route by keyword."""
         events: list[Event] = []
@@ -72,7 +97,27 @@ class Assistant:
             if name is not None and name not in loaded(state):
                 self.skills.load(name, state)
                 events.append(Custom("skill_loaded", {"skill": name, "by": "router"}))
+        named = self.named_specialist(text)
+        if named:
+            # The user asked for a specialist by name: delegate deterministically (small models
+            # often do the work themselves instead, and llama.cpp ignores a named tool_choice).
+            persona, task = named
+            state["pre_call"] = {"name": "delegate", "arguments": {"persona": persona, "task": task}}
+            events.append(Custom("delegate_hint", {"persona": persona}))
         return events
+
+    def named_specialist(self, text: str) -> tuple[str, str] | None:
+        """(persona, task) if the user addresses a specialist ("ask the writer to …", "@researcher …")."""
+        for name in self.specialists:
+            pattern = (
+                rf"(@{re.escape(name)}\b|\b(ask|have|get|let|tell|use)\s+(the\s+|my\s+|your\s+)?{re.escape(name)}\b)"
+                r"[\s,:]*(to\s+)?"
+            )
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                task = (text[: match.start()] + text[match.end() :]).strip(" ,.:") or text
+                return name, task[0].upper() + task[1:]
+        return None
 
 
 def build_assistant(
@@ -105,24 +150,21 @@ def build_assistant(
     specialists = [p for p in personas.values() if p.delegate and p.name != main.name]
     delegate = None
     if specialists:
-        agents = [_specialist_agent(p, skills, model_for(p), settings) for p in specialists]
+        side = make_settings(side_config(config))  # own llama.cpp slot if OMEN_SLOT_SIDE is set
+        agents = [_specialist_agent(p, skills, model_for(p), side) for p in specialists]
         delegate = delegate_tool(agents, max_turns={p.name: p.max_turns for p in specialists})
 
     def instructions(ctx: Any, agent: Agent) -> str:
+        # Constant for the session: anything that varies belongs in Assistant.context.
         state = getattr(ctx.context, "state", {}) if ctx.context is not None else {}
-        now = datetime.now().astimezone()
-        parts = [main.body, GUIDANCE]
+        parts = [main.body, GUIDANCE, CONTEXT_NOTE]
         if delegate is not None:
             parts.append(DELEGATION + "\n" + "\n".join(f"- {p.name}: {p.description}" for p in specialists))
-        parts.append(f"Current date and time: {now:%A, %d %B %Y, %H:%M %Z}.")
-        recalled = memory.prompt_section(state.get("user_message", ""))
-        if recalled:
-            parts.append(recalled)
         if skills.skills:
-            parts.append("Skills (call load_skill with the name before a task a skill covers):\n" + skills.roster())
-        active = skills.active_instructions(state)
-        if active:
-            parts.append(active)
+            parts.append(
+                "Skills (their tools are always available; call load_skill with the name to get a skill's "
+                "instructions before a task it covers):\n" + skills.roster()
+            )
         hints = state.get("ui_hints") or []
         if hints:
             parts.append(UI_HINTS[0] + " ".join(UI_HINTS[1][k] for k in hints if k in UI_HINTS[1]))
@@ -143,6 +185,7 @@ def build_assistant(
     return Assistant(
         agent=agent, persona=main, personas=personas, skills=skills, memory=memory,
         use_router=use_router, core_tools=core, options=options,
+        specialists=[p.name for p in specialists],
     )
 
 

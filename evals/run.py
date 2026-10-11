@@ -82,12 +82,7 @@ def build_omen(task: dict, model: Model, workdir: Path) -> Runtime:
         memory_path=workdir / "facts.jsonl",
         use_router=task.get("router", True),
     )
-    return Runtime(
-        assistant.agent,
-        max_turns=task.get("max_steps", 6),
-        prepare=assistant.prepare,
-        ask_handler=_auto_answer,
-    )
+    return Runtime.for_assistant(assistant, max_turns=task.get("max_steps", 6), ask_handler=_auto_answer)
 
 
 def build_agent(task: dict, model: Model) -> Agent:

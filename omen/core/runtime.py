@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import json
 import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from agents import Agent, ItemHelpers, MaxTurnsExceeded, MessageQueue, RunConfig, Runner
+from agents.tool_context import ToolContext
 
 from omen.config import MAX_TURNS
 from omen.core.events import (
@@ -40,8 +42,8 @@ from omen.core.events import (
     UIComponent,
     UserQuestion,
 )
-from omen.core.session import Session
-from omen.core.tools import classify_error
+from omen.core.session import CUSTOM_DATA_KEY, Session
+from omen.core.tools import ToolResult, classify_error
 from omen.ui.components import UIPayload, payload
 from omen.ui.extract import strip_hints
 
@@ -192,6 +194,7 @@ class Runtime:
         ask_handler: Callable[[str, list[str] | None], Awaitable[str]] | None = None,
         components: Callable[[str, set[str] | None], Awaitable[list[UIPayload]]] | None = None,
         ui: set[str] | None = None,
+        context: Callable[[str, dict], str | None] | None = None,
     ):
         """
         Args:
@@ -203,6 +206,9 @@ class Runtime:
                 they are emitted as UI_COMPONENT before RUN_FINISHED.
             ui: component types the frontend renders (None = all). Tool results of other
                 types lose their details (the text stays) and only these are extracted.
+            context: builds a block (time, memories, skill instructions) prepended to each new
+                user message, after `prepare`. Keeping varying text here instead of in the system
+                prompt is what keeps the model server's prompt cache warm.
         """
         self.agent = agent
         self.session = session or Session()
@@ -211,6 +217,7 @@ class Runtime:
         self.prepare = prepare
         self.ask_handler = ask_handler
         self.components = components
+        self.context = context
         self.ui = ui
         self.queue = MessageQueue()
         self.state: dict = {}
@@ -219,6 +226,19 @@ class Runtime:
         self._aborted = False
         self._question: tuple[UserQuestion, asyncio.Future] | None = None
         self._emit: Callable[[Event], None] = lambda event: None
+
+    @classmethod
+    def for_assistant(cls, assistant: Any, session: Session | None = None, **kwargs: Any) -> Runtime:
+        """A runtime wired to an omen.assistant.Assistant (agent, skill router, context block)."""
+        runtime = cls(assistant.agent, session, **kwargs)
+        runtime.attach(assistant)
+        return runtime
+
+    def attach(self, assistant: Any) -> None:
+        """Switch to another assistant (e.g. persona change) keeping the session and state."""
+        self.agent = assistant.agent
+        self.prepare = assistant.prepare
+        self.context = assistant.context
 
     def send(self, text: str) -> None:
         """Queue a user message while a run is in progress (delivered after the current turn)."""
@@ -251,6 +271,58 @@ class Runtime:
             return await future
         finally:
             self._question = None
+
+    async def _run_pre_call(
+        self, call: dict, user_message: str, context: OmenContext, config: RunConfig, out: asyncio.Queue
+    ) -> AsyncIterator[Event]:
+        """Run a tool call chosen by the harness (not the model) before the model's turn.
+
+        The user message, the call and its result are appended to the session in order, so the
+        conversation reads exactly as if the model had made the call (and stays cache-friendly).
+        """
+        tool = next((t for t in self.agent.tools if getattr(t, "name", None) == call["name"]), None)
+        if tool is None:
+            return
+        await self.session.add_items([{"role": "user", "content": user_message}])
+        call_id = f"call_{uuid.uuid4().hex[:16]}"
+        arguments = json.dumps(call.get("arguments", {}), ensure_ascii=False)
+        yield ToolCallStart(call_id, tool.name)
+        yield ToolCallArgs(call_id, arguments)
+        yield ToolCallEnd(call_id)
+        tool_context = ToolContext(
+            context=context, tool_name=tool.name, tool_call_id=call_id, tool_arguments=arguments,
+            run_config=config, conversation_history=list(self.session.items()),
+        )
+        task = asyncio.create_task(tool.on_invoke_tool(tool_context, arguments))
+        while not task.done():  # stream what the tool emits (e.g. a persona's run) while it works
+            getter = asyncio.ensure_future(out.get())
+            done, _ = await asyncio.wait({task, getter}, return_when=asyncio.FIRST_COMPLETED)
+            if getter in done:
+                yield self._filter_ui(getter.result())
+            else:
+                getter.cancel()
+            if self._aborted and not task.done():
+                task.cancel()
+        while not out.empty():
+            yield self._filter_ui(out.get_nowait())
+        try:
+            output = task.result()
+        except asyncio.CancelledError:
+            output = ToolResult("Cancelled: the user stopped the run.", error="aborted")
+        except Exception as e:
+            output = ToolResult(f"Error in {tool.name}: {type(e).__name__}: {e}", error="exception")
+        content = str(output)
+        details = output.details if isinstance(output, ToolResult) else None
+        error = output.error if isinstance(output, ToolResult) else classify_error(content)
+        ui = payload(details, text=content[:500])
+        yield self._filter_ui(ToolCallResult(call_id, tool.name, content, ui.model_dump() if ui else None, error))
+        result_item: dict = {"type": "function_call_output", "call_id": call_id, "output": content}
+        if details is not None:
+            result_item[CUSTOM_DATA_KEY] = {"ui": details}
+        await self.session.add_items([
+            {"type": "function_call", "call_id": call_id, "name": tool.name, "arguments": arguments},
+            result_item,
+        ])
 
     def _hint_kinds(self) -> list[str]:
         """Hint tags the model may use: extractor-filled kinds the frontend renders (tables need none)."""
@@ -290,9 +362,15 @@ class Runtime:
             yield event
 
         reason = "done"
-        next_input: str | list[dict] = user_input
+        pre_call = self.state.pop("pre_call", None)  # e.g. a delegation the user asked for by name
+        block = self.context(user_input, self.state) if self.context else None
+        next_input: str | list[dict] = f"{block}\n\n{user_input}" if block else user_input
         try:
-            while True:
+            if pre_call and isinstance(next_input, str):
+                async for event in self._run_pre_call(pre_call, next_input, context, config, out):
+                    yield event
+                next_input = []  # the session now ends with the call's result; the model replies to it
+            while not self._aborted:
                 result = Runner.run_streamed(
                     self.agent,
                     next_input,
@@ -331,6 +409,7 @@ class Runtime:
                     "input_tokens": usage.input_tokens,
                     "output_tokens": usage.output_tokens,
                     "total_tokens": usage.total_tokens,
+                    "cached_tokens": getattr(usage.input_tokens_details, "cached_tokens", 0) or 0,
                 })
 
                 if self._aborted:
@@ -342,6 +421,8 @@ class Runtime:
                 for text in pending:
                     yield Custom("message_injected", text)
                 next_input = [{"role": "user", "content": text} for text in pending]
+            if self._aborted:
+                reason = "aborted"
         except MaxTurnsExceeded:
             reason = "max_turns"
         except Exception as e:

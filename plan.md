@@ -385,6 +385,19 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 - [x] Live on `ling3` (headless pilot screenshots): weather card + answer; delegation to the writer as a nested block; table in the reply. Fixed from those: duplicate table, `remember` used for request data (rule moved into the tool description), unbounded nested-block height.
 - [x] Tests: 115 unit tests (Textual pilot tests skip if textual isn't installed).
 
+### Prompt cache (DeepSeek Harness layout)
+
+llama.cpp reuses its KV cache only for an unchanged token prefix; the tool list is rendered into the first system block, so any change to the system prompt or tools reprocesses the whole conversation. Following DeepSeek Harness (`dsh`, ~95–99% reported hit rates):
+
+- [x] System prompt frozen per session: persona, guidance, a note about the context block, specialists roster, skills roster, UI hints. No clock, no recalled memory, no per-turn skill text.
+- [x] Each new user message starts with a `<context>` block (time; memories not yet shown this session; instructions of skills loaded since the last message), stored once and never rewritten; TUI/server history hide it (`strip_context`).
+- [x] Constant tool list: every skill tool is always visible; calling one marks its skill loaded; `load_skill` returns the skill's instructions as its result; each skill's instructions enter the conversation exactly once.
+- [x] Named specialists ("ask the writer to …", "@researcher …") are delegated by the harness before the model runs (llama.cpp ignores a named `tool_choice`, and with all tools visible the model otherwise did the work itself); the call and result are appended to the session like a model-made call.
+- [x] Instrumentation: usage events carry `cached_tokens`; the TUI status bar shows the session's cache hit rate.
+- [x] Opt-in llama.cpp slot pinning: `OMEN_SLOT_MAIN` / `OMEN_SLOT_SIDE` (`id_slot`) so personas and the UI extractor don't evict the main conversation; needs `llama-server -np 2+`.
+- [x] Results on `ling3` (5-turn scripted conversation): cache hit **69% → 86%** overall; turns after the first **97–99%** (skill-loading turns were ~50% and every new clock minute reset to 0%). First request is larger (~2.4k vs ~1.1k tokens) because all tools are listed; it's cached across turns and sessions. Eval suite: **45/46, 100% valid tool calls**; named delegation 8/8.
+- [ ] Compaction (Phase 7) must keep the prefix: summarizer = same system prompt + tools + history + a final instruction; new session starts with the same system prompt and tools.
+
 ### Phase 6 — Web UI
 
 - [ ] Vite + React + assistant-ui + `@assistant-ui/react-ag-ui`; tool UIs per payload type.

@@ -7,12 +7,14 @@ A skill is a folder:
       tools.py      # optional: TOOLS = [tool, ...]
       helpers.py    # anything tools.py imports relatively (`from .helpers import x`)
 
-Only `name: description` lines are always in the system prompt. A skill's
-tools are registered up front but disabled (SDK `is_enabled`) until the skill
-is loaded, either by the model calling `load_skill(name)` or by the keyword
-pre-router before a run (small models under-trigger skills). Loading also puts
-the skill's instructions into the system prompt. Up to MAX_LOADED skills stay
-loaded across turns; loading another evicts the least recently used.
+Cache-friendly layout (see plan.md, "Prompt cache"): the system prompt and the
+tool list never change during a session, so the model server can reuse its
+prompt cache. Concretely:
+- only `name: description` lines are in the (frozen) system prompt;
+- every skill tool is always visible; calling one marks its skill as loaded;
+- a skill's instructions are appended to the conversation exactly once: as the
+  result of `load_skill(name)`, or in the next user message's context block when
+  the keyword pre-router (or a tool call) loaded it (`pending_instructions`).
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from omen.core.tools import ToolResult, tool
 logger = logging.getLogger(__name__)
 MAX_LOADED = 3
 STATE_KEY = "skills"  # OmenContext.state[STATE_KEY] = [loaded skill names, most recent last]
+SHOWN_KEY = "skills_shown"  # skills whose instructions are already in the conversation
 _PACKAGE = "omen_skills"
 
 
@@ -151,23 +154,32 @@ class Skills:
     def roster(self) -> str:
         return "\n".join(f"- {s.name}: {s.description}" for s in self.skills.values())
 
-    def active_instructions(self, state: dict) -> str:
-        parts = []
+    def instructions(self, skill: Skill) -> str:
+        tools = ", ".join(t.name for t in skill.tools)
+        header = f"Skill '{skill.name}' instructions" + (f" (tools: {tools})" if tools else "")
+        return f"{header}:\n{skill.body}"
+
+    def pending_instructions(self, state: dict) -> list[str]:
+        """Instructions of loaded skills not yet shown in this conversation (then marked shown)."""
+        shown = state.setdefault(SHOWN_KEY, [])
+        out = []
         for name in loaded(state):
             skill = self.skills.get(name)
-            if skill and skill.body:
-                tools = ", ".join(t.name for t in skill.tools)
-                header = f"## Skill: {skill.name}" + (f" (tools: {tools})" if tools else "")
-                parts.append(f"{header}\n{skill.body}")
-        return "\n\n".join(parts)
+            if skill and skill.body and name not in shown:
+                shown.append(name)
+                out.append(self.instructions(skill))
+        return out
 
     def gated_tools(self) -> list[FunctionTool]:
-        """Every skill tool, enabled only while its skill is loaded."""
-        gated = []
-        for skill in self.skills.values():
-            for t in skill.tools:
-                gated.append(dataclasses.replace(t, is_enabled=_enabled_when_loaded(skill.name)))
-        return gated
+        """Every skill tool, always visible (a constant tool list keeps the prompt cache warm).
+
+        Calling one marks its skill as loaded, so its instructions follow in the next context block.
+        """
+        return [
+            dataclasses.replace(t, on_invoke_tool=_marks_loaded(self, skill.name, t.on_invoke_tool))
+            for skill in self.skills.values()
+            for t in skill.tools
+        ]
 
     def load_skill_tool(self, redirects: dict[str, str] | None = None) -> FunctionTool:
         """`redirects` maps names that aren't skills (e.g. personas) to a hint for the model."""
@@ -176,7 +188,7 @@ class Skills:
 
         @tool
         def load_skill(ctx: RunContextWrapper[Any], name: str) -> ToolResult:
-            """Load a skill to get its instructions and tools. Use it before tasks a skill covers.
+            """Get a skill's instructions before a task it covers (its tools are always available).
 
             Args:
                 name: Skill name from the skills list.
@@ -191,9 +203,12 @@ class Skills:
                     f"Error: no skill named '{name}'. Skills: {', '.join(skills.skills)}.",
                     error="invalid_args",
                 )
-            tools = ", ".join(t.name for t in skill.tools) or "none (instructions only)"
+            shown = state.setdefault(SHOWN_KEY, [])
+            if skill.name not in shown:
+                shown.append(skill.name)
+            body = skills.instructions(skill) if skill.body else f"Skill '{skill.name}' has no instructions."
             return ToolResult(
-                f"Loaded skill '{skill.name}'. Tools now available: {tools}.",
+                f"Loaded skill '{skill.name}'.\n\n{body}",
                 details={"type": "skill_loaded", "skill": skill.name},
             )
 
@@ -206,8 +221,11 @@ def _state(ctx: Any) -> dict:
     return state if isinstance(state, dict) else {}
 
 
-def _enabled_when_loaded(name: str):
-    def is_enabled(ctx: Any, agent: Any) -> bool:
-        return name in loaded(_state(ctx))
+def _marks_loaded(skills: Skills, name: str, invoke: Any):
+    async def on_invoke_tool(ctx: Any, arguments: str) -> Any:
+        state = _state(ctx)
+        if name not in loaded(state):
+            skills.load(name, state)
+        return await invoke(ctx, arguments)
 
-    return is_enabled
+    return on_invoke_tool

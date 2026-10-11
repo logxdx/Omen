@@ -2,8 +2,18 @@
 
 from __future__ import annotations
 
+import re
+
 from omen.core.session import CUSTOM_DATA_KEY, Session
 from omen.ui.components import payload
+
+
+_CONTEXT = re.compile(r"^\s*<context>.*?</context>\s*", re.DOTALL)
+
+
+def strip_context(text: str) -> str:
+    """A user message without its `<context>` block (time, memories, skill notes)."""
+    return _CONTEXT.sub("", text, count=1)
 
 
 def history(session: Session, entry_id: str | None = None) -> list[dict]:
@@ -23,6 +33,8 @@ def history(session: Session, entry_id: str | None = None) -> list[dict]:
             content = item.get("content")
             if isinstance(content, list):
                 content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+            if role == "user":
+                content = strip_context(content or "")
             out.append({"role": role, "content": content or ""})
         elif kind == "function_call":
             names[item.get("call_id", "")] = item.get("name", "")

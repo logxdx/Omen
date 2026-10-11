@@ -85,36 +85,54 @@ class SkillsTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(loaded(state)), MAX_LOADED)
         self.assertIsNone(skills.load("missing", state))
 
-    async def test_tools_are_hidden_until_load_skill(self):
+    async def test_system_prompt_and_tools_stay_identical_across_a_session(self):
         model = FakeModel()
         model.add_multiple_turn_outputs([
             [get_function_tool_call("load_skill", json.dumps({"name": "alpha"}), call_id="l1")],
             [get_function_tool_call("use_alpha", json.dumps({"thing": "x"}), call_id="u1")],
             [get_text_message("done")],
+            [get_text_message("second answer")],
         ])
         assistant = build_assistant(model=model, skills_dirs=[self.root], personas_dirs=[], memory_path=self.root / "m.jsonl", use_router=False)
-        rt = Runtime(assistant.agent, prepare=assistant.prepare)
+        rt = Runtime.for_assistant(assistant)
         events = [e async for e in rt.run("do something")]
+        [e async for e in rt.run("and again")]
 
-        first = tool_names(model.first_turn_args)
-        self.assertEqual(first, ["load_skill", "remember", "ask_user"])
-        self.assertIn("use_alpha", tool_names(model.last_turn_args))
-        self.assertNotIn("use_beta", tool_names(model.last_turn_args))
-        self.assertIn("Alpha steps.", model.last_turn_args["system_instructions"])
-        self.assertNotIn("Alpha steps.", model.first_turn_args["system_instructions"])
+        # Prompt-cache layout: same system prompt and same tools on every request.
+        self.assertEqual(model.first_turn_args["system_instructions"], model.last_turn_args["system_instructions"])
+        self.assertEqual(tool_names(model.first_turn_args), tool_names(model.last_turn_args))
+        self.assertEqual(tool_names(model.first_turn_args), ["load_skill", "remember", "ask_user", "use_alpha", "use_beta"])
+        self.assertNotIn("Alpha steps.", model.last_turn_args["system_instructions"])
         results = {e.name: e for e in events if isinstance(e, ToolCallResult)}
+        self.assertIn("Alpha steps.", results["load_skill"].content)  # instructions arrive as the tool result
         self.assertEqual(results["use_alpha"].content, "alpha-value: x")
-        self.assertEqual(loaded(rt.state), ["alpha"])  # stays loaded for the next message
+        self.assertEqual(loaded(rt.state), ["alpha"])
+        # The second message doesn't repeat instructions already in the conversation.
+        last_user = [i for i in model.last_turn_args["input"] if i.get("role") == "user"][-1]["content"]
+        self.assertNotIn("Alpha steps.", last_user)
 
-    async def test_router_preloads_before_the_first_call(self):
+    async def test_router_and_direct_tool_use_deliver_instructions_once_in_context(self):
         model = FakeModel()
-        model.add_multiple_turn_outputs([[get_text_message("ok")]])
+        model.add_multiple_turn_outputs([
+            [get_text_message("ok")],
+            [get_function_tool_call("use_alpha", json.dumps({"thing": "y"}), call_id="u2")],
+            [get_text_message("used alpha")],
+            [get_text_message("fine")],
+        ])
         assistant = build_assistant(model=model, skills_dirs=[self.root], personas_dirs=[], memory_path=self.root / "m.jsonl")
-        rt = Runtime(assistant.agent, prepare=assistant.prepare)
+        rt = Runtime.for_assistant(assistant)
         events = [e async for e in rt.run("use beta on this")]
-        self.assertIn("use_beta", tool_names(model.first_turn_args))
         routed = [e.value for e in events if isinstance(e, Custom) and e.name == "skill_loaded"]
         self.assertEqual(routed, [{"skill": "beta", "by": "router"}])
+        first_user = model.first_turn_args["input"][-1]["content"]
+        self.assertIn("Skill 'beta' instructions", first_user)  # router-loaded: in the context block
+
+        [e async for e in rt.run("now something else")]  # calls use_alpha directly → alpha marked loaded
+        self.assertIn("alpha", loaded(rt.state))
+        [e async for e in rt.run("thanks")]
+        last_user = model.last_turn_args["input"][-1]["content"]
+        self.assertIn("Skill 'alpha' instructions", last_user)
+        self.assertNotIn("Skill 'beta' instructions", last_user)
 
     async def test_unknown_skill_is_an_actionable_error(self):
         model = FakeModel()

@@ -70,11 +70,11 @@ def create_app(
         if current is None:
             session = Session(sessions_dir / f"{thread_id}.jsonl", session_id=thread_id)
             assistant = assistant_factory(persona=persona)
-            runtime = Runtime(assistant.agent, session, prepare=assistant.prepare, components=build_components)
+            runtime = Runtime.for_assistant(assistant, session, components=build_components)
             current = threads[thread_id] = Thread(thread_id, session, runtime, assistant)
         elif persona and persona != current.assistant.persona.name and not current.runtime.running:
             current.assistant = current.assistant.switch(persona)
-            current.runtime.agent, current.runtime.prepare = current.assistant.agent, current.assistant.prepare
+            current.runtime.attach(current.assistant)
         return current
 
     def existing(thread_id: str) -> Thread:

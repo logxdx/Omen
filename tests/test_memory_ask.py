@@ -51,10 +51,14 @@ class AssistantMemoryTests(unittest.IsolatedAsyncioTestCase):
                 [get_text_message("Your sister is Anna.")],
             ])
             assistant = build_assistant(model=model, skills_dirs=[], personas_dirs=[], memory_path=path)
-            rt = Runtime(assistant.agent, prepare=assistant.prepare)
+            rt = Runtime.for_assistant(assistant)
             [e async for e in rt.run("My sister is called Anna.")]
             [e async for e in rt.run("What's my sister's name?")]
-            self.assertIn("The user's sister is Anna.", model.last_turn_args["system_instructions"])
+            # Recalled facts arrive in the new user message's context block (the system prompt stays fixed).
+            last_user = [i for i in model.last_turn_args["input"] if i.get("role") == "user"][-1]["content"]
+            self.assertTrue(last_user.startswith("<context>"))
+            self.assertIn("The user's sister is Anna.", last_user)
+            self.assertNotIn("Anna", model.last_turn_args["system_instructions"])
 
 
 class AskUserTests(unittest.IsolatedAsyncioTestCase):

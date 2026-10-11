@@ -111,7 +111,7 @@ def delegate_tool(
         app = ctx.context  # OmenContext when run through omen.core.runtime
         emit = getattr(app, "emit", None)
         run_config = (
-            dataclasses.replace(ctx.run_config, message_queue=None) if ctx.run_config else None
+            dataclasses.replace(ctx.run_config, message_queue=None, model_settings=None) if ctx.run_config else None
         )
 
         from omen.core.runtime import EventMapper  # runtime imports tools; avoid a cycle

@@ -130,7 +130,7 @@ class Transcript:
             elif event.name == "message_injected":
                 await self.mount(UserMessage(f"› {event.value}"))
             elif event.name == "usage":
-                self.app.usage = event.value
+                self.app.add_usage(event.value)
         elif isinstance(event, ev.RunError):
             await self.mount(ErrorMessage(f"✗ {event.message}"))
         elif isinstance(event, ev.RunFinished) and event.reason != "done":
@@ -300,9 +300,8 @@ class OmenApp(App):
         self.assistant = assistant_factory(persona=persona, use_router=use_router)
         self.session = session or Session.create(SESSIONS_DIR)
         self.extractor = extractor if extractor is not None else Extractor()
-        self.runtime = Runtime(
-            self.assistant.agent, self.session, prepare=self.assistant.prepare,
-            components=self._components, ui=set(RENDERERS),
+        self.runtime = Runtime.for_assistant(
+            self.assistant, self.session, components=self._components, ui=set(RENDERERS),
         )
         self.usage: dict = {}
         self.transcript: Transcript | None = None
@@ -329,6 +328,11 @@ class OmenApp(App):
         self.refresh_status()
         self.query_one("#prompt", Input).focus()
 
+    def add_usage(self, usage: dict) -> None:
+        """Accumulate token usage for the session (the status bar shows the prompt-cache hit rate)."""
+        for key in ("input_tokens", "output_tokens", "cached_tokens"):
+            self.usage[key] = self.usage.get(key, 0) + (usage.get(key) or 0)
+
     def scroll_down(self) -> None:
         self.query_one("#transcript", VerticalScroll).scroll_end(animate=False)
 
@@ -337,7 +341,10 @@ class OmenApp(App):
         self.query_one("#header", Plain).update(
             f"omen · persona: {self.assistant.persona.name} · model: {main_model().model} · skills: {skills}"
         )
-        tokens = f" · {self.usage.get('total_tokens', 0)} tokens" if self.usage else ""
+        tokens = ""
+        if self.usage.get("input_tokens"):
+            hit = 100 * self.usage.get("cached_tokens", 0) / self.usage["input_tokens"]
+            tokens = f" · {self.usage['input_tokens'] + self.usage.get('output_tokens', 0)} tokens · cache {hit:.0f}%"
         session = self.session.path.name if self.session.path else "in memory"
         self.query_one("#status", Plain).update(f"{state}{tokens} · {session}")
 
@@ -463,7 +470,7 @@ class OmenApp(App):
             except KeyError:
                 await note(ErrorMessage(f"no main persona named {arg}"))
                 return
-            self.runtime.agent, self.runtime.prepare = self.assistant.agent, self.assistant.prepare
+            self.runtime.attach(self.assistant)
             await note(Note(f"persona: {self.assistant.persona.name}"))
         elif name == "/skills":
             active = loaded(self.runtime.state)

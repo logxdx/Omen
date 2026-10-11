@@ -94,7 +94,7 @@
 
 # --- full assistant (agent: omen): real skills, fresh sandbox + memory per task, confirmations answered "yes" ---
 #   files: {path: content} seeds the sandbox; expect_files: {path: substring} checks the result
-#   router: false disables the keyword pre-router (the model must call load_skill itself)
+#   router: false disables the keyword pre-router (skill tools are always visible; no instructions pre-loaded)
 #   network: true tasks hit live services and run only with OMEN_EVAL_NETWORK=1
 
 - id: omen_write_note
@@ -131,11 +131,11 @@
   expect_tools: [remember]
   expect_args: {remember: {fact: may 3}}
 
-- id: omen_load_skill_without_router
+- id: omen_skill_tool_without_router
   agent: omen
   router: false
   prompt: Create a file called hello.txt that says hi.
-  expect_tools: [load_skill, write_file]
+  expect_tools: [write_file]
   expect_files: {hello.txt: hi}
   max_steps: 5
 

@@ -43,21 +43,41 @@ class ModelConfig:
     extra_body: dict = field(default_factory=dict)
 
 
+def _slot(name: str) -> dict:
+    """llama.cpp slot pinning (opt-in): {"id_slot": n} when the env var is set.
+
+    Start llama-server with `-np 2` (or more) and set OMEN_SLOT_MAIN=0, OMEN_SLOT_SIDE=1 so
+    delegated personas and the UI extractor don't evict the main conversation's prompt cache.
+    """
+    value = os.getenv(name)
+    return {"id_slot": int(value)} if value not in (None, "") else {}
+
+
+def side_config(config: ModelConfig) -> ModelConfig:
+    """`config` for side work (personas, extractor): its own llama.cpp slot when configured."""
+    slot = _slot("OMEN_SLOT_SIDE")
+    if not slot:
+        return config
+    return ModelConfig(**{**config.__dict__, "extra_body": {**config.extra_body, **slot}})
+
+
 def extractor_model() -> ModelConfig:
     """Model that fills UI components from text (JSON schema mode). Defaults to the main model."""
     main = main_model()
-    return ModelConfig(
+    extra = {k: v for k, v in main.extra_body.items() if k != "id_slot"}
+    return side_config(ModelConfig(
         model=os.getenv("OMEN_EXTRACTOR_MODEL", main.model),
         base_url=os.getenv("OMEN_EXTRACTOR_BASE_URL", main.base_url or ""),
         api_key=os.getenv("OMEN_EXTRACTOR_API_KEY", main.api_key or ""),
         temperature=0.0,
         max_tokens=800,
-    )
+        extra_body=extra,
+    ))
 
 
 def main_model() -> ModelConfig:
     local = os.getenv("OMEN_LOCAL", "1") != "0"
-    extra_body = json.loads(os.getenv("OMEN_EXTRA_BODY", "{}"))
+    extra_body = {**json.loads(os.getenv("OMEN_EXTRA_BODY", "{}")), **_slot("OMEN_SLOT_MAIN")}
     api_key = os.getenv("OMEN_API_KEY") or os.getenv("TRIAGE_API_KEY")
 
     if local:
