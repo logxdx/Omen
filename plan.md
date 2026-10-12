@@ -334,7 +334,7 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 - [x] `core/session.py`: JSONL tree implementing the SDK `Session` protocol; branching, labels, detached forks, `ui_details()`.
 - [x] Tests: 33 unit tests on the SDK's `FakeModel` (`python -m unittest discover -s tests -t .`).
 - [x] Evals: 12 tasks (incl. 2 delegation tasks). **Local `ling3` (7.9B Q5_K_M, llama.cpp): 36/36 passed over 3 repeats, 38/38 valid tool calls, ~2.1 steps and ~1.2 s per task.**
-- [ ] Multi-turn eval tasks (needed to measure when the model chooses `share_context`).
+- [x] Multi-turn eval tasks (needed to measure when the model chooses `share_context`): tasks with `turns:` run in one session and are checked per turn; 11 tasks (`mt_*`: follow-ups, ellipsis, corrections, reusing an earlier result, answering from context, delegation needing earlier turns, file edits across turns). The summary reports how many `delegate` calls set `share_context`. **Not yet run on `ling3`** (the server was busy with a benchmark, 2026-10-12).
 
 ### Phase 2 — Skills and core tools
 

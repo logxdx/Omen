@@ -10,6 +10,9 @@
 #   agent            "delegator": main agent only has `delegate` to a "researcher" persona
 #   history          earlier conversation (list of {role, content}) seeded before the prompt
 #   expect_context_passed  a delegate call must set share_context or mention this text in its task
+#   turns            multi-turn: a list of turns run in order in one session, instead of `prompt`.
+#                    Each turn has its own prompt, max_steps and expect_* keys above, checked against
+#                    that turn only; history, files and expect_files stay on the task.
 
 - id: weather_simple
   prompt: What's the weather in Paris right now?
@@ -93,7 +96,7 @@
   expect_answer: [tom@becker.dev]
 
 # --- full assistant (agent: omen): real skills, fresh sandbox + memory per task, confirmations answered "yes" ---
-#   files: {path: content} seeds the sandbox; expect_files: {path: substring} checks the result
+#   files: {path: content} seeds the sandbox; expect_files: {path: substring or [substrings]} checks the result
 #   router: false disables the keyword pre-router (skill tools are always visible; no instructions pre-loaded)
 #   network: true tasks hit live services and run only with OMEN_EVAL_NETWORK=1
 
@@ -166,3 +169,110 @@
   expect_tools: [delegate]
   expect_args: {delegate: {persona: researcher}}
   max_steps: 4
+
+# --- multi-turn (turns run in one session; later turns lean on what the model said and did earlier) ---
+
+- id: mt_weather_followup
+  turns:
+    - prompt: What's the weather in Paris right now?
+      expect_tools: [get_weather]
+      expect_answer: ["18"]
+    - prompt: And in Fahrenheit?
+      expect_tools: [get_weather]
+      expect_args: {get_weather: {city: paris, units: f}}
+      expect_answer: ["64"]
+
+- id: mt_contact_ellipsis
+  turns:
+    - prompt: What's Tom's email address?
+      expect_tools: [lookup_contact]
+      expect_answer: [tom@becker.dev]
+    - prompt: And Priya's?
+      expect_tools: [lookup_contact]
+      expect_args: {lookup_contact: {name: priya}}
+      expect_answer: [priya.sharma@example.com]
+
+- id: mt_reuse_earlier_result
+  turns:
+    - prompt: What's Priya's email address?
+      expect_tools: [lookup_contact]
+      expect_answer: [priya.sharma@example.com]
+    - prompt: Set a reminder for tomorrow at 10am to call her, and put her phone number in it.
+      expect_tools: [create_reminder]
+      expect_args: {create_reminder: {text: "98200"}}
+      max_steps: 5
+
+- id: mt_answer_from_context
+  turns:
+    - prompt: What's the wifi password for the cabin? Check my notes.
+      expect_tools: [search_notes]
+      expect_answer: [pinecone-42]
+    - prompt: Sorry, what was it again?
+      expect_tools: []
+      expect_answer: [pinecone-42]
+
+- id: mt_correction
+  turns:
+    - prompt: Convert 100 euros to Indian rupees.
+      expect_tools: [convert_currency]
+      expect_answer: ["9,000"]
+    - prompt: Sorry, I meant British pounds, not euros.
+      expect_tools: [convert_currency]
+      expect_args: {convert_currency: {from_currency: gbp, to_currency: inr}}
+      expect_answer: ["10,583"]
+
+# multi-turn delegation: the context comes from the model's own earlier turns, not seeded history
+- id: mt_delegate_needs_context
+  agent: delegator
+  turns:
+    - prompt: My friend Tom is visiting next week and I want to send him the plan.
+    - prompt: Ask the researcher to find his email address.
+      expect_tools: [delegate]
+      expect_context_passed: tom
+      expect_answer: [tom@becker.dev]
+
+- id: mt_delegate_followup
+  agent: delegator
+  turns:
+    - prompt: Ask the researcher to find the Wi-Fi password for the cabin in my notes.
+      expect_tools: [delegate]
+      expect_answer: [pinecone-42]
+    - prompt: Now have them look up Priya's phone number too.
+      expect_tools: [delegate]
+      expect_args: {delegate: {persona: researcher}}
+      expect_answer: ["98200"]
+
+- id: mt_omen_write_then_edit
+  agent: omen
+  turns:
+    - prompt: Create a note at notes/shopping.md listing eggs and bread.
+      expect_tools: [write_file]
+    - prompt: Add milk to that list.
+  expect_files: {notes/shopping.md: [eggs, bread, milk]}
+
+- id: mt_omen_read_then_ask
+  agent: omen
+  files: {notes/plans.md: "Trip to Goa on 12 December. Book the train by Friday."}
+  turns:
+    - prompt: What does my notes/plans.md file say?
+      expect_tools: [read_file]
+      expect_answer: [goa]
+    - prompt: By when do I have to book the train?
+      expect_answer: [friday]
+
+- id: mt_omen_fact_into_file
+  agent: omen
+  turns:
+    - prompt: My sister's name is Meera and her birthday is on May 3.
+    - prompt: Save a note at notes/sister.md with her name and birthday.
+      expect_tools: [write_file]
+  expect_files: {notes/sister.md: [meera, may 3]}
+
+- id: mt_omen_writer_needs_context
+  agent: omen
+  turns:
+    - prompt: I'm running about 20 minutes late for dinner with Anna tonight.
+    - prompt: Ask the writer to draft a short message to her about it.
+      expect_tools: [delegate]
+      expect_args: {delegate: {persona: writer}}
+      expect_answer: ["20"]

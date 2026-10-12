@@ -1,7 +1,9 @@
 """Eval runner: runs evals/tasks.yaml against the configured model.
 
 Reports, per task: pass/fail, tool-call validity (calls that weren't unknown
-tools or bad arguments), LLM steps and latency. Results are also written to
+tools or bad arguments), LLM steps and latency. A multi-turn task runs its
+turns in one session, so later turns see what the model actually said and did
+earlier, and each turn is checked on its own. Results are also written to
 evals/results/<timestamp>.json so runs can be compared across models and
 harness changes.
 """
@@ -45,16 +47,27 @@ SYSTEM = (
 
 
 @dataclass
+class Turn:
+    calls: list[dict] = field(default_factory=list)
+    invalid_calls: int = 0
+    steps: int = 0
+    answer: str = ""
+    finish: str = ""
+    errors: list[str] = field(default_factory=list)
+
+
+@dataclass
 class TaskResult:
     id: str
     passed: bool
     failures: list[str] = field(default_factory=list)
-    calls: list[dict] = field(default_factory=list)
+    calls: list[dict] = field(default_factory=list)  # every turn's calls, each tagged with its turn
     invalid_calls: int = 0
     steps: int = 0
     seconds: float = 0.0
-    answer: str = ""
-    finish: str = ""
+    answer: str = ""  # the last turn's
+    finish: str = ""  # the last turn's
+    answers: list[str] = field(default_factory=list)  # one per turn
 
 
 async def _auto_answer(question: str, options: list[str] | None) -> str:
@@ -102,6 +115,39 @@ def build_agent(task: dict, model: Model) -> Agent:
     return Agent(name="eval", instructions=SYSTEM, model=model, model_settings=settings, tools=tools)
 
 
+async def run_turn(runtime: Runtime, prompt: str) -> Turn:
+    turn = Turn()
+    args_by_id: dict[str, str] = {}
+    names_by_id: dict[str, str] = {}
+    text: list[str] = []
+    async for event in runtime.run(prompt):
+        if isinstance(event, StepStarted):
+            turn.steps += 1
+        elif isinstance(event, TextMessageContent):
+            text.append(event.delta)
+        elif isinstance(event, TextMessageEnd):
+            turn.answer, text = "".join(text).strip(), []
+        elif isinstance(event, ToolCallStart):
+            names_by_id[event.tool_call_id] = event.name
+        elif isinstance(event, ToolCallArgs):
+            args_by_id[event.tool_call_id] = event.delta
+        elif isinstance(event, ToolCallResult):
+            turn.calls.append({
+                "name": event.name,
+                "requested": names_by_id.get(event.tool_call_id),
+                "arguments": args_by_id.get(event.tool_call_id, ""),
+                "error": event.error,
+                "content": event.content[:300],
+            })
+            if event.error in ("unknown_tool", "invalid_args"):
+                turn.invalid_calls += 1
+        elif isinstance(event, RunError):
+            turn.errors.append(f"run error: {event.message}")
+        elif isinstance(event, RunFinished):
+            turn.finish = event.reason
+    return turn
+
+
 async def run_task(task: dict, model: Model) -> TaskResult:
     workdir = Path(tempfile.mkdtemp(prefix="omen-eval-"))
     if task.get("agent") == "omen":
@@ -111,45 +157,31 @@ async def run_task(task: dict, model: Model) -> TaskResult:
     result = TaskResult(id=task["id"], passed=False)
     if task.get("history"):
         await runtime.session.add_items(task["history"])
-    args_by_id: dict[str, str] = {}
-    names_by_id: dict[str, str] = {}
-    text: list[str] = []
+    turns = task.get("turns") or [task]
+    max_steps = runtime.max_turns
     started = time.perf_counter()
 
-    async for event in runtime.run(task["prompt"]):
-        if isinstance(event, StepStarted):
-            result.steps += 1
-        elif isinstance(event, TextMessageContent):
-            text.append(event.delta)
-        elif isinstance(event, TextMessageEnd):
-            result.answer, text = "".join(text).strip(), []
-        elif isinstance(event, ToolCallStart):
-            names_by_id[event.tool_call_id] = event.name
-        elif isinstance(event, ToolCallArgs):
-            args_by_id[event.tool_call_id] = event.delta
-        elif isinstance(event, ToolCallResult):
-            result.calls.append({
-                "name": event.name,
-                "requested": names_by_id.get(event.tool_call_id),
-                "arguments": args_by_id.get(event.tool_call_id, ""),
-                "error": event.error,
-                "content": event.content[:300],
-            })
-            if event.error in ("unknown_tool", "invalid_args"):
-                result.invalid_calls += 1
-        elif isinstance(event, RunError):
-            result.failures.append(f"run error: {event.message}")
-        elif isinstance(event, RunFinished):
-            result.finish = event.reason
+    for n, spec in enumerate(turns, 1):
+        runtime.max_turns = spec.get("max_steps", max_steps)
+        turn = await run_turn(runtime, spec["prompt"])
+        result.calls += [{**c, "turn": n} for c in turn.calls]
+        result.invalid_calls += turn.invalid_calls
+        result.steps += turn.steps
+        result.answers.append(turn.answer)
+        result.answer, result.finish = turn.answer, turn.finish
+        prefix = f"turn {n}: " if len(turns) > 1 else ""
+        result.failures += [prefix + f for f in turn.errors + check(spec, turn)]
 
     result.seconds = round(time.perf_counter() - started, 2)
-    result.failures += check(task, result)
-    for rel, needle in (task.get("expect_files") or {}).items():
+    for rel, needles in (task.get("expect_files") or {}).items():
         path = workdir / "sandbox" / rel
         if not path.exists():
             result.failures.append(f"file {rel} was not created")
-        elif str(needle).lower() not in path.read_text().lower():
-            result.failures.append(f"file {rel} lacks '{needle}'")
+            continue
+        content = path.read_text().lower()
+        for needle in needles if isinstance(needles, list) else [needles]:
+            if str(needle).lower() not in content:
+                result.failures.append(f"file {rel} lacks '{needle}'")
     shutil.rmtree(workdir, ignore_errors=True)
     result.passed = not result.failures
     return result
@@ -163,7 +195,12 @@ def _args(raw: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def check(task: dict, r: TaskResult) -> list[str]:
+def _shares_context(args: dict) -> bool:
+    return str(args.get("share_context")).lower() == "true"
+
+
+def check(task: dict, r: Turn) -> list[str]:
+    """Failures of one turn against its expectations (a single-turn task is its own turn)."""
     failures = []
     if r.finish != "done":
         failures.append(f"run ended with '{r.finish}'")
@@ -187,7 +224,7 @@ def check(task: dict, r: TaskResult) -> list[str]:
     if needle:
         delegations = [_args(c["arguments"]) for c in r.calls if c["name"] == "delegate"]
         passed = any(
-            str(a.get("share_context")).lower() == "true" or str(needle).lower() in str(a.get("task", "")).lower()
+            _shares_context(a) or str(needle).lower() in str(a.get("task", "")).lower()
             for a in delegations
         )
         if not passed:
@@ -214,7 +251,11 @@ async def run_suite(only: list[str] | None = None, repeat: int = 1, model: Model
             r = await run_task(task, model)
             results.append(r)
             mark = "PASS" if r.passed else "FAIL"
-            print(f"{mark}  {r.id:<28} steps={r.steps} calls={len(r.calls)} invalid={r.invalid_calls} {r.seconds:>6.2f}s")
+            turns = f" turns={len(r.answers)}" if len(r.answers) > 1 else ""
+            print(
+                f"{mark}  {r.id:<28} steps={r.steps} calls={len(r.calls)} invalid={r.invalid_calls}"
+                f" {r.seconds:>6.2f}s{turns}"
+            )
             for f in r.failures:
                 print(f"      - {f}")
 
@@ -231,5 +272,9 @@ async def run_suite(only: list[str] | None = None, repeat: int = 1, model: Model
     out = HERE / "results" / f"{datetime.now():%Y%m%d-%H%M%S}.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps({"model": config.model, "results": [asdict(r) for r in results]}, indent=2))
+    delegations = [_args(c["arguments"]) for r in results for c in r.calls if c["name"] == "delegate"]
+    if delegations:  # how often the model forks the conversation for a specialist
+        shared = sum(_shares_context(a) for a in delegations)
+        print(f"delegations {len(delegations)}  ·  share_context {shared}/{len(delegations)}")
     print(f"results: {out}")
     return 0 if passed == len(results) else 1

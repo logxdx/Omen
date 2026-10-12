@@ -145,4 +145,7 @@ session but stripped before the model.
 
 `omen eval` runs `evals/tasks.yaml` against the configured model (tool choice, argument validity,
 multi-step chains, delegation, skills) and reports pass rate, valid tool-call rate and steps;
-`omen eval --extract` checks the UI extractor on `evals/extract_tasks.yaml`.
+`omen eval --extract` checks the UI extractor on `evals/extract_tasks.yaml`. Multi-turn tasks
+(`turns:`) run every turn in one session, so follow-ups depend on what the model really said and
+did earlier, and check each turn on its own; the summary also counts how many `delegate` calls
+set `share_context`.
