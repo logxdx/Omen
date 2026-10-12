@@ -43,11 +43,14 @@ UI components, questions, subagent events, custom events). For each user message
   of the session, and returns only the result. The main model decides whether to share context.
   `follow_up=true` resumes the specialist's latest branch on this path (its earlier subtasks, tool
   calls and results) and extends that branch, so its next request only appends the new subtask.
-  Questions go up: every specialist has `ask_superior(question)`, which ends its run (`StopAtTools`);
-  `delegate` returns "<persona> paused to ask: …" instead of a result. The main agent answers with
-  another `delegate` to that specialist, which resumes the thread as an answer without any flag, or
-  first asks its own superior, the user, with `ask_user`. A question never becomes the direct reply
-  of a named delegation; the main model takes the turn.
+  Questions go up: every specialist has `ask_superior(question)`, which ends its run. An ask before
+  any other tool call in the run is turned back once ("try your tools first"). A specialist that
+  asks without having seen the conversation is resumed once with it shared, which is the
+  superior's first answer. If it still asks, `delegate` returns "<persona> paused to ask: …"
+  instead of a result. The main agent answers with another `delegate` to that specialist, which
+  resumes the thread as an answer without any flag, or first asks its own superior, the user, with
+  `ask_user`. A question never becomes the direct reply of a named delegation; the main model takes
+  the turn.
   When the user named the specialist, the harness makes the call (continuing the thread if the
   previous message went to the same specialist) and the specialist's result is the
   reply as is (no main-model turn retyping it). Otherwise the main model can write `{{result}}`,

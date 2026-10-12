@@ -536,6 +536,20 @@ Evals after items 1–2 (2026-10-12, ling3): multi-turn 24/26 over 2 repeats, fu
      the main agent to use it when only the user knows; guidance says the same.
    - [x] A named delegation that ends in a question is not the direct reply; the main model gets
      the turn to answer it.
+   - [x] Found on ling3 and handled in the harness: the main model relays a specialist's question to
+     the user even when the conversation answers it, so a specialist that asks without having seen
+     the conversation is first resumed once with it shared (`auto_answer`). The eval researcher
+     asked instead of calling `lookup_contact` (echoing its task), so an ask before any other tool
+     call is turned back once ("try your tools first").
+   - Result (2026-10-12, ling3; delegation tasks ×3): `mt_omen_writer_needs_context` 3/3 (was 0/3:
+     the writer asks, gets the conversation, drafts "Hi Anna, … 20 minutes late"); `delegate_*`
+     9/9; `mt_omen_writer_revise` 3/3. `mt_omen_writer_asks` 0/3: the writer asks in its reply text
+     instead of calling `ask_superior` (nothing for the harness to catch); one run saved the draft to
+     a file instead. Researcher misses (`mt_delegate_needs_context` 1/3) are step-cap/brief issues
+     (4 steps, "search notes, contacts or online", `lookup_contact("Tom's")`), no question asked.
+     Full suite 30/34, 100% valid tool calls. The main model still set `follow_up` 0/53 times.
+   - [ ] Next: a specialist reply that is only questions (ends with "?", no draft) could be treated
+     like `ask_superior`; risky for drafts that end with a question, so measure first.
 4. **Parallel specialists** (later, gated on measurements).
    - [ ] Only if llama.cpp `--parallel 4` holds decode speed with concurrent slots (the 4×128k
      benchmark): one tool call fans out to 2–4 specialists and returns all results in one tool

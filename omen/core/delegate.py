@@ -31,7 +31,15 @@ import dataclasses
 import json
 from typing import Any
 
-from agents import Agent, FunctionTool, MaxTurnsExceeded, Runner
+from agents import (
+    Agent,
+    FunctionTool,
+    FunctionToolResult,
+    MaxTurnsExceeded,
+    RunContextWrapper,
+    Runner,
+    ToolsToFinalOutputResult,
+)
 from agents.tool_context import ToolContext
 
 from omen.core.events import SubagentEvent
@@ -63,8 +71,14 @@ FROM_CONVERSATION = (
 ASK_SUPERIOR = "ask_superior"
 
 
+QUESTION_SENT = "Your question went to the main assistant; its answer comes next."
+TOOLS_FIRST = (
+    "Not sent: try your tools first. If they can't find it, call ask_superior again with the question."
+)
+
+
 @tool
-def ask_superior(question: str) -> ToolResult:
+def ask_superior(ctx: RunContextWrapper[Any], question: str) -> ToolResult:
     """Ask the main assistant a question and pause your subtask until it answers.
 
     Only for what the task doesn't say and your tools can't find (who someone is, which one, what
@@ -73,7 +87,21 @@ def ask_superior(question: str) -> ToolResult:
     Args:
         question: One short, specific question (not the task itself).
     """
-    return ToolResult("Your question went to the main assistant; its answer comes next.")
+    # Small models ask instead of looking things up: the first ask of a turn, before any tool
+    # call, is turned back once.
+    history = list(getattr(ctx, "conversation_history", None) or [])
+    since_task = history[next((i for i in range(len(history) - 1, -1, -1) if _role(history[i]) == "user"), -1) + 1:]
+    if not any(_type(item) == "function_call" for item in since_task):
+        return ToolResult(TOOLS_FIRST, error="tools_first")
+    return ToolResult(QUESTION_SENT)
+
+
+def _stop_at_question(ctx: Any, results: list[FunctionToolResult]) -> ToolsToFinalOutputResult:
+    """End a persona's run at an ask_superior call that went through (not one turned back)."""
+    for r in results:
+        if r.tool.name == ASK_SUPERIOR and not getattr(r.output, "error", None):
+            return ToolsToFinalOutputResult(is_final_output=True, final_output=r.output)
+    return ToolsToFinalOutputResult(is_final_output=False, final_output=None)
 
 
 def with_questions(agent: Agent) -> Agent:
@@ -82,7 +110,15 @@ def with_questions(agent: Agent) -> Agent:
         return agent
     if agent.tool_use_behavior != "run_llm_again":  # the persona decides when it stops; leave it alone
         return agent
-    return agent.clone(tools=[*agent.tools, ask_superior], tool_use_behavior={"stop_at_tool_names": [ASK_SUPERIOR]})
+    return agent.clone(tools=[*agent.tools, ask_superior], tool_use_behavior=_stop_at_question)
+
+
+def _role(item: Any) -> Any:
+    return item.get("role") if isinstance(item, dict) else getattr(item, "role", None)
+
+
+def _type(item: Any) -> Any:
+    return item.get("type") if isinstance(item, dict) else getattr(item, "type", None)
 
 
 def _as_bool(value: Any) -> bool:
@@ -201,7 +237,7 @@ def delegate_tool(
                 finished = False
             run_items = [item.to_input_item() for item in result.new_items]
             recorded += run_items
-            question = asked_question(result.new_items) if finished else None
+            question = asked_question(result) if finished else None
             if not question or share_context or not (auto_answer and conversation):
                 break
             # The superior's first answer: what it knows, i.e. the conversation (shared once, only
@@ -264,11 +300,11 @@ def delegation_result(details: Any, content: str) -> str | None:
     return None
 
 
-def asked_question(run_items: list[Any]) -> str | None:
-    """The question if a persona's run stopped at ask_superior (after its last message)."""
-    for item in reversed(run_items):
-        if getattr(item, "type", None) == "message_output_item":
-            return None
+def asked_question(result: Any) -> str | None:
+    """The question if a persona's run stopped at ask_superior (its final output is that tool's result)."""
+    if str(result.final_output or "") != QUESTION_SENT:  # a normal run ends with the persona's own text
+        return None
+    for item in reversed(result.new_items):
         raw = getattr(item, "raw_item", None)
         if getattr(item, "type", None) == "tool_call_item" and getattr(raw, "name", None) == ASK_SUPERIOR:
             try:

@@ -175,6 +175,7 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
 
     def asking_researcher(self) -> FakeModel:
         model = turns(
+            get_function_tool_call("search_notes", json.dumps({"query": "cabin"}), call_id="s1"),
             get_function_tool_call("ask_superior", json.dumps({"question": "Which cabin?"}), call_id="q1"),
             get_text_message("The lake cabin's password is pinecone-42."),
         )
@@ -200,7 +201,8 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
 
         persona_input = persona_model.last_turn_args["input"]
         self.assertIn("Find the cabin wifi password.", persona_input[0]["content"])
-        self.assertEqual([i.get("name") for i in persona_input if i.get("type") == "function_call"], ["ask_superior"])
+        calls = [i.get("name") for i in persona_input if i.get("type") == "function_call"]
+        self.assertEqual(calls[-1], "ask_superior")  # (FakeModel reuses item ids, so the SDK drops one call)
         self.assertIn("answers your question", persona_input[-1]["content"])
         self.assertIn("The lake cabin.", persona_input[-1]["content"])
         self.assertTrue(answered.details["props"]["follow_up"])
@@ -238,7 +240,8 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
 
         persona_input = persona_model.last_turn_args["input"]
         self.assertEqual(persona_input[0]["content"], "We're going to the lake cabin.")  # the conversation, once
-        self.assertEqual([i.get("name") for i in persona_input if i.get("type") == "function_call"], ["ask_superior"])
+        calls = [i.get("name") for i in persona_input if i.get("type") == "function_call"]
+        self.assertEqual(calls[-1], "ask_superior")
         self.assertIn("conversation above", persona_input[-1]["content"])
 
         result = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
@@ -247,6 +250,21 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
         thread = json.dumps(rt.session.thread(result.details["props"]["branch"]))
         self.assertIn("ask_superior", thread)
         self.assertNotIn("We're going to the lake cabin.", thread)  # the shared conversation isn't stored twice
+
+    async def test_asking_before_using_any_tool_is_turned_back_once(self):
+        persona_model = turns(
+            get_function_tool_call("ask_superior", json.dumps({"question": "How do I find it?"}), call_id="q1"),
+            get_function_tool_call("search_notes", json.dumps({"query": "wifi"}), call_id="s1"),
+            get_text_message("pinecone-42"),
+        )
+        self.researcher = Agent(name="researcher", instructions="You research.", model=persona_model, tools=[search_notes])
+        rt, _ = self.main_runtime({"persona": "researcher", "task": "Find the cabin wifi password."})
+        events = [e async for e in rt.run("q?")]
+
+        result = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
+        self.assertEqual(result.content, "pinecone-42")  # the run went on: no question reached the caller
+        outputs = [i["output"] for i in persona_model.last_turn_args["input"] if i.get("type") == "function_call_output"]
+        self.assertIn("try your tools first", outputs[0])
 
     def test_question_helpers(self):
         call = {"type": "function_call", "call_id": "q", "name": "ask_superior", "arguments": "{}"}
