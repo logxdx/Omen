@@ -37,7 +37,7 @@ TOOL_CONTENT_MAX_CHARS = int(os.getenv("OMEN_TOOL_MAX_CHARS", "4000"))
 
 @dataclass
 class ModelConfig:
-    model: str  # LiteLLM model name, e.g. "openai/jarvis"
+    model: str  # LiteLLM model name, e.g. "openai/ling3"
     base_url: str | None = None
     api_key: str | None = None
     temperature: float = 0.3
@@ -89,7 +89,7 @@ def main_model() -> ModelConfig:
 
     if local:
         return ModelConfig(
-            model=os.getenv("OMEN_MODEL", "openai/jarvis"),
+            model=os.getenv("OMEN_MODEL", "openai/ling3"),
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
             api_key=api_key or "ollama",
             extra_body=extra_body,

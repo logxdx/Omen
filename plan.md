@@ -502,6 +502,9 @@ specialist results 3 new or updated).
 
 ## 9. Open decisions
 
-- **General shell tool?** Recommend no for now — typed skills only; revisit with a sandbox + `ask_user` confirmation.
-- **Node toolchain for the web build** — needed at build time only. Acceptable?
-- **Default local model** for evals (current Modelfile `jarvis`; which base model and context size?).
+- **General shell tool?** Decided (2026-10-12): **no** — typed skills only.
+- **Node toolchain for the web build** — needed at build time only (`web/dist` is committed, so running
+  Omen needs no Node). Acceptable?
+- **Default local model**: Decided (2026-10-12): **ling3** — Ling 3.0 Tiny (Q5_K_M, 7.9B MoE / 1.3B
+  active) on llama.cpp (`~/llama.cpp/serve-ling.sh`, alias `ling3`, 128k context, tuned for the
+  6 GB RTX 4050); `OMEN_MODEL` defaults to `openai/ling3`, and evals are reported against it.

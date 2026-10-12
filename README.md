@@ -27,7 +27,8 @@ uv sync --extra voice    # + speech: faster-whisper, openwakeword, pyaudio, torc
 ```
 
 Omen talks to any OpenAI-compatible server through LiteLLM. By default it expects a local server at
-`http://localhost:11434/v1` serving a model named `jarvis` (see [Local model](#local-model)).
+`http://localhost:11434/v1` serving a model named `ling3` (Ling 3.0 Tiny, the default and the eval
+model; see [Local model](#local-model)).
 
 ## Run
 
@@ -62,7 +63,7 @@ Environment variables (a `.env` file in the repo root is read):
 |---|---|---|
 | `OMEN_LOCAL` | `1` | `1`: local server (`OLLAMA_BASE_URL`); `0`: hosted (`CEREBRAS_BASE_URL`) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434/v1` | local OpenAI-compatible endpoint |
-| `OMEN_MODEL` | `openai/jarvis` | LiteLLM model name |
+| `OMEN_MODEL` | `openai/ling3` | LiteLLM model name |
 | `OMEN_API_KEY` / `TRIAGE_API_KEY` | | API key |
 | `OMEN_EXTRA_BODY` | `{}` | JSON merged into every request (backend-specific fields) |
 | `OMEN_PERSONA` | `omen` | main persona |
@@ -113,7 +114,8 @@ Call `get_weather` with the city name. Answer in one or two sentences.
 
 Any OpenAI-compatible server works. Notes for llama.cpp (`llama-server`):
 
-- Start it with `--jinja` (native tool calls) and `--alias jarvis`, or set `OMEN_MODEL`.
+- Start it with `--jinja` (native tool calls) and `--alias ling3`, or set `OMEN_MODEL`. The default and
+  eval model is Ling 3.0 Tiny (`Ling-3.0-tiny-Q5_K_M.gguf`, 7.9B MoE, 1.3B active).
 - Hybrid/MoE models on a small GPU: `--cpu-moe --moe-cache-mib <free VRAM>` keeps hot experts on the
   GPU; a larger `-ub` (2048) prefills ~40% faster than 512 at the same decode speed.
 - Cap the host prompt cache (`--cache-ram 2048`): the default 8 GB can push a 15 GB machine into swap.
