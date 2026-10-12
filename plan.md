@@ -417,6 +417,69 @@ llama.cpp reuses its KV cache only for an unchanged token prefix; the tool list 
 - [x] Dependencies: dropped `beautifulsoup4`, `crawl4ai`, `html2text`, `liteparse`, `piper-tts`, `spider_rs` (+ its `spider-py` source), `statsmodels`; speech packages (`faster-whisper`, `pyaudio`, `openwakeword`, `numpy`, `scipy`, `halo`, `markdown`, `torch>=2.14.0`) moved to the `voice` extra (`uv sync --extra voice`). A fresh `uv sync` is 238 MB instead of 6.4 GB, has no torch, and passes all 130 tests; `omen` CLI, server and TUI import cleanly.
 - [x] Docs rewritten: `README.md` (install, run, configuration table, personas/skills format, local-model notes) and `docs/architecture.md` (runtime, assistant, skills, model repairs, session tree, compaction, generative UI, server/web, voice, the SDK fork, evals).
 
+
+### Phase 9 — Ideas from Agent Zero (cache-safe)
+
+Source: agent0ai/agent-zero (studied 2026-10-12): subordinate delegation, topic/bulk history
+compression, the `tiny-local` profile, an `[EXTRAS]` tail rebuilt on every call, loop guards.
+
+**Rule for every item: keep the prompt-cache invariant.** Since the DeepSeek-Harness layout, each
+request is the previous request (prompt + the model's own output) plus new text at the end; the
+model server reuses its whole cache (97–99% on turns 2+). Nothing may edit or remove earlier
+tokens, except compaction, which breaks the prefix once, deliberately, between user messages.
+Each item states its effect on that.
+
+1. **Loop breakers** (low effort; cache: append-only, no effect).
+   - [ ] An identical tool call (same name and arguments) to the previous step is not executed; the
+     result is a warning listing concrete next moves (read what you wrote, answer with what you
+     have, report the blocker); stop after N in a row. Extends the text-repetition repair in `OmenModel`.
+   - [ ] Guidance rule from A0's `tiny-local` profile: "continue / go ahead / proceed" means call the
+     next tool, not promise to.
+2. **No retyping of specialist results** (low–medium; cache: neutral, faster).
+   - [ ] When the user named the specialist (the harness `pre_call` path), its result is the reply:
+     streamed to the user and stored as the assistant message, with no main-model turn. The next
+     request prefills those tokens (~2000 tok/s on ling3) instead of the model decoding them
+     (~100 tok/s).
+   - [ ] Otherwise the main model may write a placeholder (e.g. `{{result}}`) for the latest
+     `delegate` result; the UI shows it expanded, but the session stores exactly what the model
+     generated, so the next request still extends the server's cache.
+3. **Compaction keeps requests and answers verbatim** (medium; cache: the same single break at
+   the same moment as today).
+   - [ ] For turns older than the verbatim window: keep each user request and the final answer
+     word for word, replace the tool calls in between with a one-line stub
+     ("[3 tool calls: read_file ×2, web_search]"). Call the side model only if still over budget,
+     and only for what was elided. Fewer side-model calls also means fewer evictions of the main
+     slot.
+   - [ ] Summary prompt rules from A0's compaction: preserve exact file paths, URLs, IDs and values;
+     keep decisions apart from assumptions and mark what is unverified.
+4. **Goal reminder near the end of the prompt** (low effort; cache: **depends on the design**).
+   - A0 rebuilds an `[EXTRAS]` block after the history on every call and never stores it. That
+     breaks the invariant on every model call: the next request drops the old tail, so the server
+     rolls back to it and re-evaluates the tail plus the model's previous output plus the new tool
+     result. On a plain transformer that is ~100–300 tokens per call. On ling3 it may be far more:
+     18 of its 24 layers carry recurrent (KDA) state that can't be rewound to an arbitrary point;
+     llama.cpp needs a context checkpoint at or before the divergence, and checkpoints are at least
+     8192 tokens apart by default (`--checkpoint-min-step`).
+   - [ ] **Gate first**: run `python -m evals.cache_tail` on ling3 (append-only vs ephemeral tail,
+     6k and 20k prefixes). Not run yet: the model server was busy with another session's test.
+   - [ ] Default (cache-safe) design: a short reminder appended to the tool-result text and stored
+     with it, e.g. "(goal: plan the Kyoto week · step 12 of 50)", only every K steps or past step
+     thresholds. Small models still see it near the end; nothing is ever removed. Use the
+     ephemeral version only if the gate shows it is cheap.
+5. Smaller, later:
+   - [ ] Continue a specialist: a follow-up to the same specialist appends to its existing branch
+     instead of a fresh brief (cache: as today; the branch's prefix comes back from the host RAM
+     prompt cache or is re-prefilled).
+   - [ ] Memory-quality filter (reject temp paths, "user asked …", fragments under ~24 chars) if
+     Omen ever extracts memories automatically.
+
+Not adopting: JSON-in-text tool calls (native calls are better), five-level topic/bulk
+compression (pointless at 32k), compression in a background thread during runs (competes with the
+main model on one GPU and evicts its cache), memory recall every 3 steps, unlimited delegation
+depth and parallel subagents.
+
+Done when: evals stay 20/20 with 100% valid tool calls, the 5-turn cache benchmark stays at
+97–99% on turns 2+, and a loop/retype case each is covered by a test.
 ---
 
 ## 8. Success criteria
