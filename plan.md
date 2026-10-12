@@ -460,12 +460,15 @@ Each item states its effect on that.
      18 of its 24 layers carry recurrent (KDA) state that can't be rewound to an arbitrary point;
      llama.cpp needs a context checkpoint at or before the divergence, and checkpoints are at least
      8192 tokens apart by default (`--checkpoint-min-step`).
-   - [ ] **Gate first**: run `python -m evals.cache_tail` on ling3 (append-only vs ephemeral tail,
-     6k and 20k prefixes). Not run yet: the model server was busy with another session's test.
-   - [ ] Default (cache-safe) design: a short reminder appended to the tool-result text and stored
-     with it, e.g. "(goal: plan the Kyoto week · step 12 of 50)", only every K steps or past step
-     thresholds. Small models still see it near the end; nothing is ever removed. Use the
-     ephemeral version only if the gate shows it is cheap.
+   - [x] **Gate measured** (`python -m evals.cache_tail`, ling3, `-ub 2048`, `--parallel 2`,
+     2026-10-12): the next call re-evaluates **12 tokens** append-only vs **2,099 tokens** with an
+     ephemeral tail, at both 6k and 20k prefixes. The extra ~2,000 tokens match a rollback to the
+     last context checkpoint ~one `-ub` before the end of the previous prompt (inferred, not
+     confirmed by varying `-ub`). That is ~0.8–1 s of prefill on every model call and ~65% instead of
+     99.8% cache reuse at 6k. **Ephemeral tail blocks are out.**
+   - [ ] Design: a short reminder appended to the tool-result text and stored with it, e.g.
+     "(goal: plan the Kyoto week · step 12 of 50)", only every K steps or past step thresholds.
+     Small models still see it near the end; nothing is ever removed.
 5. Smaller, later:
    - [ ] Continue a specialist: a follow-up to the same specialist appends to its existing branch
      instead of a fresh brief (cache: as today; the branch's prefix comes back from the host RAM
