@@ -1,4 +1,5 @@
-"""Entry point: `python -m omen` (TUI), `omen chat` (line chat), `omen serve` (AG-UI server), `omen eval`.
+"""Entry point: `python -m omen` (TUI), `omen chat` (line chat), `omen voice` (speech, needs the
+`voice` extra), `omen serve` (AG-UI server), `omen eval`.
 
 `python -m omen` opens the Textual TUI; `omen chat` is the plain line chat. In it, lines you
 type while Omen is working are queued and delivered after the current step;
@@ -180,6 +181,10 @@ def main() -> None:
     chat_p.add_argument("--reasoning", action="store_true", help="show model reasoning")
     chat_p.add_argument("--no-router", action="store_true", help="don't auto-load skills by keyword")
     chat_p.add_argument("--persona", help="main persona (default: OMEN_PERSONA or omen)")
+    voice_p = sub.add_parser("voice", help="talk to Omen (needs `uv sync --extra voice` and a TTS server)")
+    voice_p.add_argument("--session", type=Path, help="resume a session file")
+    voice_p.add_argument("--no-router", action="store_true", help="don't auto-load skills by keyword")
+    voice_p.add_argument("--persona", help="main persona (default: OMEN_PERSONA or omen)")
     serve_p = sub.add_parser("serve", help="AG-UI server for the web UI")
     serve_p.add_argument("--host", default="127.0.0.1")
     serve_p.add_argument("--port", type=int, default=8765)
@@ -216,6 +221,15 @@ def main() -> None:
         from evals.run import run_suite
 
         sys.exit(asyncio.run(run_suite(only=args.only, repeat=args.repeat)))
+    if args.command == "voice":
+        from omen.voice.frontend import run_voice
+
+        session = Session(args.session) if args.session else Session.create(SESSIONS_DIR)
+        assistant = build_assistant(use_router=not args.no_router, persona=args.persona)
+        if run_voice(Runtime.for_assistant(assistant, session), lambda event: render(event, False)):
+            return
+        print("(falling back to the text chat)")
+        args.session = session.path if session.entries else args.session
     if args.command in (None, "tui"):
         try:
             from omen.tui.app import run_tui
