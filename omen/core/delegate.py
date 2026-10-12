@@ -20,7 +20,11 @@ the persona's next request is its previous one plus the new subtask.
 
 Questions go up the chain: a persona that can't finish without information it
 doesn't have calls `ask_superior(question)`, which ends its run; `delegate`
-returns the question instead of a result. The main agent answers with another
+returns the question instead of a result. A reply that only asks for missing
+information (one side-model check, only when it has a "?" or request wording)
+counts the same.
+Before a question goes up, a persona that hasn't seen the conversation is
+resumed once with it: that is often all the superior knows anyway. The main agent answers with another
 `delegate` to the same persona (it continues where it stopped, no flag needed)
 or first asks its own superior, the user, with `ask_user`.
 """
@@ -29,6 +33,9 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import logging
+import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from agents import (
@@ -46,6 +53,8 @@ from omen.core.events import SubagentEvent
 from omen.core.session import CUSTOM_DATA_KEY
 from omen.core.tools import ToolResult, extract_custom_data, tool, truncate
 from omen.config import TOOL_CONTENT_MAX_CHARS
+
+logger = logging.getLogger(__name__)
 
 REPLY = (
     "Reply with the result for the main assistant: concise, complete, no preamble. If the task doesn't say "
@@ -66,8 +75,12 @@ QUESTION_RESULT = (
     "stopped. Only if nobody has said, ask the user with ask_user."
 )
 FROM_CONVERSATION = (
-    "The conversation above, between the user and me, has what you need. Take the answer from it."
+    "The conversation above, between the user and me, has what you need. Take the answer from it, and "
+    "use [placeholders] for small details it doesn't give (an exact date, a full name) instead of asking again."
 )
+# When a reply might be asking for something (worth the side-model check): a question mark, or
+# request wording without one ("Please provide: - the recipient's name ...").
+MIGHT_ASK = re.compile(r"\?|\b(provide|clarify|need to know|need (a few|more|some)|let me know|tell me)\b", re.I)
 ASK_SUPERIOR = "ask_superior"
 
 
@@ -136,13 +149,18 @@ def delegate_tool(
     name: str = "delegate",
     questions: bool = True,
     auto_answer: bool = True,
+    asks_back: Callable[[str, str], Awaitable[bool]] | None = None,
 ) -> FunctionTool:
     """A tool that hands subtasks to `personas` (agents with their own instructions and tools).
 
     `max_turns` caps each delegated run; pass a dict to set it per persona name. With `questions`,
-    each persona also gets ask_superior. With `auto_answer`, a persona that asks without having seen
-    the conversation is resumed once with it before the question goes to the main model.
+    each persona also gets ask_superior, and a reply that only asks for missing information
+    (`asks_back(task, reply)`, default: one side-model call when the reply has a "?" or request
+    wording, `MIGHT_ASK`) counts as a
+    question too. With `auto_answer`, a persona that asks without having seen the conversation is
+    resumed once with it before the question goes to the main model.
     """
+    asks_back = asks_back or reply_asks_back
     by_name = {p.name: with_questions(p) if questions else p for p in personas}
 
     def turns_for(persona_name: str) -> int:
@@ -199,9 +217,10 @@ def delegate_tool(
 
         app = ctx.context  # OmenContext when run through omen.core.runtime
         session = getattr(app, "session", None)
-        thread_end, users_since = latest_thread(session.items(), persona.name) if session else (None, 0)
+        last, users_since = latest_delegation(session.items(), persona.name) if session else (None, 0)
+        thread_end = (last or {}).get("branch")
         thread = session.thread(thread_end) if thread_end else []
-        answering = waiting_for_answer(thread) and users_since <= 1  # it asked us: this is the answer
+        answering = bool((last or {}).get("question")) and users_since <= 1  # it asked us: this is the answer
         if not (answering or follow_up is True or (follow_up == "auto" and users_since <= 1)):
             thread_end, thread = None, []
         thread = [_without_details(i) for i in fork_history(thread, max_history_items)]
@@ -238,6 +257,9 @@ def delegate_tool(
             run_items = [item.to_input_item() for item in result.new_items]
             recorded += run_items
             question = asked_question(result) if finished else None
+            reply = str(result.final_output or "").strip() if finished and not question else ""
+            if questions and MIGHT_ASK.search(reply) and await asks_back(task, reply):
+                question = truncate(reply, 800)  # it asked in its reply instead of calling ask_superior
             if not question or share_context or not (auto_answer and conversation):
                 break
             # The superior's first answer: what it knows, i.e. the conversation (shared once, only
@@ -315,20 +337,11 @@ def asked_question(result: Any) -> str | None:
     return None
 
 
-def waiting_for_answer(thread: list[Any]) -> bool:
-    """True if a persona's thread ends with its ask_superior call (stored items are plain dicts)."""
-    last = thread[-1] if thread else None
-    if not isinstance(last, dict) or last.get("type") != "function_call_output":
-        return False
-    return any(
-        isinstance(i, dict) and i.get("type") == "function_call"
-        and i.get("call_id") == last.get("call_id") and i.get("name") == ASK_SUPERIOR
-        for i in thread
-    )
+def latest_delegation(items: list[Any], persona: str) -> tuple[dict | None, int]:
+    """(details of `persona`'s latest delegation on this path, user messages since it).
 
-
-def latest_thread(items: list[Any], persona: str) -> tuple[str | None, int]:
-    """(last entry of `persona`'s latest delegation branch on this path, user messages since it)."""
+    The details carry its branch (the thread to continue) and, if it ended asking, its question.
+    """
     users = 0
     for item in reversed(items):
         if not isinstance(item, dict):
@@ -339,8 +352,36 @@ def latest_thread(items: list[Any], persona: str) -> tuple[str | None, int]:
             ui = (item.get(CUSTOM_DATA_KEY) or {}).get("ui")
             if isinstance(ui, dict) and ui.get("type") == "delegation" and ui.get("persona") == persona:
                 if ui.get("branch"):
-                    return ui["branch"], users
+                    return ui, users
     return None, users
+
+
+ASKS_BACK_PROMPT = (
+    "A helper was given this task:\n<task>\n{task}\n</task>\n\nIt replied:\n<reply>\n{reply}\n</reply>\n\n"
+    "Did the helper do the task (a reply that contains a question, like a draft asking the reader something, "
+    "still counts as done), or did it only ask for information it was missing instead of doing it? "
+    "Answer with one word: DONE or ASKING."
+)
+
+
+async def reply_asks_back(task: str, reply: str) -> bool:
+    """True if a persona's reply only asks for missing information (one side-model call, thinking off)."""
+    import litellm
+
+    from omen.config import extractor_model
+
+    config = extractor_model()
+    try:
+        response = await litellm.acompletion(
+            model=config.model, api_base=config.base_url, api_key=config.api_key, temperature=0, max_tokens=5,
+            extra_body=config.extra_body or None, timeout=20,
+            messages=[{"role": "user", "content": ASKS_BACK_PROMPT.format(task=task, reply=reply[:3000])}],
+        )
+        verdict = response.choices[0].message.content or ""
+    except Exception as e:  # never fail a delegation over this: treat the reply as the result
+        logger.warning("asks-back check failed: %s", e)
+        return False
+    return "ASKING" in verdict.upper()
 
 
 def _without_details(item: Any) -> Any:

@@ -396,7 +396,7 @@ llama.cpp reuses its KV cache only for an unchanged token prefix; the tool list 
 - [x] Instrumentation: usage events carry `cached_tokens`; the TUI status bar shows the session's cache hit rate.
 - [x] Opt-in llama.cpp slot pinning: `OMEN_SLOT_MAIN` / `OMEN_SLOT_SIDE` (`id_slot`) so personas and the UI extractor don't evict the main conversation; needs `llama-server -np 2+`.
 - [x] Results on `ling3` (5-turn scripted conversation): cache hit **69% → 86%** overall; turns after the first **97–99%** (skill-loading turns were ~50% and every new clock minute reset to 0%). First request is larger (~2.4k vs ~1.1k tokens) because all tools are listed; it's cached across turns and sessions. Eval suite: **45/46, 100% valid tool calls**; named delegation 8/8.
-- [ ] Compaction (Phase 7) must keep the prefix: summarizer = same system prompt + tools + history + a final instruction; new session starts with the same system prompt and tools.
+- [x] Compaction (Phase 7) must keep the prefix: done differently. Compaction happens in the same session, so the system prompt and tools stay as they were (Phase 7 measured the frozen prefix staying cached across a compaction). The summary itself is a side-model call with its own prompt (not the main prefix), and since Phase 9 condensed turns usually need no summary at all.
 
 ### Phase 6 — Web UI
 
@@ -470,7 +470,7 @@ Each item states its effect on that.
    - [x] Stored reminder: every 5th tool result in a turn ends with
      "(goal: <the user's request> · step N of M)" (`omen/core/guard.py`); nothing is ever removed.
 5. Smaller, later:
-   - [ ] Continue a specialist → moved to Phase 10, item 1.
+   - [x] Continue a specialist → moved to Phase 10, item 1 (done).
    - [ ] Memory-quality filter (reject temp paths, "user asked …", fragments under ~24 chars) if
      Omen ever extracts memories automatically.
 
@@ -516,10 +516,9 @@ prompt-cache invariant.
    - [x] Measured on ling3: `mt_omen_writer_needs_context` fails 3/3. "Ask the writer to draft a
      short message to her about it" reaches the writer as that sentence alone; the writer replies
      "Who is 'her'? What is the topic?". Item 1 doesn't help (no earlier writer thread).
-   - [ ] Decide:
-     Options: share the context on named calls when the message has pronouns/references (a
-     specialist prefill of the conversation, once), or let the main model write the brief (one
-     extra main-model step, which Phase 9 removed for speed).
+   - [x] Decided (2026-10-12): neither option up front. The specialist gets the conversation lazily,
+     when it asks (`ask_superior` or a reply that only asks, item 3): one specialist prefill of the
+     conversation, only when it was needed, and no extra main-model step.
 
 Evals after items 1–2 (2026-10-12, ling3): multi-turn 24/26 over 2 repeats, full suite 31/33,
 100% valid tool calls in both. Misses: `mt_omen_writer_needs_context` (item 2) and the known-flaky
@@ -548,8 +547,24 @@ Evals after items 1–2 (2026-10-12, ling3): multi-turn 24/26 over 2 repeats, fu
      a file instead. Researcher misses (`mt_delegate_needs_context` 1/3) are step-cap/brief issues
      (4 steps, "search notes, contacts or online", `lookup_contact("Tom's")`), no question asked.
      Full suite 30/34, 100% valid tool calls. The main model still set `follow_up` 0/53 times.
-   - [ ] Next: a specialist reply that is only questions (ends with "?", no draft) could be treated
-     like `ask_superior`; risky for drafts that end with a question, so measure first.
+   - [x] A reply that only asks for missing information counts as a question (`reply_asks_back`):
+     "ends with ?" misses most of them ("…Please provide those details so I can draft the
+     message.") and a phrase match hits real drafts ("Could you arrange the repair?"), so when a
+     reply contains "?" one side-model call (thinking off, 5 tokens) answers DONE or ASKING.
+     Measured on ling3: 20/20 right on 5 asking replies from the evals and 5 drafts/answers that
+     end with a question, ~0.5 s per check. Any error counts as DONE (the reply stays the result).
+     The check also runs on request wording without a "?" ("Please provide: - …"), and the
+     answer-from-conversation message says to use [placeholders] for small details.
+   - Result (2026-10-12, ling3): full suite **33/34**, 100% valid tool calls (only the old flaky
+     `chain_contact_reminder` missed). Delegation tasks ×3: 23/30, 100% valid; `delegate_*`,
+     `mt_delegate_followup` and `mt_delegate_follow_up` 3/3 each (eval researcher's cap raised
+     from 4 to 6 steps). `mt_omen_writer_asks` stays 0/3, now for a model reason: the writer sees the
+     conversation (it quotes Mr. Rao, the heater and works out the date) but still asks for a full
+     name and exact date despite the placeholder rule, and ling3's main model relays that to the
+     user instead of answering "use placeholders". Other misses: the writer saving the draft to a
+     file instead of showing it, and the researcher asking after a failed lookup.
+   - [ ] Open: a stronger main model (or a rule for the main agent: "if the specialist only asks for
+     small details, tell it to use placeholders") for the remaining writer case.
 4. **Parallel specialists** (later, gated on measurements).
    - [ ] Only if llama.cpp `--parallel 4` holds decode speed with concurrent slots (the 4×128k
      benchmark): one tool call fans out to 2–4 specialists and returns all results in one tool

@@ -4,7 +4,7 @@ import unittest
 from agents import Agent
 
 from omen.core import Runtime, ToolResult, delegate_tool, tool
-from omen.core.delegate import delegation_result, fork_history, latest_thread, waiting_for_answer
+from omen.core.delegate import MIGHT_ASK, delegation_result, fork_history, latest_delegation
 from omen.core.session import CUSTOM_DATA_KEY
 from omen.core.events import SubagentEvent, TextMessageContent, ToolCallResult, ToolCallStart
 from tests.sdk_fake_model import FakeModel
@@ -266,24 +266,66 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
         outputs = [i["output"] for i in persona_model.last_turn_args["input"] if i.get("type") == "function_call_output"]
         self.assertIn("try your tools first", outputs[0])
 
+    async def test_a_reply_that_only_asks_counts_as_a_question(self):
+        persona_model = turns(
+            get_text_message("Who is 'her', and what is it about?"),
+            get_text_message("Hi Anna, I'm 20 minutes late."),
+        )
+        writer = Agent(name="writer", instructions="You write.", model=persona_model)
+        checked = []
+
+        async def asks_back(task: str, reply: str) -> bool:
+            checked.append(reply)
+            return reply.startswith("Who is")
+
+        main_model = turns(
+            get_text_message("Noted."),
+            delegate_call({"persona": "writer", "task": "Message her about it."}),
+            get_text_message("Sent."),
+        )
+        rt = Runtime(Agent(name="jarvis", model=main_model, tools=[delegate_tool([writer], asks_back=asks_back)]))
+        [e async for e in rt.run("I'm 20 minutes late for dinner with Anna.")]
+        events = [e async for e in rt.run("Message her about it.")]
+
+        result = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
+        self.assertEqual(result.content, "Hi Anna, I'm 20 minutes late.")  # answered from the conversation
+        self.assertEqual(checked, ["Who is 'her', and what is it about?"])  # a plain draft isn't checked
+        self.assertIn("conversation above", persona_model.last_turn_args["input"][-1]["content"])
+
+    async def test_a_text_question_that_stays_unanswered_reaches_the_main_model(self):
+        writer_model = turns(get_text_message("Who is 'her'?"), get_text_message("Still: who is 'her'?"))
+        writer = Agent(name="writer", instructions="You write.", model=writer_model)
+
+        async def asks_back(task: str, reply: str) -> bool:
+            return True
+
+        rt, _ = self.main_runtime({"persona": "writer", "task": "Message her."})
+        rt.agent = Agent(name="jarvis", model=rt.agent.model, tools=[delegate_tool([writer], asks_back=asks_back)])
+        events = [e async for e in rt.run("q")]  # the conversation doesn't say who she is
+        result = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
+        self.assertIn("writer paused to ask: Still: who is 'her'?", result.content)
+        self.assertTrue(result.details["props"]["shared_context"])  # it saw the conversation first
+        self.assertIsNone(delegation_result(result.details["props"] | {"type": "delegation"}, result.content))
+
     def test_question_helpers(self):
-        call = {"type": "function_call", "call_id": "q", "name": "ask_superior", "arguments": "{}"}
-        out = {"type": "function_call_output", "call_id": "q", "output": "sent"}
-        self.assertTrue(waiting_for_answer([{"role": "user", "content": "t"}, call, out]))
-        self.assertFalse(waiting_for_answer([call, out, {"role": "assistant", "content": "done"}]))
-        self.assertFalse(waiting_for_answer([{**call, "name": "search_notes"}, out]))
+        self.assertTrue(MIGHT_ASK.search("I need more details. Please provide:\n- the recipient's name"))
+        self.assertTrue(MIGHT_ASK.search("Who is 'her'?"))
+        self.assertIsNone(MIGHT_ASK.search("Hi Anna, I'm 20 minutes late for dinner. See you soon."))
         self.assertIsNone(delegation_result({"type": "delegation", "question": "Which?"}, "x"))
         self.assertEqual(delegation_result({"type": "delegation", "result": "r"}, "x"), "r")
 
-    def test_latest_thread_counts_user_messages_since(self):
-        def output(persona, branch):
-            return {"type": "function_call_output", CUSTOM_DATA_KEY: {"ui": {"type": "delegation", "persona": persona, "branch": branch}}}
+    def test_latest_delegation_counts_user_messages_since(self):
+        def output(persona, branch, **more):
+            ui = {"type": "delegation", "persona": persona, "branch": branch, **more}
+            return {"type": "function_call_output", CUSTOM_DATA_KEY: {"ui": ui}}
 
         items = [{"role": "user", "content": "a"}, output("writer", "b1"), {"role": "user", "content": "b"},
-                 output("researcher", "b2"), {"role": "user", "content": "c"}]
-        self.assertEqual(latest_thread(items, "writer"), ("b1", 2))
-        self.assertEqual(latest_thread(items, "researcher"), ("b2", 1))
-        self.assertEqual(latest_thread(items, "chef"), (None, 3))
+                 output("researcher", "b2", question="Which?"), {"role": "user", "content": "c"}]
+        writer, users = latest_delegation(items, "writer")
+        self.assertEqual((writer["branch"], users), ("b1", 2))
+        researcher, users = latest_delegation(items, "researcher")
+        self.assertEqual((researcher["question"], users), ("Which?", 1))
+        self.assertEqual(latest_delegation(items, "chef"), (None, 3))
 
     def test_schema_lists_personas(self):
         t = delegate_tool([self.researcher])

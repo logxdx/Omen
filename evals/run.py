@@ -109,7 +109,9 @@ def build_agent(task: dict, model: Model) -> Agent:
             model_settings=settings,
             tools=[search_notes, lookup_contact],
         )
-        tools = [delegate_tool([researcher], max_turns=4)]
+        # 6, not 4: with 4 the researcher often ran out on wordy briefs ("look through the notes…"),
+        # which measured the step cap rather than delegation.
+        tools = [delegate_tool([researcher], max_turns=6)]
     else:
         tools = EVAL_TOOLS
     return Agent(name="eval", instructions=SYSTEM, model=model, model_settings=settings, tools=tools)

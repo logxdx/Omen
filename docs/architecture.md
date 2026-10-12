@@ -44,7 +44,10 @@ UI components, questions, subagent events, custom events). For each user message
   `follow_up=true` resumes the specialist's latest branch on this path (its earlier subtasks, tool
   calls and results) and extends that branch, so its next request only appends the new subtask.
   Questions go up: every specialist has `ask_superior(question)`, which ends its run. An ask before
-  any other tool call in the run is turned back once ("try your tools first"). A specialist that
+  any other tool call in the run is turned back once ("try your tools first"). A reply that only
+  asks for missing information counts as a question too: when a reply contains "?" or request
+  wording ("please provide: …"), one side-model
+  call (thinking off, ~0.5 s on ling3) tells a finished draft from a request for details. A specialist that
   asks without having seen the conversation is resumed once with it shared, which is the
   superior's first answer. If it still asks, `delegate` returns "<persona> paused to ask: …"
   instead of a result. The main agent answers with another `delegate` to that specialist, which
