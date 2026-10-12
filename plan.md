@@ -334,7 +334,7 @@ All frontends consume the same event stream. Events mirror AG-UI: `RUN_STARTED`,
 - [x] `core/session.py`: JSONL tree implementing the SDK `Session` protocol; branching, labels, detached forks, `ui_details()`.
 - [x] Tests: 33 unit tests on the SDK's `FakeModel` (`python -m unittest discover -s tests -t .`).
 - [x] Evals: 12 tasks (incl. 2 delegation tasks). **Local `ling3` (7.9B Q5_K_M, llama.cpp): 36/36 passed over 3 repeats, 38/38 valid tool calls, ~2.1 steps and ~1.2 s per task.**
-- [x] Multi-turn eval tasks (needed to measure when the model chooses `share_context`): tasks with `turns:` run in one session and are checked per turn; 11 tasks (`mt_*`: follow-ups, ellipsis, corrections, reusing an earlier result, answering from context, delegation needing earlier turns, file edits across turns). The summary reports how many `delegate` calls set `share_context`. **Not yet run on `ling3`** (the server was busy with a benchmark, 2026-10-12).
+- [x] Multi-turn eval tasks (needed to measure when the model chooses `share_context`): tasks with `turns:` run in one session and are checked per turn; 11 tasks (`mt_*`: follow-ups, ellipsis, corrections, reusing an earlier result, answering from context, delegation needing earlier turns, file edits across turns). The summary reports how many `delegate` calls set `share_context`. **Local `ling3`: 24/26 over 2 repeats, 100% valid tool calls** (with Phase 10's two follow-up tasks); the miss is the named-delegation context gap (Phase 10, item 2). The model set `share_context` in 2 of 19 delegations.
 
 ### Phase 2 — Skills and core tools
 
@@ -498,20 +498,32 @@ prompt-cache invariant.
 
 1. **Continue a specialist** (medium; cache: append-only for the specialist — its next request is
    its previous one plus the new subtask).
-   - [ ] `delegate(…, follow_up)`: true resumes the persona's latest thread on this conversation
+   - [x] `delegate(…, follow_up)`: true resumes the persona's latest thread on this conversation
      path (its earlier subtasks, its tool calls and results) and appends the new run to the same
      session branch; no earlier thread → a fresh one. Combines with `share_context` (conversation
      fork, then the thread, then the subtask).
-   - [ ] Named delegation ("ask the writer to …") continues automatically when the previous user
-     turn delegated to the same persona ("ask the writer to make it shorter").
-   - [ ] Tests (FakeModel) and multi-turn evals for both paths; report how often the model sets
-     `follow_up` itself.
+   - [x] Named delegation ("ask the writer to …") continues automatically when the previous user
+     turn delegated to the same persona ("ask the writer to make it shorter"): the harness passes
+     `follow_up: "auto"`.
+   - [x] Tests (FakeModel, 4 new; 153 total) and multi-turn evals for both paths; the summary
+     reports how often the model sets `follow_up` itself.
+   - Result (2026-10-12, ling3): `mt_omen_writer_revise` 3/3 — "make it shorter and more casual"
+     reaches the writer with its earlier draft, and the reply keeps Anna and the 20 minutes. The main
+     model **never set `follow_up` itself (0/31 delegations)** and rarely `share_context` (2/31);
+     `mt_delegate_follow_up` still passes because the researcher just searches again. So on ling3
+     continuation comes from the named path; the model path is for stronger main models.
 2. **Named delegation loses context** (found by `mt_omen_writer_needs_context`).
-   - [ ] Measure on ling3 first. "Ask the writer to message her about it" goes to the writer as the
-     raw sentence with no `share_context`, so "her" and "it" are lost unless item 1 applies.
+   - [x] Measured on ling3: `mt_omen_writer_needs_context` fails 3/3. "Ask the writer to draft a
+     short message to her about it" reaches the writer as that sentence alone; the writer replies
+     "Who is 'her'? What is the topic?". Item 1 doesn't help (no earlier writer thread).
+   - [ ] Decide:
      Options: share the context on named calls when the message has pronouns/references (a
      specialist prefill of the conversation, once), or let the main model write the brief (one
      extra main-model step, which Phase 9 removed for speed).
+
+Evals after items 1–2 (2026-10-12, ling3): multi-turn 24/26 over 2 repeats, full suite 31/33,
+100% valid tool calls in both. Misses: `mt_omen_writer_needs_context` (item 2) and the known-flaky
+`chain_contact_reminder`.
 3. **Parallel specialists** (later, gated on measurements).
    - [ ] Only if llama.cpp `--parallel 4` holds decode speed with concurrent slots (the 4×128k
      benchmark): one tool call fans out to 2–4 specialists and returns all results in one tool
