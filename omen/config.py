@@ -1,7 +1,7 @@
 """Runtime configuration, read from the environment (.env).
 
-Uses the same variables as the old `config/agent_config.py` (OLLAMA_BASE_URL,
-CEREBRAS_BASE_URL, TRIAGE_API_KEY), plus OMEN_* overrides.
+OLLAMA_BASE_URL, CEREBRAS_BASE_URL and TRIAGE_API_KEY (kept from the first version of Omen)
+plus OMEN_* variables; the full list is in README.md.
 """
 
 from __future__ import annotations
