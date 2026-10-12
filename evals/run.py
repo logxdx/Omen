@@ -195,8 +195,8 @@ def _args(raw: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _shares_context(args: dict) -> bool:
-    return str(args.get("share_context")).lower() == "true"
+def _flag(args: dict, key: str) -> bool:
+    return str(args.get(key)).lower() == "true"
 
 
 def check(task: dict, r: Turn) -> list[str]:
@@ -224,7 +224,7 @@ def check(task: dict, r: Turn) -> list[str]:
     if needle:
         delegations = [_args(c["arguments"]) for c in r.calls if c["name"] == "delegate"]
         passed = any(
-            _shares_context(a) or str(needle).lower() in str(a.get("task", "")).lower()
+            _flag(a, "share_context") or str(needle).lower() in str(a.get("task", "")).lower()
             for a in delegations
         )
         if not passed:
@@ -273,8 +273,12 @@ async def run_suite(only: list[str] | None = None, repeat: int = 1, model: Model
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps({"model": config.model, "results": [asdict(r) for r in results]}, indent=2))
     delegations = [_args(c["arguments"]) for r in results for c in r.calls if c["name"] == "delegate"]
-    if delegations:  # how often the model forks the conversation for a specialist
-        shared = sum(_shares_context(a) for a in delegations)
-        print(f"delegations {len(delegations)}  ·  share_context {shared}/{len(delegations)}")
+    if delegations:  # how often the model shares the conversation / continues a specialist's thread itself
+        shared = sum(_flag(a, "share_context") for a in delegations)
+        follow = sum(_flag(a, "follow_up") for a in delegations)
+        print(
+            f"delegations {len(delegations)}  ·  share_context {shared}/{len(delegations)}"
+            f"  ·  follow_up {follow}/{len(delegations)}"
+        )
     print(f"results: {out}")
     return 0 if passed == len(results) else 1

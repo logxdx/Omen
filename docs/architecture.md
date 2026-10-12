@@ -41,7 +41,10 @@ UI components, questions, subagent events, custom events). For each user message
   skills and turn caps. `delegate(persona, task, share_context)` runs them on a fork of the current
   conversation (`share_context=true`) or on the task alone, records the sub-run as a detached branch
   of the session, and returns only the result. The main model decides whether to share context.
-  When the user named the specialist, the harness makes the call and the specialist's result is the
+  `follow_up=true` resumes the specialist's latest branch on this path (its earlier subtasks, tool
+  calls and results) and extends that branch, so its next request only appends the new subtask.
+  When the user named the specialist, the harness makes the call (continuing the thread if the
+  previous message went to the same specialist) and the specialist's result is the
   reply as is (no main-model turn retyping it). Otherwise the main model can write `{{result}}`,
   shown expanded on screen and stored as written.
 
@@ -148,4 +151,4 @@ multi-step chains, delegation, skills) and reports pass rate, valid tool-call ra
 `omen eval --extract` checks the UI extractor on `evals/extract_tasks.yaml`. Multi-turn tasks
 (`turns:`) run every turn in one session, so follow-ups depend on what the model really said and
 did earlier, and check each turn on its own; the summary also counts how many `delegate` calls
-set `share_context`.
+set `share_context` and `follow_up`.

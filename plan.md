@@ -470,9 +470,7 @@ Each item states its effect on that.
    - [x] Stored reminder: every 5th tool result in a turn ends with
      "(goal: <the user's request> · step N of M)" (`omen/core/guard.py`); nothing is ever removed.
 5. Smaller, later:
-   - [ ] Continue a specialist: a follow-up to the same specialist appends to its existing branch
-     instead of a fresh brief (cache: as today; the branch's prefix comes back from the host RAM
-     prompt cache or is re-prefilled).
+   - [ ] Continue a specialist → moved to Phase 10, item 1.
    - [ ] Memory-quality filter (reject temp paths, "user asked …", fragments under ~24 chars) if
      Omen ever extracts memories automatically.
 
@@ -488,6 +486,44 @@ Result (2026-10-12, ling3): evals 19/20, 100% valid tool calls; the one miss
 (`chain_contact_reminder`) is flaky on both sides — 3/4 with Phase 9 vs 1/4 before. Cache
 benchmark turns 2–5: 96/96/98/98% (before: 96/96/97/85%). Tests: 146 (guard 3, compaction 11,
 specialist results 3 new or updated).
+
+### Phase 10 — Delegation, after Agent Zero's subordinates
+
+Source: agent0ai/agent-zero v2.13 (`e3051fb`, studied 2026-10-12): `call_subordinate(message,
+profile, reset, context_id)` creates numbered children (A0 → A1 → A2, no depth limit) that see only
+their task message and persist as their own chats, so `reset: false` / `context_id` continues one;
+`parallel` runs up to 8 subordinate or tool jobs in the background (start / await / collect /
+cancel); long results are reused with `§§include(file)`. Same rule as Phase 9: keep the
+prompt-cache invariant.
+
+1. **Continue a specialist** (medium; cache: append-only for the specialist — its next request is
+   its previous one plus the new subtask).
+   - [ ] `delegate(…, follow_up)`: true resumes the persona's latest thread on this conversation
+     path (its earlier subtasks, its tool calls and results) and appends the new run to the same
+     session branch; no earlier thread → a fresh one. Combines with `share_context` (conversation
+     fork, then the thread, then the subtask).
+   - [ ] Named delegation ("ask the writer to …") continues automatically when the previous user
+     turn delegated to the same persona ("ask the writer to make it shorter").
+   - [ ] Tests (FakeModel) and multi-turn evals for both paths; report how often the model sets
+     `follow_up` itself.
+2. **Named delegation loses context** (found by `mt_omen_writer_needs_context`).
+   - [ ] Measure on ling3 first. "Ask the writer to message her about it" goes to the writer as the
+     raw sentence with no `share_context`, so "her" and "it" are lost unless item 1 applies.
+     Options: share the context on named calls when the message has pronouns/references (a
+     specialist prefill of the conversation, once), or let the main model write the brief (one
+     extra main-model step, which Phase 9 removed for speed).
+3. **Parallel specialists** (later, gated on measurements).
+   - [ ] Only if llama.cpp `--parallel 4` holds decode speed with concurrent slots (the 4×128k
+     benchmark): one tool call fans out to 2–4 specialists and returns all results in one tool
+     result; no nesting, no background jobs. Not A0's job list in a per-call `[EXTRAS]` block — an
+     ephemeral tail costs ~2,000 re-evaluated tokens per call on ling3 (Phase 9, item 4).
+
+Not adopting: unlimited delegation depth (a 1.3B-active model writing briefs at every level),
+background jobs collected later, profile directories of prompt overrides (`personas/*.md` front
+matter is enough). Keeping what A0 lacks: `share_context` and harness-routed named specialists.
+
+Done when: follow-ups to a specialist continue its thread (tests + evals), the named-delegation
+context gap is measured and decided, and evals keep 100% valid tool calls.
 ---
 
 ## 8. Success criteria

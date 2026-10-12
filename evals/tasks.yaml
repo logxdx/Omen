@@ -242,6 +242,27 @@
       expect_args: {delegate: {persona: researcher}}
       expect_answer: ["98200"]
 
+# follow-ups to the same specialist: the model may set follow_up itself (counted in the summary)
+- id: mt_delegate_follow_up
+  agent: delegator
+  turns:
+    - prompt: Ask the researcher to find the Wi-Fi password for the cabin in my notes.
+      expect_tools: [delegate]
+      expect_answer: [pinecone-42]
+    - prompt: Have the researcher check those same notes for when my dentist appointment is.
+      expect_tools: [delegate]
+      expect_answer: [friday]
+
+- id: mt_omen_writer_revise
+  agent: omen
+  turns:
+    - prompt: Ask the writer to draft a two-sentence message to Anna saying I'll be 20 minutes late for dinner.
+      expect_tools: [delegate]
+      expect_answer: [anna]
+    - prompt: Ask the writer to make it shorter and more casual.
+      expect_tools: [delegate]
+      expect_answer: [anna, "20"]
+
 - id: mt_omen_write_then_edit
   agent: omen
   turns:

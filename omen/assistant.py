@@ -45,7 +45,8 @@ GUIDANCE = (
 DELEGATION = (
     "Specialists: hand them a subtask with delegate (they are not skills; don't load_skill them). "
     "Delegate only when a subtask needs a specialist's tools or a substantial piece of writing; answer simple "
-    "questions yourself. If the user names a specialist, delegate to it. When delegate returns a draft or report the "
+    "questions yourself. If the user names a specialist, delegate to it. To change or add to what a specialist did "
+    "earlier, delegate to it again with follow_up true. When delegate returns a draft or report the "
     "user should see in full, write {{result}} where it goes (the screen shows it in full) instead of copying it out; "
     "otherwise give the user the facts, not just a note that it's done."
 )
@@ -124,7 +125,10 @@ class Assistant:
             # The user asked for a specialist by name: delegate deterministically (small models
             # often do the work themselves instead, and llama.cpp ignores a named tool_choice).
             persona, task = named
-            state["pre_call"] = {"name": "delegate", "arguments": {"persona": persona, "task": task}}
+            # follow_up "auto": continue the persona's thread if the previous message went to it too
+            # ("ask the writer to make it shorter").
+            arguments = {"persona": persona, "task": task, "follow_up": "auto"}
+            state["pre_call"] = {"name": "delegate", "arguments": arguments}
             events.append(Custom("delegate_hint", {"persona": persona}))
         return events
 

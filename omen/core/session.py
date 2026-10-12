@@ -129,6 +129,16 @@ class Session:
             )
         return last
 
+    def thread(self, entry_id: str) -> list[Any]:
+        """Items of the detached branch ending at `entry_id` (a delegation's run, oldest first)."""
+        items = []
+        entry = self.entries.get(entry_id)
+        while entry is not None and entry.get("detached"):
+            if entry["type"] == "item":
+                items.append(entry["data"])
+            entry = self.entries.get(entry["parent_id"])
+        return items[::-1]
+
     def label(self, entry_id: str, name: str) -> str:
         if entry_id not in self.entries:
             raise KeyError(entry_id)

@@ -12,7 +12,8 @@ What makes it work on a small model:
   everything that varies (time, recalled memories, skill instructions) goes in a `<context>` block
   at the start of each user message. Turns after the first hit the llama.cpp prompt cache at 97–99%.
 - **Delegation as branches.** The main persona can hand a subtask to a specialist persona, which
-  runs on a fork of the conversation (or just the task) and returns only its result.
+  runs on a fork of the conversation (or just the task) and returns only its result. Follow-ups
+  ("ask the writer to make it shorter") continue the specialist's earlier thread.
 - **Steer mid-run.** Messages you send while Omen is working are delivered after the current step.
 - **Compaction.** Long conversations are summarized into fixed sections before they slow the model
   down; the latest turns stay verbatim.

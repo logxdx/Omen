@@ -92,6 +92,7 @@ export interface DelegationProps {
   persona: string;
   task: string;
   shared_context?: boolean;
+  follow_up?: boolean;
   branch?: string | null;
   steps?: number;
 }

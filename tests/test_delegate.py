@@ -4,7 +4,8 @@ import unittest
 from agents import Agent
 
 from omen.core import Runtime, ToolResult, delegate_tool, tool
-from omen.core.delegate import fork_history
+from omen.core.delegate import fork_history, latest_thread
+from omen.core.session import CUSTOM_DATA_KEY
 from omen.core.events import SubagentEvent, TextMessageContent, ToolCallResult, ToolCallStart
 from tests.sdk_fake_model import FakeModel
 from tests.sdk_responses import get_function_tool_call, get_text_message
@@ -111,6 +112,76 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
         result = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
         self.assertEqual(result.error, "invalid_args")
         self.assertIn("researcher", result.content)
+
+    async def test_follow_up_continues_the_personas_thread(self):
+        self.persona_model.add_multiple_turn_outputs([[get_text_message("Also: dentist on Friday.")]])
+        main_model = turns(
+            delegate_call({"persona": "researcher", "task": "Find the cabin wifi password."}),
+            get_text_message("It's pinecone-42."),
+            delegate_call({"persona": "researcher", "task": "Anything else in there?", "follow_up": True}, "d2"),
+            get_text_message("Dentist on Friday."),
+        )
+        rt = Runtime(Agent(name="jarvis", model=main_model, tools=[delegate_tool([self.researcher])]))
+        [e async for e in rt.run("What's the cabin wifi password?")]
+        events = [e async for e in rt.run("Ask it what else is in there.")]
+
+        persona_input = self.persona_model.last_turn_args["input"]
+        self.assertIn("Find the cabin wifi password.", persona_input[0]["content"])
+        self.assertIn("search_notes", json.dumps(persona_input))  # its own earlier tool call and result
+        self.assertIn("follow-up", persona_input[-1]["content"])
+        self.assertIn("Anything else in there?", persona_input[-1]["content"])
+
+        props = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0].details["props"]
+        self.assertTrue(props["follow_up"])
+        thread = rt.session.thread(props["branch"])  # one branch holds both runs
+        self.assertEqual(contents(thread)[0], persona_input[0]["content"])
+        self.assertIn("dentist on Friday", json.dumps(thread))
+        self.assertNotIn("search_notes", json.dumps(rt.session.items()))  # main context unchanged
+
+    async def test_follow_up_without_an_earlier_thread_starts_fresh(self):
+        rt, _ = self.main_runtime({"persona": "researcher", "task": "Find it.", "follow_up": True})
+        events = [e async for e in rt.run("q?")]
+        self.assertEqual(len(self.persona_model.first_turn_args["input"]), 1)
+        result = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
+        self.assertFalse(result.details["props"]["follow_up"])
+
+    async def test_named_delegation_continues_only_right_after_the_same_persona(self):
+        self.persona_model.add_multiple_turn_outputs([
+            [get_text_message("Shorter: pinecone-42.")],
+            [get_text_message("Fresh answer.")],
+        ])
+        main_model = turns(get_text_message("You're welcome."))
+
+        def prepare(text: str, state: dict) -> list:
+            if text.startswith("ask"):
+                state["pre_call"] = {
+                    "name": "delegate",
+                    "arguments": {"persona": "researcher", "task": text, "follow_up": "auto"},
+                }
+            return []
+
+        rt = Runtime(
+            Agent(name="jarvis", model=main_model, tools=[delegate_tool([self.researcher])]), prepare=prepare
+        )
+        inputs = []
+        for text in ["ask the researcher for the wifi password", "ask the researcher to say it shorter",
+                     "thanks", "ask the researcher about something else"]:
+            [e async for e in rt.run(text)]
+            inputs.append(self.persona_model.last_turn_args["input"])
+
+        self.assertIn("follow-up", inputs[1][-1]["content"])  # right after the same persona
+        self.assertIn("wifi password", json.dumps(inputs[1]))
+        self.assertEqual(len(inputs[3]), 1)  # a turn in between: a fresh brief
+
+    def test_latest_thread_counts_user_messages_since(self):
+        def output(persona, branch):
+            return {"type": "function_call_output", CUSTOM_DATA_KEY: {"ui": {"type": "delegation", "persona": persona, "branch": branch}}}
+
+        items = [{"role": "user", "content": "a"}, output("writer", "b1"), {"role": "user", "content": "b"},
+                 output("researcher", "b2"), {"role": "user", "content": "c"}]
+        self.assertEqual(latest_thread(items, "writer"), ("b1", 2))
+        self.assertEqual(latest_thread(items, "researcher"), ("b2", 1))
+        self.assertEqual(latest_thread(items, "chef"), (None, 3))
 
     def test_schema_lists_personas(self):
         t = delegate_tool([self.researcher])

@@ -133,6 +133,7 @@ class Delegation(Component):
     persona: str
     task: str
     shared_context: bool = False
+    follow_up: bool = False  # continued the persona's earlier thread
     branch: str | None = None
     steps: int = 0
 
