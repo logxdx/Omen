@@ -46,7 +46,8 @@ DELEGATION = (
     "Specialists: hand them a subtask with delegate (they are not skills; don't load_skill them). "
     "Delegate only when a subtask needs a specialist's tools or a substantial piece of writing; answer simple "
     "questions yourself. If the user names a specialist, delegate to it. To change or add to what a specialist did "
-    "earlier, delegate to it again with follow_up true. When delegate returns a draft or report the "
+    "earlier, delegate to it again with follow_up true. If a specialist asks you a question, answer it with "
+    "delegate to the same specialist; if only the user knows, ask_user first. When delegate returns a draft or report the "
     "user should see in full, write {{result}} where it goes (the screen shows it in full) instead of copying it out; "
     "otherwise give the user the facts, not just a note that it's done."
 )

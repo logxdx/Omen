@@ -4,7 +4,7 @@ import unittest
 from agents import Agent
 
 from omen.core import Runtime, ToolResult, delegate_tool, tool
-from omen.core.delegate import fork_history, latest_thread
+from omen.core.delegate import delegation_result, fork_history, latest_thread, waiting_for_answer
 from omen.core.session import CUSTOM_DATA_KEY
 from omen.core.events import SubagentEvent, TextMessageContent, ToolCallResult, ToolCallStart
 from tests.sdk_fake_model import FakeModel
@@ -172,6 +172,90 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("follow-up", inputs[1][-1]["content"])  # right after the same persona
         self.assertIn("wifi password", json.dumps(inputs[1]))
         self.assertEqual(len(inputs[3]), 1)  # a turn in between: a fresh brief
+
+    def asking_researcher(self) -> FakeModel:
+        model = turns(
+            get_function_tool_call("ask_superior", json.dumps({"question": "Which cabin?"}), call_id="q1"),
+            get_text_message("The lake cabin's password is pinecone-42."),
+        )
+        self.researcher = Agent(name="researcher", instructions="You research.", model=model, tools=[search_notes])
+        return model
+
+    async def test_question_pauses_the_persona_and_the_answer_continues_it(self):
+        persona_model = self.asking_researcher()
+        main_model = turns(
+            delegate_call({"persona": "researcher", "task": "Find the cabin wifi password."}),
+            delegate_call({"persona": "researcher", "task": "The lake cabin."}, "d2"),  # no follow_up flag
+            get_text_message("It's pinecone-42."),
+        )
+        tool = delegate_tool([self.researcher], auto_answer=False)  # the main model answers
+        rt = Runtime(Agent(name="jarvis", model=main_model, tools=[tool]))
+        events = [e async for e in rt.run("What's the cabin wifi password?")]
+
+        asked, answered = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"]
+        self.assertIn("researcher paused to ask: Which cabin?", asked.content)
+        self.assertEqual(asked.details["props"]["question"], "Which cabin?")
+        self.assertIsNone(asked.error)
+        self.assertEqual(persona_model.first_turn_args["input"][0]["role"], "user")  # the run stopped at the question
+
+        persona_input = persona_model.last_turn_args["input"]
+        self.assertIn("Find the cabin wifi password.", persona_input[0]["content"])
+        self.assertEqual([i.get("name") for i in persona_input if i.get("type") == "function_call"], ["ask_superior"])
+        self.assertIn("answers your question", persona_input[-1]["content"])
+        self.assertIn("The lake cabin.", persona_input[-1]["content"])
+        self.assertTrue(answered.details["props"]["follow_up"])
+        self.assertIsNone(answered.details["props"].get("question"))
+        self.assertEqual(answered.content, "The lake cabin's password is pinecone-42.")
+        self.assertIn("ask_superior", [t.name for t in persona_model.first_turn_args["tools"]])
+
+    async def test_named_delegation_question_goes_to_the_main_model(self):
+        self.asking_researcher()
+        main_model = turns(get_text_message("The researcher asks: which cabin?"))
+
+        def prepare(text: str, state: dict) -> list:
+            state["pre_call"] = {"name": "delegate", "arguments": {"persona": "researcher", "task": text}}
+            return []
+
+        tool = delegate_tool([self.researcher], auto_answer=False)
+        rt = Runtime(Agent(name="jarvis", model=main_model, tools=[tool]), prepare=prepare)
+        events = [e async for e in rt.run("ask the researcher for the cabin wifi password")]
+
+        main_input = json.dumps(main_model.last_turn_args["input"])
+        self.assertIn("paused to ask: Which cabin?", main_input)  # not shown to the user as the reply
+        reply = "".join(e.delta for e in events if isinstance(e, TextMessageContent))
+        self.assertEqual(reply, "The researcher asks: which cabin?")
+
+    async def test_question_is_answered_from_the_conversation_once(self):
+        persona_model = self.asking_researcher()
+        main_model = turns(
+            get_text_message("Noted."),
+            delegate_call({"persona": "researcher", "task": "Find the cabin wifi password."}),
+            get_text_message("It's pinecone-42."),
+        )
+        rt = Runtime(Agent(name="jarvis", model=main_model, tools=[delegate_tool([self.researcher])]))
+        [e async for e in rt.run("We're going to the lake cabin.")]
+        events = [e async for e in rt.run("What's the wifi password there?")]
+
+        persona_input = persona_model.last_turn_args["input"]
+        self.assertEqual(persona_input[0]["content"], "We're going to the lake cabin.")  # the conversation, once
+        self.assertEqual([i.get("name") for i in persona_input if i.get("type") == "function_call"], ["ask_superior"])
+        self.assertIn("conversation above", persona_input[-1]["content"])
+
+        result = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
+        self.assertEqual(result.content, "The lake cabin's password is pinecone-42.")
+        self.assertTrue(result.details["props"]["shared_context"])
+        thread = json.dumps(rt.session.thread(result.details["props"]["branch"]))
+        self.assertIn("ask_superior", thread)
+        self.assertNotIn("We're going to the lake cabin.", thread)  # the shared conversation isn't stored twice
+
+    def test_question_helpers(self):
+        call = {"type": "function_call", "call_id": "q", "name": "ask_superior", "arguments": "{}"}
+        out = {"type": "function_call_output", "call_id": "q", "output": "sent"}
+        self.assertTrue(waiting_for_answer([{"role": "user", "content": "t"}, call, out]))
+        self.assertFalse(waiting_for_answer([call, out, {"role": "assistant", "content": "done"}]))
+        self.assertFalse(waiting_for_answer([{**call, "name": "search_notes"}, out]))
+        self.assertIsNone(delegation_result({"type": "delegation", "question": "Which?"}, "x"))
+        self.assertEqual(delegation_result({"type": "delegation", "result": "r"}, "x"), "r")
 
     def test_latest_thread_counts_user_messages_since(self):
         def output(persona, branch):

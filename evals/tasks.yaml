@@ -297,3 +297,15 @@
       expect_tools: [delegate]
       expect_args: {delegate: {persona: writer}}
       expect_answer: ["20"]
+      expect_answer_any: [hi anna, hey anna, dear anna, hello anna]  # a draft, not questions back
+
+# named delegation with facts only the main agent has: the writer should ask_superior, not guess
+- id: mt_omen_writer_asks
+  agent: omen
+  turns:
+    - prompt: My landlord, Mr. Rao, still hasn't fixed the heater. I reported it two weeks ago.
+    - prompt: Ask the writer to write him a firm but polite complaint.
+      expect_tools: [delegate]
+      expect_answer: [rao, heater]
+      expect_answer_any: [dear mr. rao, hello mr. rao, hi mr. rao, dear mr rao]  # a draft, not questions back
+      max_steps: 6

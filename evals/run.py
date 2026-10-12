@@ -276,9 +276,10 @@ async def run_suite(only: list[str] | None = None, repeat: int = 1, model: Model
     if delegations:  # how often the model shares the conversation / continues a specialist's thread itself
         shared = sum(_flag(a, "share_context") for a in delegations)
         follow = sum(_flag(a, "follow_up") for a in delegations)
+        asked = sum(" paused to ask: " in c["content"] for r in results for c in r.calls if c["name"] == "delegate")
         print(
             f"delegations {len(delegations)}  ·  share_context {shared}/{len(delegations)}"
-            f"  ·  follow_up {follow}/{len(delegations)}"
+            f"  ·  follow_up {follow}/{len(delegations)}  ·  specialist questions {asked}"
         )
     print(f"results: {out}")
     return 0 if passed == len(results) else 1

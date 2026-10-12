@@ -93,6 +93,7 @@ export interface DelegationProps {
   task: string;
   shared_context?: boolean;
   follow_up?: boolean;
+  question?: string | null;
   branch?: string | null;
   steps?: number;
 }

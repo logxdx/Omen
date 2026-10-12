@@ -13,7 +13,8 @@ What makes it work on a small model:
   at the start of each user message. Turns after the first hit the llama.cpp prompt cache at 97–99%.
 - **Delegation as branches.** The main persona can hand a subtask to a specialist persona, which
   runs on a fork of the conversation (or just the task) and returns only its result. Follow-ups
-  ("ask the writer to make it shorter") continue the specialist's earlier thread.
+  ("ask the writer to make it shorter") continue the specialist's earlier thread. A specialist that
+  is missing something asks Omen (`ask_superior`); Omen answers it or asks you.
 - **Steer mid-run.** Messages you send while Omen is working are delivered after the current step.
 - **Compaction.** Long conversations are summarized into fixed sections before they slow the model
   down; the latest turns stay verbatim.

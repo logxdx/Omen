@@ -134,6 +134,7 @@ class Delegation(Component):
     task: str
     shared_context: bool = False
     follow_up: bool = False  # continued the persona's earlier thread
+    question: str | None = None  # it paused to ask the main agent this (ask_superior)
     branch: str | None = None
     steps: int = 0
 

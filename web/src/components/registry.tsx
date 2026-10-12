@@ -125,7 +125,10 @@ const Choice = (p: ChoiceProps) => (
   <Line icon="?">{p.question} {p.answer ? <b>→ {p.answer}</b> : <span className="muted">[{p.options?.join(" / ")}]</span>}</Line>
 );
 const Delegation = (p: DelegationProps) => (
-  <Line icon="↳"><b className="accent">{p.persona}</b>{p.shared_context ? " (with context)" : ""}: <span className="muted">{p.task}</span></Line>
+  <Line icon="↳">
+    <b className="accent">{p.persona}</b>{p.shared_context ? " (with context)" : ""}: <span className="muted">{p.task}</span>
+    {p.question ? <div>? asks: {p.question}</div> : null}
+  </Line>
 );
 const MemorySaved = (p: MemorySavedProps) => <Line icon="✓">remembered: {p.fact}</Line>;
 const SkillLoaded = (p: SkillLoadedProps) => <Line icon="⚙"><span className="muted">skill: {p.skill}</span></Line>;

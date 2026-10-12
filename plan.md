@@ -524,7 +524,19 @@ prompt-cache invariant.
 Evals after items 1–2 (2026-10-12, ling3): multi-turn 24/26 over 2 repeats, full suite 31/33,
 100% valid tool calls in both. Misses: `mt_omen_writer_needs_context` (item 2) and the known-flaky
 `chain_contact_reminder`.
-3. **Parallel specialists** (later, gated on measurements).
+3. **Questions up the chain, follow-ups down** (asked by the owner, 2026-10-12; cache: append-only —
+   the question ends the specialist's request, the answer is appended to the same thread).
+   - [x] `ask_superior(question)` on every delegation target (`delegate_tool(questions=True)` adds it
+     and `StopAtTools`): ends the specialist's run; `delegate` returns "<persona> paused to ask: …"
+     with the question in the delegation details (TUI and web show it).
+   - [x] The superior answers with `delegate` to the same specialist: a thread that ends with an
+     unanswered question resumes as "The main assistant answers your question: …" with no flag
+     (ling3 never set `follow_up`). Other follow-ups: `follow_up: true` / named "auto" (item 1).
+   - [x] The main agent's own superior is the user: `ask_user` (Phase 2). The question result tells
+     the main agent to use it when only the user knows; guidance says the same.
+   - [x] A named delegation that ends in a question is not the direct reply; the main model gets
+     the turn to answer it.
+4. **Parallel specialists** (later, gated on measurements).
    - [ ] Only if llama.cpp `--parallel 4` holds decode speed with concurrent slots (the 4×128k
      benchmark): one tool call fans out to 2–4 specialists and returns all results in one tool
      result; no nesting, no background jobs. Not A0's job list in a per-call `[EXTRAS]` block — an

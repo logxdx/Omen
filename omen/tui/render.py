@@ -138,7 +138,10 @@ def _choice(p: dict, text: str) -> Widget:
 @renderer("delegation")
 def _delegation(p: dict, text: str) -> Widget:
     shared = " (with context)" if p.get("shared_context") else ""
-    return Static(Text.assemble(("↳ ", "magenta"), (p["persona"], "bold magenta"), f"{shared}: ", (p["task"], "dim")))
+    line = Text.assemble(("↳ ", "magenta"), (p["persona"], "bold magenta"), f"{shared}: ", (p["task"], "dim"))
+    if p.get("question"):
+        line.append_text(Text.assemble("\n  ", ("? asks: ", "yellow"), p["question"]))
+    return Static(line)
 
 
 @renderer("memory_saved")
