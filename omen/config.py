@@ -26,6 +26,10 @@ DEFAULT_PERSONA = os.getenv("OMEN_PERSONA", "omen")
 
 # Upper bound on LLM steps per user message.
 MAX_TURNS = int(os.getenv("OMEN_MAX_TURNS", "50"))
+# Compaction (omen/core/compaction.py): summarize the old part of a conversation when the context
+# passes COMPACT_AT tokens, keeping the last KEEP_RECENT tokens verbatim. 0 disables it.
+COMPACT_AT = int(os.getenv("OMEN_COMPACT_AT", "24000"))
+KEEP_RECENT = int(os.getenv("OMEN_KEEP_RECENT", "6000"))
 
 # Default cap on the text a tool returns to the model (~1k tokens).
 TOOL_CONTENT_MAX_CHARS = int(os.getenv("OMEN_TOOL_MAX_CHARS", "4000"))

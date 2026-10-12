@@ -5,7 +5,7 @@
 - Enter sends. While Omen works, Enter steers it (delivered after the current step);
   when Omen asks a question, Enter (or picking an option) answers it.
 - Esc stops the current run. Ctrl+P opens the command palette, Ctrl+T the branch tree.
-- Slash commands: /help /personas /persona <name> /skills /skill <name> /reload /new /tree /quit
+- Slash commands: /help /personas /persona <name> /skills /skill <name> /reload /compact /new /tree /quit
 """
 
 from __future__ import annotations
@@ -35,8 +35,13 @@ from omen.ui.history import history
 
 HELP = (
     "**Enter** send · steer while working · answer questions   **Esc** stop   **Ctrl+P** commands   **Ctrl+T** branches\n\n"
-    "`/personas` `/persona <name>` `/skills` `/skill <name>` `/reload` `/new` `/tree` `/quit`"
+    "`/personas` `/persona <name>` `/skills` `/skill <name>` `/reload` `/compact` `/new` `/tree` `/quit`"
 )
+
+
+def compaction_note(info: dict) -> str:
+    tokens = info.get("tokens_before") or 0
+    return f"⇣ earlier conversation summarized{f' (was ~{tokens:,} tokens)' if tokens else ''}"
 
 
 
@@ -128,6 +133,8 @@ class Transcript:
                 await self.mount(Note(f"⚙ skill: {event.value['skill']} ({event.value.get('by', '')})"))
             elif event.name == "message_injected":
                 await self.mount(UserMessage(f"› {event.value}"))
+            elif event.name == "compacted":
+                await self.mount(Note(compaction_note(event.value)))
             elif event.name == "usage":
                 self.app.add_usage(event.value)
         elif isinstance(event, ev.RunError):
@@ -437,6 +444,8 @@ class OmenApp(App):
                     await self.transcript.mount(Markdown(message["content"], classes="assistant"))
                 for component in message.get("components", []):
                     await self.transcript.handle(ev.UIComponent("history", component))
+            elif role == "compaction":
+                await self.transcript.mount(Note(compaction_note(message)))
             elif role == "tool_call":
                 await self.transcript.handle(ev.ToolCallStart(message["id"], message["name"]))
                 await self.transcript.handle(ev.ToolCallArgs(message["id"], message.get("arguments") or ""))
@@ -486,6 +495,13 @@ class OmenApp(App):
                 await note(Note(f"⚙ skill: {arg}"))
             else:
                 await note(ErrorMessage(f"no skill named {arg}"))
+        elif name == "/compact":
+            if self.runtime.running:
+                await note(Note("stop the current run first"))
+                return
+            self.refresh_status("summarizing…")
+            info = await self.runtime.compact()
+            await note(Note(compaction_note(info) if info else "nothing to summarize yet"))
         elif name == "/reload":
             self.assistant.reload()
             await note(Note(f"reloaded {len(self.assistant.skills.skills)} skills"))

@@ -81,6 +81,7 @@ function applyToBlocks(blocks: Block[], e: AgUiEvent): Block[] {
     case "CUSTOM":
       if (e.name === "skill_loaded") return [...blocks, { kind: "note", id: uid("note"), text: `skill: ${e.value?.skill} (${e.value?.by})` }];
       if (e.name === "message_injected") return [...blocks, { kind: "user", id: uid("user"), text: String(e.value) }];
+      if (e.name === "compacted") return [...blocks, { kind: "note", id: uid("note"), text: compactionNote(e.value?.tokens_before) }];
       return blocks;
     case "RUN_ERROR":
       return [...blocks, { kind: "error", id: uid("error"), text: e.message }];
@@ -147,13 +148,18 @@ export function answerQuestion(state: ChatState, questionId: string, answer: str
 // -- history ------------------------------------------------------------------------------ //
 
 export interface HistoryMessage {
-  role: "user" | "assistant" | "tool_call" | "tool";
+  role: "user" | "assistant" | "tool_call" | "tool" | "compaction";
   content?: string;
   id?: string;
   name?: string;
   arguments?: string;
   ui?: UIPayload | null;
   components?: UIPayload[];
+  tokens_before?: number;
+}
+
+export function compactionNote(tokensBefore?: number): string {
+  return `earlier conversation summarized${tokensBefore ? ` (was ~${tokensBefore.toLocaleString()} tokens)` : ""}`;
 }
 
 /** A saved thread (GET /threads/{id}) as transcript blocks. */
@@ -168,6 +174,7 @@ export function fromHistory(messages: HistoryMessage[]): ChatState {
         state = reduce(state, { type: "ACTIVITY_SNAPSHOT", messageId: `${id}-ui-${i}`, activityType: ui.type, content: ui });
       });
     }
+    else if (m.role === "compaction") state.blocks = [...state.blocks, { kind: "note", id: uid("note"), text: compactionNote(m.tokens_before) }];
     else if (m.role === "tool_call") state = reduce(reduce(state, { type: "TOOL_CALL_START", toolCallId: m.id, toolCallName: m.name }), { type: "TOOL_CALL_ARGS", toolCallId: m.id, delta: m.arguments ?? "" });
     else if (m.role === "tool") {
       state = reduce(state, { type: "TOOL_CALL_RESULT", toolCallId: m.id, content: m.content ?? "" });

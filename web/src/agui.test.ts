@@ -97,6 +97,16 @@ describe("fromHistory", () => {
     ]);
     expect(kinds(state.blocks)).toEqual(["user", "assistant", "component"]);
   });
+
+  it("marks where the conversation was summarized", () => {
+    const state = fromHistory([
+      { role: "user", content: "old" },
+      { role: "compaction", content: "## Goal\n- x", tokens_before: 24000 },
+      { role: "user", content: "new" },
+    ]);
+    expect(kinds(state.blocks)).toEqual(["user", "note", "user"]);
+    expect((state.blocks[1] as { text: string }).text).toContain("24,000");
+  });
 });
 
 describe("parseSse", () => {

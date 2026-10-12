@@ -22,7 +22,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 from agents import Agent, ItemHelpers, MaxTurnsExceeded, MessageQueue, RunConfig, Runner
 from agents.tool_context import ToolContext
 
-from omen.config import MAX_TURNS
+from omen.config import COMPACT_AT, KEEP_RECENT, MAX_TURNS
 from omen.core.events import (
     Custom,
     Event,
@@ -42,6 +42,7 @@ from omen.core.events import (
     UIComponent,
     UserQuestion,
 )
+from omen.core.compaction import Compactor
 from omen.core.session import CUSTOM_DATA_KEY, Session
 from omen.core.tools import ToolResult, classify_error
 from omen.ui.components import UIPayload, payload
@@ -195,6 +196,7 @@ class Runtime:
         components: Callable[[str, set[str] | None, str], Awaitable[list[UIPayload]]] | None = None,
         ui: set[str] | None = None,
         context: Callable[[str, dict], str | None] | None = None,
+        compactor: Compactor | None = None,
     ):
         """
         Args:
@@ -210,6 +212,8 @@ class Runtime:
             context: builds a block (time, memories, skill instructions) prepended to each new
                 user message, after `prepare`. Keeping varying text here instead of in the system
                 prompt is what keeps the model server's prompt cache warm.
+            compactor: summarizes the old part of the conversation before a user message
+                when the context is over budget (omen.core.compaction); emits Custom("compacted").
         """
         self.agent = agent
         self.session = session or Session()
@@ -219,6 +223,7 @@ class Runtime:
         self.ask_handler = ask_handler
         self.components = components
         self.context = context
+        self.compactor = compactor
         self.ui = ui
         self.queue = MessageQueue()
         self.state: dict = {}
@@ -231,6 +236,8 @@ class Runtime:
     @classmethod
     def for_assistant(cls, assistant: Any, session: Session | None = None, **kwargs: Any) -> Runtime:
         """A runtime wired to an omen.assistant.Assistant (agent, skill router, context block)."""
+        if "compactor" not in kwargs and COMPACT_AT > 0:
+            kwargs["compactor"] = Compactor(COMPACT_AT, KEEP_RECENT)
         runtime = cls(assistant.agent, session, **kwargs)
         runtime.attach(assistant)
         return runtime
@@ -240,6 +247,12 @@ class Runtime:
         self.agent = assistant.agent
         self.prepare = assistant.prepare
         self.context = assistant.context
+
+    async def compact(self) -> dict | None:
+        """Compact now, whatever the size (e.g. a /compact command). None if there was nothing to do."""
+        if self.compactor is None or self.running:
+            return None
+        return await self.compactor.maybe_compact(self.session, self.state, force=True)
 
     def send(self, text: str) -> None:
         """Queue a user message while a run is in progress (delivered after the current turn)."""
@@ -364,6 +377,14 @@ class Runtime:
 
         reason = "done"
         pre_call = self.state.pop("pre_call", None)  # e.g. a delegation the user asked for by name
+        if self.compactor is not None:
+            try:
+                info = await self.compactor.maybe_compact(self.session, self.state)
+            except Exception:  # never fail a run over compaction; the full context still works
+                logger.exception("compaction failed")
+                info = None
+            if info:
+                yield Custom("compacted", info)
         block = self.context(user_input, self.state) if self.context else None
         next_input: str | list[dict] = f"{block}\n\n{user_input}" if block else user_input
         try:
@@ -407,6 +428,9 @@ class Runtime:
                     yield event
                 await task
                 usage = result.context_wrapper.usage
+                if usage.request_usage_entries:  # the context's size now: the compaction trigger
+                    last = usage.request_usage_entries[-1]
+                    self.state["context_tokens"] = last.input_tokens + last.output_tokens
                 yield Custom("usage", {
                     "requests": usage.requests,
                     "input_tokens": usage.input_tokens,

@@ -12,6 +12,9 @@ Entry types:
 - "label": names an entry; never becomes the leaf.
 - "ui": a component extracted from an assistant reply (`{target, component}`), for
   re-rendering; never becomes the leaf, so the model never sees it.
+- "compaction": `{summary, first_kept, tokens_before}` on the main line. The model's view
+  of the branch becomes: the summary, then the items from `first_kept` on (see
+  omen/core/compaction.py). The entries before it stay in the file and the UIs.
 
 Delegation sub-runs are recorded with `fork()` as *detached* branches: they hang
 off the main conversation but never become its leaf, so the main agent never
@@ -28,6 +31,8 @@ from pathlib import Path
 from typing import Any
 
 from agents.memory import SessionSettings
+
+from omen.core.compaction import with_summary
 
 CUSTOM_DATA_KEY = "_agents_custom_data"
 _SIDE_TYPES = {"label", "ui"}
@@ -146,8 +151,36 @@ class Session:
         return chain[::-1]
 
     def items(self, entry_id: str | None = None) -> list[Any]:
-        """SDK input items along the current branch (or up to `entry_id`)."""
-        return [e["data"] for e in self.path_to(entry_id) if e["type"] == "item"]
+        """SDK input items the model sees along the current branch (or up to `entry_id`):
+        after a compaction, its summary plus the items it kept."""
+        entries = self.item_entries(entry_id)
+        items = [data for _, data in entries]
+        compaction = self.last_compaction(entry_id)
+        return with_summary(items, compaction["data"]["summary"]) if compaction else items
+
+    def item_entries(self, entry_id: str | None = None) -> list[tuple[str, Any]]:
+        """(entry id, item) pairs the model sees, without the summary (the latest compaction's
+        kept items and everything after it)."""
+        path = self.path_to(entry_id)
+        start = 0
+        for i in range(len(path) - 1, -1, -1):
+            if path[i]["type"] == "compaction":
+                kept = path[i]["data"]["first_kept"]
+                start = next((j for j, e in enumerate(path) if e["id"] == kept), i)
+                break
+        return [(e["id"], e["data"]) for e in path[start:] if e["type"] == "item"]
+
+    def last_compaction(self, entry_id: str | None = None) -> dict | None:
+        for entry in reversed(self.path_to(entry_id)):
+            if entry["type"] == "compaction":
+                return entry
+        return None
+
+    def compact(self, summary: str, first_kept: str, tokens_before: int = 0) -> str:
+        """Record a compaction on the current branch (see omen/core/compaction.py)."""
+        if first_kept not in self.entries:
+            raise KeyError(first_kept)
+        return self.append("compaction", {"summary": summary, "first_kept": first_kept, "tokens_before": tokens_before})
 
     def children(self, entry_id: str | None) -> list[dict]:
         return [

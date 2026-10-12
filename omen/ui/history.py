@@ -22,13 +22,18 @@ def history(session: Session, entry_id: str | None = None) -> list[dict]:
 
     Each message: {"role": "user", "content"} or {"role": "assistant", "content", "components"} or
     {"role": "tool_call", "id", "name", "arguments"} or
-    {"role": "tool", "id", "name", "content", "ui"}.
+    {"role": "tool", "id", "name", "content", "ui"} or
+    {"role": "compaction", "content": summary, "tokens_before"} where the model's view was summarized
+    (the full transcript is still listed).
     """
     out: list[dict] = []
     names: dict[str, str] = {}
     components = session.reply_components()
     for entry in session.path_to(entry_id):
         item = entry["data"]
+        if entry["type"] == "compaction":
+            out.append({"role": "compaction", "content": item["summary"], "tokens_before": item.get("tokens_before", 0)})
+            continue
         if entry["type"] != "item" or not isinstance(item, dict):
             continue
         role, kind = item.get("role"), item.get("type")
