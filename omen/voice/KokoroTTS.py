@@ -7,12 +7,12 @@ from openai import OpenAI
 from typing import Literal
 from textwrap import dedent
 
-from config.agent_config import AGENT_CONFIGS
+from omen.config import extractor_model
 
-config = AGENT_CONFIGS["tts_summarizer"]
-BASE_URL = config["BASE_URL"]
-API_KEY = config["API_KEY"]
-MODEL_NAME: str = config["MODEL_NAME"]
+_model = extractor_model()  # the side model (own llama.cpp slot if OMEN_SLOT_SIDE is set)
+BASE_URL = _model.base_url
+API_KEY = _model.api_key or "none"
+MODEL_NAME: str = _model.model.removeprefix("openai/")
 
 
 # unmarkdown the text

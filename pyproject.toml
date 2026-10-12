@@ -5,33 +5,32 @@ description = "An AI assistant that can speak, and walk around the internet."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "beautifulsoup4",
     "ag-ui-protocol",
     "browserforge",
     "crawlberg",
-    "crawl4ai",
     "ddgs",
     "fastapi",
-    "faster-whisper",
-    "halo",
-    "html2text",
     "litellm",
-    "liteparse",
-    "markdown",
-    "numpy",
     "openai-agents",
-    "piper-tts",
-    "pyaudio",
     "python-dotenv",
     "requests",
-    "scipy",
-    "spider_rs",
     "rich",
-    "statsmodels",
     "textual",
     "uvicorn",
     "yt-dlp",
+]
+
+[project.optional-dependencies]
+# Speech in/out (omen/voice): `uv sync --extra voice`. Text mode never imports these.
+voice = [
+    "faster-whisper",
+    "halo",
+    "markdown",
+    "numpy",
     "openwakeword>=0.4.0",
+    "pyaudio",
+    "scipy",
+    "torch>=2.14.0",
 ]
 
 [[tool.uv.index]]
@@ -43,6 +42,5 @@ explicit = true
 torch = [{ index = "pytorch-cuda" }]
 torchvision = [{ index = "pytorch-cuda" }]
 torchaudio = [{ index = "pytorch-cuda" }]
-spider_rs = { path = "spider-py" }
 # Omen fork of the OpenAI Agents SDK (see vendor/openai-agents/FORK.md)
 openai-agents = { path = "vendor/openai-agents", editable = true }
