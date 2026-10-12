@@ -430,28 +430,29 @@ tokens, except compaction, which breaks the prefix once, deliberately, between u
 Each item states its effect on that.
 
 1. **Loop breakers** (low effort; cache: append-only, no effect).
-   - [ ] An identical tool call (same name and arguments) to the previous step is not executed; the
-     result is a warning listing concrete next moves (read what you wrote, answer with what you
-     have, report the blocker); stop after N in a row. Extends the text-repetition repair in `OmenModel`.
-   - [ ] Guidance rule from A0's `tiny-local` profile: "continue / go ahead / proceed" means call the
-     next tool, not promise to.
+   - [x] `omen/core/guard.py`, applied to every tool of the main agent and the specialists: an
+     identical call (same name and arguments) to the previous step of the same turn is not run; the
+     result is a warning with concrete next moves, and a second repeat says to stop and answer.
+   - [x] Guidance rule from A0's `tiny-local` profile: "continue / go ahead / proceed" means call the
+     next tool now.
 2. **No retyping of specialist results** (low–medium; cache: neutral, faster).
-   - [ ] When the user named the specialist (the harness `pre_call` path), its result is the reply:
-     streamed to the user and stored as the assistant message, with no main-model turn. The next
-     request prefills those tokens (~2000 tok/s on ling3) instead of the model decoding them
-     (~100 tok/s).
-   - [ ] Otherwise the main model may write a placeholder (e.g. `{{result}}`) for the latest
-     `delegate` result; the UI shows it expanded, but the session stores exactly what the model
-     generated, so the next request still extends the server's cache.
+   - [x] When the user named the specialist (the harness `pre_call` path), its result is the reply:
+     streamed to the user and stored as the assistant message, with no main-model turn (messages
+     queued meanwhile are answered next). Live on ling3: "ask the writer to draft a note…" → 1.9 s,
+     0 main-model requests.
+   - [x] Otherwise the main model may write `{{result}}` for the latest `delegate` result (its full
+     text is in the delegation details); the stream and history show it expanded, the session
+     stores what the model wrote. Live, ling3 rarely delegates on its own (it wrote the blog post
+     and did the lookup itself), so this path is mostly for stronger main models.
 3. **Compaction keeps requests and answers verbatim** (medium; cache: the same single break at
    the same moment as today).
-   - [ ] For turns older than the verbatim window: keep each user request and the final answer
-     word for word, replace the tool calls in between with a one-line stub
-     ("[3 tool calls: read_file ×2, web_search]"). Call the side model only if still over budget,
-     and only for what was elided. Fewer side-model calls also means fewer evictions of the main
-     slot.
-   - [ ] Summary prompt rules from A0's compaction: preserve exact file paths, URLs, IDs and values;
-     keep decisions apart from assumptions and mark what is unverified.
+   - [x] `condense()`: before the verbatim window, each user request and final answer word for word,
+     the tool calls between them as one stub ("[3 tool calls: read_file ×2, web_search]"). Used as
+     is when it fits `condensed_tokens` (default `OMEN_KEEP_RECENT`); otherwise the newest condensed
+     turns stay and only older ones go to the side model. Live on ling3 (Kyoto check): condensed,
+     no model call, turn 5 in 1.0 s (3.2 s with the summarizer), all facts recalled.
+   - [x] Summary prompt: exact names, numbers, dates, paths, URLs and IDs; decisions apart from
+     assumptions; unconfirmed facts marked (unverified).
 4. **Goal reminder near the end of the prompt** (low effort; cache: **depends on the design**).
    - A0 rebuilds an `[EXTRAS]` block after the history on every call and never stores it. That
      breaks the invariant on every model call: the next request drops the old tail, so the server
@@ -466,9 +467,8 @@ Each item states its effect on that.
      last context checkpoint ~one `-ub` before the end of the previous prompt (inferred, not
      confirmed by varying `-ub`). That is ~0.8–1 s of prefill on every model call and ~65% instead of
      99.8% cache reuse at 6k. **Ephemeral tail blocks are out.**
-   - [ ] Design: a short reminder appended to the tool-result text and stored with it, e.g.
-     "(goal: plan the Kyoto week · step 12 of 50)", only every K steps or past step thresholds.
-     Small models still see it near the end; nothing is ever removed.
+   - [x] Stored reminder: every 5th tool result in a turn ends with
+     "(goal: <the user's request> · step N of M)" (`omen/core/guard.py`); nothing is ever removed.
 5. Smaller, later:
    - [ ] Continue a specialist: a follow-up to the same specialist appends to its existing branch
      instead of a fresh brief (cache: as today; the branch's prefix comes back from the host RAM
@@ -483,6 +483,11 @@ depth and parallel subagents.
 
 Done when: evals stay 20/20 with 100% valid tool calls, the 5-turn cache benchmark stays at
 97–99% on turns 2+, and a loop/retype case each is covered by a test.
+
+Result (2026-10-12, ling3): evals 19/20, 100% valid tool calls; the one miss
+(`chain_contact_reminder`) is flaky on both sides — 3/4 with Phase 9 vs 1/4 before. Cache
+benchmark turns 2–5: 96/96/98/98% (before: 96/96/97/85%). Tests: 146 (guard 3, compaction 11,
+specialist results 3 new or updated).
 ---
 
 ## 8. Success criteria

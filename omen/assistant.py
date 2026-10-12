@@ -16,10 +16,20 @@ from typing import Any
 
 from agents import Agent, FunctionTool, Model
 
-from omen.config import DEFAULT_PERSONA, OMEN_HOME, PERSONAS_DIRS, SKILLS_DIRS, ModelConfig, main_model, side_config
+from omen.config import (
+    DEFAULT_PERSONA,
+    MAX_TURNS,
+    OMEN_HOME,
+    PERSONAS_DIRS,
+    SKILLS_DIRS,
+    ModelConfig,
+    main_model,
+    side_config,
+)
 from omen.core.ask import ask_user
 from omen.core.delegate import delegate_tool
 from omen.core.events import Custom, Event
+from omen.core.guard import guard_all
 from omen.core.memory import Memory
 from omen.core.models import make_model, make_settings
 from omen.core.personas import Persona, discover
@@ -29,13 +39,15 @@ from omen.ui.extract import CHART_REQUEST
 GUIDANCE = (
     "Answer in plain sentences. Use a tool only when you need information or an action you can't do "
     "yourself. Call remember only for lasting personal facts (names, birthdays, preferences), not for data "
-    "the user gives you for the current question."
+    "the user gives you for the current question. If the user says continue, go ahead or proceed, call the "
+    "next tool now instead of saying you will."
 )
 DELEGATION = (
     "Specialists: hand them a subtask with delegate (they are not skills; don't load_skill them). "
     "Delegate only when a subtask needs a specialist's tools or a substantial piece of writing; answer simple "
-    "questions yourself. If the user names a specialist, delegate to it. When delegate returns, give the user the result "
-    "itself (the full draft, the facts), not just a note that it's done."
+    "questions yourself. If the user names a specialist, delegate to it. When delegate returns a draft or report the "
+    "user should see in full, write {{result}} where it goes (the screen shows it in full) instead of copying it out; "
+    "otherwise give the user the facts, not just a note that it's done."
 )
 UI_HINTS = (
     "The user's screen can show components. Write tables in markdown. ",
@@ -80,7 +92,7 @@ class Assistant:
     def reload(self) -> None:
         """Re-scan skill folders (after editing a SKILL.md or tools.py)."""
         self.skills.reload()
-        self.agent.tools = self.core_tools + self.skills.gated_tools()
+        self.agent.tools = guard_all(self.core_tools + self.skills.gated_tools(), max_turns=MAX_TURNS)
 
     def context(self, text: str, state: dict) -> str:
         """The `<context>` block for a new user message: time, new memories, new skill instructions."""
@@ -190,7 +202,7 @@ def build_assistant(
         instructions=instructions,
         model=model_for(main),
         model_settings=settings,
-        tools=core + skills.gated_tools(),
+        tools=guard_all(core + skills.gated_tools(), max_turns=MAX_TURNS),
     )
     return Assistant(
         agent=agent, persona=main, personas=personas, skills=skills, memory=memory,
@@ -216,5 +228,5 @@ def _specialist_agent(persona: Persona, skills: Skills, model: Model, settings: 
         instructions="\n\n".join(sections),
         model=model,
         model_settings=settings,
-        tools=tools,
+        tools=guard_all(tools, max_turns=persona.max_turns),
     )

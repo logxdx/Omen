@@ -155,6 +155,7 @@ def delegate_tool(
                 error="exception",
             )
         output = str(result.final_output or "").strip() or "(no result)"
+        details["result"] = output  # in full, for the screen ({{result}}, direct replies); the model gets it capped
         return ToolResult(truncate(output, TOOL_CONTENT_MAX_CHARS), details=details)
 
     return FunctionTool(
@@ -165,6 +166,16 @@ def delegate_tool(
         strict_json_schema=False,
         custom_data_extractor=extract_custom_data,
     )
+
+
+RESULT_MARKER = "{{result}}"
+
+
+def delegation_result(details: Any, content: str) -> str | None:
+    """The full text of a successful delegation, from its UI details (else the capped content)."""
+    if isinstance(details, dict) and details.get("type") == "delegation":
+        return str(details.get("result") or content)
+    return None
 
 
 def fork_history(items: list[Any], max_items: int | None = None) -> list[Any]:

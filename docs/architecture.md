@@ -41,6 +41,18 @@ UI components, questions, subagent events, custom events). For each user message
   skills and turn caps. `delegate(persona, task, share_context)` runs them on a fork of the current
   conversation (`share_context=true`) or on the task alone, records the sub-run as a detached branch
   of the session, and returns only the result. The main model decides whether to share context.
+  When the user named the specialist, the harness makes the call and the specialist's result is the
+  reply as is (no main-model turn retyping it). Otherwise the main model can write `{{result}}`,
+  shown expanded on screen and stored as written.
+
+## Run guards (`omen/core/guard.py`)
+
+Every tool of the main agent and the specialists is wrapped. A call identical (name and arguments)
+to the previous step of the same turn is not run; the model gets a warning with concrete next moves
+(and, on a second repeat, an instruction to stop and answer). Every 5th tool result in a turn ends
+with "(goal: <the user's request> · step N of M)". The reminder is stored with the result: a block
+re-sent on each call but never stored would cost ling3 ~2,000 re-evaluated tokens per call
+(`evals/cache_tail.py`).
 
 ## Skills (`omen/core/skills.py`)
 
@@ -82,9 +94,11 @@ compaction markers. The full transcript is always shown, even where the model on
 
 Before a user message, if the context (the last request's input + output tokens) is over
 `OMEN_COMPACT_AT`, the conversation is cut at a user-message boundary (a tool call and its result
-are never separated), the last `OMEN_KEEP_RECENT` tokens stay verbatim, and the rest is summarized
-by the side model into Goal / Constraints and preferences / Progress / Decisions / Next steps /
-Files touched. An earlier summary is merged into the next. The summary is prepended to the first
+are never separated) and the last `OMEN_KEEP_RECENT` tokens stay verbatim. Before the cut, each user
+request and final answer is kept word for word and the tool calls between them shrink to one line;
+only if that is still too long are the oldest turns summarized by the side model into Goal /
+Constraints and preferences / Progress / Decisions / Next steps / Files touched (exact values kept,
+unconfirmed facts marked). An earlier summary is merged into the next. The summary is prepended to the first
 kept user message (role alternation stays intact), and memories and skill instructions that were
 summarized away are shown again. A failed or empty summary leaves the context untouched.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from omen.core.delegate import RESULT_MARKER, delegation_result
 from omen.core.session import CUSTOM_DATA_KEY, Session, message_text
 from omen.ui.components import payload
 from omen.ui.extract import strip_hints
@@ -29,6 +30,7 @@ def history(session: Session, entry_id: str | None = None) -> list[dict]:
     out: list[dict] = []
     names: dict[str, str] = {}
     components = session.reply_components()
+    last_result: str | None = None  # the latest delegation result, for {{result}} in replies
     for entry in session.path_to(entry_id):
         item = entry["data"]
         if entry["type"] == "compaction":
@@ -41,12 +43,18 @@ def history(session: Session, entry_id: str | None = None) -> list[dict]:
             out.append({"role": role, "content": strip_context(message_text(item))})
         elif role == "assistant" and kind in (None, "message"):
             text = strip_hints(message_text(item))[0]  # the live stream hides <ui:…> tags too
+            if last_result is not None:
+                text = text.replace(RESULT_MARKER, last_result)
             out.append({"role": role, "content": text, "components": components.get(entry["id"], [])})
         elif kind == "function_call":
             names[item.get("call_id", "")] = item.get("name", "")
             out.append({"role": "tool_call", "id": item.get("call_id"), "name": item.get("name"), "arguments": item.get("arguments")})
         elif kind == "function_call_output":
-            ui = payload((item.get(CUSTOM_DATA_KEY) or {}).get("ui"), text=str(item.get("output", ""))[:500])
+            raw_ui = (item.get(CUSTOM_DATA_KEY) or {}).get("ui")
+            full = delegation_result(raw_ui, str(item.get("output", "")))
+            if full is not None and not str(item.get("output", "")).startswith("Error"):
+                last_result = full
+            ui = payload(raw_ui, text=str(item.get("output", ""))[:500])
             out.append({
                 "role": "tool", "id": item.get("call_id"), "name": names.get(item.get("call_id", ""), ""),
                 "content": item.get("output"), "ui": ui.model_dump() if ui else None,

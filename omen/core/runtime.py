@@ -43,6 +43,7 @@ from omen.core.events import (
     UserQuestion,
 )
 from omen.core.compaction import Compactor
+from omen.core.delegate import RESULT_MARKER, delegation_result
 from omen.core.session import CUSTOM_DATA_KEY, Session
 from omen.core.tools import ToolResult, classify_error
 from omen.ui.components import UIPayload, payload
@@ -66,6 +67,9 @@ class OmenContext:
 # Text after these never reaches the UI: tool calls written as text (OmenModel turns them into real
 # calls) and UI hint tags (omen.ui.extract).
 HIDDEN_MARKERS = ("<tool_call>", "<ui:")
+# Markers the UI shows expanded while the session keeps them as written (append-only prompts):
+# {{result}} is the latest delegation's full result.
+EXPANDED_MARKERS = (RESULT_MARKER,)
 
 
 class EventMapper:
@@ -78,6 +82,12 @@ class EventMapper:
         self._emitted = 0  # how much of it has been streamed
         self._streamed_unmatched = 0  # streamed messages not yet matched to message_output_created
         self._tool_names: dict[str, str] = {}
+        self.expansions: dict[str, str] = {}  # marker -> what the UI shows instead
+
+    def _expand(self, text: str) -> str:
+        for marker, value in self.expansions.items():
+            text = text.replace(marker, value)
+        return text
 
     def map(self, event: Any) -> list[Event]:
         if event.type == "raw_response_event":
@@ -100,10 +110,10 @@ class EventMapper:
                 self._text, self._emitted = "", 0
                 out.append(TextMessageStart(self._message_id))
             self._text += data.delta
-            visible = self._visible_until()
-            if visible > self._emitted:
-                out.append(TextMessageContent(self._message_id, self._text[self._emitted : visible]))
-                self._emitted = visible
+            shown = self._expand(self._text[: self._visible_until()])
+            if len(shown) > self._emitted:
+                out.append(TextMessageContent(self._message_id, shown[self._emitted :]))
+                self._emitted = len(shown)
             return out
         if kind in ("response.reasoning_summary_text.delta", "response.reasoning_text.delta"):
             return [ReasoningContent(self._message_id or "reasoning", data.delta)]
@@ -112,18 +122,20 @@ class EventMapper:
                 message_id, self._message_id = self._message_id, None
                 self._streamed_unmatched += 1
                 out = []
-                if not any(m in self._text for m in HIDDEN_MARKERS) and self._emitted < len(self._text):
-                    out.append(TextMessageContent(message_id, self._text[self._emitted :]))  # held-back tail
-                return out + [TextMessageEnd(message_id, self._text)]
+                full = self._expand(self._text)
+                if not any(m in self._text for m in HIDDEN_MARKERS) and self._emitted < len(full):
+                    out.append(TextMessageContent(message_id, full[self._emitted :]))  # held-back tail
+                return out + [TextMessageEnd(message_id, full)]
         return []
 
     def _visible_until(self) -> int:
-        """Stream text up to a hidden marker; hold back a tail that could be the start of one."""
+        """Stream text up to a hidden marker; hold back a tail that could be the start of a marker."""
         hits = [self._text.find(m) for m in HIDDEN_MARKERS if m in self._text]
         if hits:
             return min(hits)
-        for k in range(min(len(self._text), max(len(m) for m in HIDDEN_MARKERS) - 1), 0, -1):
-            if any(m.startswith(self._text[-k:]) for m in HIDDEN_MARKERS):
+        markers = HIDDEN_MARKERS + EXPANDED_MARKERS
+        for k in range(min(len(self._text), max(len(m) for m in markers) - 1), 0, -1):
+            if any(m.startswith(self._text[-k:]) for m in markers):
                 return len(self._text) - k
         return len(self._text)
 
@@ -144,20 +156,15 @@ class EventMapper:
             content = str(_get(raw, "output") if _get(raw, "output") is not None else item.output)
             custom = item.custom_data or {}
             ui = payload(custom.get("ui"), text=content[:500])
-            return [
-                ToolCallResult(
-                    call_id,
-                    self._tool_names.get(call_id, ""),
-                    content,
-                    ui.model_dump() if ui else None,
-                    custom.get("error") or classify_error(content),
-                )
-            ]
+            error = custom.get("error") or classify_error(content)
+            if not error and (full := delegation_result(custom.get("ui"), content)) is not None:
+                self.expansions[RESULT_MARKER] = full
+            return [ToolCallResult(call_id, self._tool_names.get(call_id, ""), content, ui.model_dump() if ui else None, error)]
         if name == "message_output_created":
             if self._streamed_unmatched:
                 self._streamed_unmatched -= 1
                 return []
-            text = ItemHelpers.text_message_output(item)
+            text = self._expand(ItemHelpers.text_message_output(item))
             visible, _ = strip_hints(text)
             message_id = uuid.uuid4().hex[:12]
             return [
@@ -231,6 +238,7 @@ class Runtime:
         self._result: Any = None
         self._aborted = False
         self._question: tuple[UserQuestion, asyncio.Future] | None = None
+        self._pre_call_reply: str | None = None
         self._emit: Callable[[Event], None] = lambda event: None
 
     @classmethod
@@ -328,6 +336,7 @@ class Runtime:
         content = str(output)
         details = output.details if isinstance(output, ToolResult) else None
         error = output.error if isinstance(output, ToolResult) else classify_error(content)
+        self._pre_call_reply = None if error else delegation_result(details, content)
         ui = payload(details, text=content[:500])
         yield self._filter_ui(ToolCallResult(call_id, tool.name, content, ui.model_dump() if ui else None, error))
         result_item: dict = {"type": "function_call_output", "call_id": call_id, "output": content}
@@ -388,11 +397,30 @@ class Runtime:
         block = self.context(user_input, self.state) if self.context else None
         next_input: str | list[dict] = f"{block}\n\n{user_input}" if block else user_input
         try:
+            answered = False
             if pre_call and isinstance(next_input, str):
+                self._pre_call_reply = None
                 async for event in self._run_pre_call(pre_call, next_input, context, config, out):
                     yield event
                 next_input = []  # the session now ends with the call's result; the model replies to it
-            while not self._aborted:
+                if self._pre_call_reply and not self._aborted:
+                    # The user asked this specialist by name: its result is the reply, as is. No main-model
+                    # turn retyping it (decoding is the slow part on a local model).
+                    message_id = uuid.uuid4().hex[:12]
+                    reply = self._pre_call_reply
+                    yield TextMessageStart(message_id)
+                    yield TextMessageContent(message_id, strip_hints(reply)[0])
+                    yield TextMessageEnd(message_id, reply)
+                    await self.session.add_items([{"role": "assistant", "content": reply}])
+                    if self.components and reply.strip():
+                        request = self.state.get("user_message", "")
+                        replies.append((message_id, reply, asyncio.create_task(self.components(reply, self.ui, request))))
+                    pending = self.queue.drain()  # sent while the specialist worked: answer them next
+                    for text in pending:
+                        yield Custom("message_injected", text)
+                    next_input = [{"role": "user", "content": text} for text in pending]
+                    answered = not pending
+            while not self._aborted and not answered:
                 result = Runner.run_streamed(
                     self.agent,
                     next_input,

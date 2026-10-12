@@ -7,8 +7,9 @@ from pathlib import Path
 from omen.assistant import build_assistant
 from omen.config import REPO_ROOT
 from omen.core import Runtime
-from omen.core.events import Custom, SubagentEvent, ToolCallResult
+from omen.core.events import Custom, SubagentEvent, TextMessageContent, TextMessageEnd, ToolCallResult
 from omen.core.personas import discover
+from omen.ui.history import history
 from tests.sdk_fake_model import FakeModel
 from tests.sdk_responses import get_function_tool_call, get_text_message
 from tests.test_skills import make_skill
@@ -95,7 +96,7 @@ class AssistantPersonaTests(unittest.IsolatedAsyncioTestCase):
         model = FakeModel()
         model.add_multiple_turn_outputs([
             [get_text_message("helper's findings")],  # the helper runs first (harness-made call)
-            [get_text_message("Here is what the helper found.")],  # then the main agent replies
+            [get_text_message("You're welcome.")],  # the main agent's next turn
         ])
         assistant = self.build(model)
         rt = Runtime.for_assistant(assistant)
@@ -108,9 +109,16 @@ class AssistantPersonaTests(unittest.IsolatedAsyncioTestCase):
         result = [e for e in events if isinstance(e, ToolCallResult)][0]
         self.assertEqual((result.name, result.content), ("delegate", "helper's findings"))
         self.assertTrue([e for e in events if isinstance(e, SubagentEvent)])
-        kinds = [i.get("role") or i.get("type") for i in rt.session.items()]
-        self.assertEqual(kinds, ["user", "function_call", "function_call_output", "assistant"])
+        # The specialist's result is the reply as is: no main-model turn retyping it.
+        self.assertEqual([e.text for e in events if isinstance(e, TextMessageEnd)][-1], "helper's findings")
+        self.assertNotEqual(model.last_turn_args["system_instructions"].split("\n")[0], "You are Boss. Be brief.")
+        items = rt.session.items()
+        self.assertEqual([i.get("role") or i.get("type") for i in items], ["user", "function_call", "function_call_output", "assistant"])
+        self.assertEqual(items[-1]["content"], "helper's findings")
+
+        [e async for e in rt.run("thanks")]  # the main agent carries on from there
         self.assertEqual(model.last_turn_args["system_instructions"].split("\n")[0], "You are Boss. Be brief.")
+        self.assertIn("helper's findings", json.dumps(model.last_turn_args["input"]))
 
     async def test_load_skill_with_a_persona_name_points_to_delegate(self):
         model = FakeModel()
@@ -140,6 +148,37 @@ class AssistantPersonaTests(unittest.IsolatedAsyncioTestCase):
         delegated = [e for e in events if isinstance(e, ToolCallResult) and e.name == "delegate"][0]
         self.assertEqual(delegated.content, "alpha says alpha-value: x")
         self.assertEqual(delegated.details["props"]["persona"], "helper")
+
+    async def test_result_placeholder_is_shown_in_full_but_stored_as_written(self):
+        draft = "Dear team,\nThe launch moves to Friday.\nThanks."
+        model = FakeModel()
+        model.add_multiple_turn_outputs([
+            [get_function_tool_call("delegate", json.dumps({"persona": "helper", "task": "draft a note"}), call_id="d1")],
+            [get_text_message(draft)],  # the helper's answer
+            [get_text_message("Here is the draft:\n{{result}}\nWant changes?")],  # main agent, no retyping
+        ])
+        rt = Runtime.for_assistant(self.build(model))
+        events = [e async for e in rt.run("please draft a note for the team")]
+        shown = "".join(e.delta for e in events if isinstance(e, TextMessageContent))
+        self.assertIn(draft, shown)
+        self.assertNotIn("{{result}}", shown)
+        self.assertIn(draft, [e.text for e in events if isinstance(e, TextMessageEnd)][-1])
+        self.assertIn("{{result}}", json.dumps(rt.session.items()[-1]))  # as generated: the prompt stays append-only
+        reply = [m for m in history(rt.session) if m["role"] == "assistant"][-1]
+        self.assertEqual(reply["content"], f"Here is the draft:\n{draft}\nWant changes?")
+
+    def test_placeholder_split_across_stream_chunks(self):
+        from types import SimpleNamespace as NS
+
+        from omen.core.runtime import EventMapper
+
+        mapper = EventMapper()
+        mapper.expansions["{{result}}"] = "FULL TEXT"
+        out = []
+        for delta in ["Here: {{res", "ult}} — done"]:
+            out += mapper.map(NS(type="raw_response_event", data=NS(type="response.output_text.delta", delta=delta)))
+        out += mapper.map(NS(type="raw_response_event", data=NS(type="response.output_item.done", item=NS(type="message"))))
+        self.assertEqual("".join(e.delta for e in out if isinstance(e, TextMessageContent)), "Here: FULL TEXT — done")
 
     async def test_specialist_turn_limit(self):
         model = FakeModel()

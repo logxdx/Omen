@@ -6,7 +6,7 @@ from pathlib import Path
 from agents import Agent
 
 from omen.core import Runtime, Session
-from omen.core.compaction import Compactor, render, split_point
+from omen.core.compaction import Compactor, condense, render, split_point
 from omen.core.events import Custom
 from omen.ui.history import history
 from tests.sdk_fake_model import FakeModel
@@ -170,8 +170,42 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         [e async for e in rt.run("first")]
         self.assertIsNone(await rt.compact())  # one turn: nothing to summarize
         [e async for e in rt.run("second")]
-        self.assertIsNotNone(await rt.compact())
-        self.assertEqual(len(calls), 1)
+        info = await rt.compact()
+        self.assertEqual(info["method"], "condensed")  # the old turn fits verbatim: no model call
+        self.assertEqual(calls, [])
+
+
+class CondenseTests(unittest.IsolatedAsyncioTestCase):
+    def test_requests_and_answers_verbatim_tool_calls_as_one_line(self):
+        text = condense(CONVERSATION[:6])
+        self.assertEqual(text, (
+            "User: first question " + "a" * 400 + "\n\n[1 tool call: search]\n\nAssistant: first answer"
+            "\n\nUser: second question\n\nAssistant: second answer"
+        ))
+        self.assertNotIn("rrrr", text)  # tool output is dropped
+
+    async def test_old_turns_kept_verbatim_without_a_model_call_when_they_fit(self):
+        session = Session()
+        await session.add_items(CONVERSATION)
+        complete, calls = summarizer()
+        compactor = Compactor(trigger_tokens=1, keep_recent_tokens=10, condensed_tokens=2000, complete=complete)
+        info = await compactor.maybe_compact(session, {})
+        self.assertEqual((info["method"], calls), ("condensed", []))
+        first = session.items()[0]["content"]
+        self.assertIn("User: second question", first)
+        self.assertIn("[1 tool call: search]", first)
+        self.assertTrue(first.endswith("third question"))
+
+    async def test_only_the_oldest_turns_go_to_the_model(self):
+        session = Session()
+        await session.add_items(CONVERSATION)
+        complete, calls = summarizer()
+        compactor = Compactor(trigger_tokens=1, keep_recent_tokens=10, condensed_tokens=20, complete=complete)
+        info = await compactor.maybe_compact(session, {})
+        self.assertEqual(info["method"], "summarized")
+        self.assertIn("first question", calls[0][1]["content"])  # the oldest turn is summarized
+        self.assertNotIn("second question", calls[0][1]["content"])
+        self.assertIn("## Earlier turns, word for word (tool calls shortened)\nUser: second question", info["summary"])
 
 
 if __name__ == "__main__":

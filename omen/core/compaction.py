@@ -3,8 +3,11 @@
 Small models plan worse, and decode slower, as the context fills (ling3: ~115 tok/s at
 2k tokens, 65 at 64k). Before a new user message, if the context is over
 `trigger_tokens`, the conversation is cut at a user-message boundary (a tool call and
-its result are never separated), everything before the cut is summarized into fixed
-sections by one model call, and the most recent `keep_recent_tokens` stay verbatim.
+its result are never separated) and the most recent `keep_recent_tokens` stay verbatim.
+Before the cut, each user request and final answer is kept word for word and the tool calls
+between them shrink to one line ("[3 tool calls: read_file ×2, web_search]"); only if that
+is still over `condensed_tokens` are the oldest turns summarized into fixed sections by one
+side-model call (Phase 9, after Agent Zero's topic compression).
 
 The summary is stored as a `compaction` entry in the session tree (the full history stays
 in the file and in the UIs); the model sees it prepended to the first kept user message.
@@ -16,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass, replace
 from typing import Any, Awaitable, Callable
 
@@ -40,13 +44,15 @@ the transcript, as short bullet points under every heading (write "- none" if no
 ## Files touched
 - paths written or read
 
-Keep exact names, numbers, dates, paths and URLs. If the transcript starts with an earlier summary, \
+Keep exact names, numbers, dates, paths, URLs and IDs. Keep decisions apart from assumptions, and mark \
+anything not confirmed in the transcript as (unverified). If the transcript starts with an earlier summary, \
 merge its facts in. Output only the filled template."""
 
 Complete = Callable[[list[dict]], Awaitable[str]]
 _CONTEXT = re.compile(r"^\s*<context>.*?</context>\s*", re.DOTALL)
-SUMMARY_HEADER = "<summary>\nThe earlier conversation, summarized:\n"
-_SUMMARY = re.compile(r"^<summary>\nThe earlier conversation, summarized:\n(.*?)\n</summary>\s*", re.DOTALL)
+SUMMARY_HEADER = "<summary>\nThe earlier conversation, condensed:\n"
+_SUMMARY = re.compile(r"^<summary>\nThe earlier conversation, (?:condensed|summarized):\n(.*?)\n</summary>\s*", re.DOTALL)
+VERBATIM_HEADING = "## Earlier turns, word for word (tool calls shortened)"
 
 
 def estimate_tokens(items: list[Any]) -> int:
@@ -98,6 +104,41 @@ def render(items: list[Any], tool_chars: int = 600) -> str:
     return "\n\n".join(lines)
 
 
+def condense(items: list[Any]) -> str:
+    """Turns as text: each user request and final answer verbatim, the tool calls between them as one line."""
+    lines: list[str] = []
+    calls: list[str] = []
+    answer = ""
+
+    def end_turn() -> None:
+        if calls:
+            counts = Counter(calls)
+            names = ", ".join(f"{n} ×{c}" if c > 1 else n for n, c in counts.items())
+            lines.append(f"[{len(calls)} tool call{'s' if len(calls) > 1 else ''}: {names}]")
+        if answer:
+            lines.append(f"Assistant: {answer}")
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if is_user_message(item):
+            end_turn()
+            calls, answer = [], ""
+            text = _text(item)
+            if earlier := _SUMMARY.match(text):
+                lines.append(f"Earlier summary:\n{earlier.group(1).strip()}")
+                text = text[earlier.end():]
+            text = _CONTEXT.sub("", text, count=1).strip()
+            if text:
+                lines.append(f"User: {text}")
+        elif item.get("type") == "function_call":
+            calls.append(str(item.get("name", "tool")))
+        elif item.get("role") == "assistant" and item.get("type") in (None, "message"):
+            answer = _text(item).strip() or answer  # the last one in a turn is the final answer
+    end_turn()
+    return "\n\n".join(lines)
+
+
 def with_summary(items: list[Any], summary: str) -> list[Any]:
     """Prepend the summary to the first user message (keeps user/assistant alternation)."""
     out = list(items)
@@ -134,6 +175,7 @@ def _text(item: dict) -> str:
 class Compactor:
     trigger_tokens: int = 24000
     keep_recent_tokens: int = 6000
+    condensed_tokens: int | None = None  # budget for verbatim old turns; None = keep_recent_tokens
     complete: Complete | None = None
     config: ModelConfig | None = None
     # State that tracks what earlier context blocks showed (omen.assistant / omen.core.skills):
@@ -152,24 +194,41 @@ class Compactor:
         cut = split_point(items, self.keep_recent_tokens)
         if cut == 0:
             return None
-        transcript = render(items[:cut])
-        try:
-            summary = (await (self.complete or self._litellm_complete)([
-                {"role": "system", "content": SUMMARY_PROMPT},
-                {"role": "user", "content": f"TRANSCRIPT:\n{transcript}"},
-            ])).strip()
-        except Exception as e:  # no summary, no compaction: the run goes on with the full context
-            logger.warning("compaction summary failed: %s", e)
-            return None
-        summary = re.sub(r"<think>.*?</think>", "", summary, flags=re.DOTALL).strip()
-        if not substantive(summary):
-            logger.warning("compaction summary was empty or only headings; keeping the full context")
-            return None
+        old = items[:cut]
+        # Newest old turns that fit the budget stay word for word (tool calls shortened); only the
+        # turns before them go to the side model.
+        budget = self.keep_recent_tokens if self.condensed_tokens is None else self.condensed_tokens
+        keep_from = len(old)
+        for i in reversed([i for i, item in enumerate(old) if is_user_message(item)]):
+            if len(condense(old[i:])) // 4 > budget:
+                break
+            keep_from = i
+        verbatim = condense(old[keep_from:]) if keep_from < len(old) else ""
+        if keep_from == 0:
+            summary, method = verbatim, "condensed"
+        else:
+            try:
+                summarized = (await (self.complete or self._litellm_complete)([
+                    {"role": "system", "content": SUMMARY_PROMPT},
+                    {"role": "user", "content": f"TRANSCRIPT:\n{render(old[:keep_from])}"},
+                ])).strip()
+            except Exception as e:  # no summary, no compaction: the run goes on with the full context
+                logger.warning("compaction summary failed: %s", e)
+                return None
+            summarized = re.sub(r"<think>.*?</think>", "", summarized, flags=re.DOTALL).strip()
+            if not substantive(summarized):
+                logger.warning("compaction summary was empty or only headings; keeping the full context")
+                return None
+            summary = f"{summarized}\n\n{VERBATIM_HEADING}\n{verbatim}" if verbatim else summarized
+            method = "summarized"
         session.compact(summary, first_kept=entries[cut][0], tokens_before=size)
         state["context_tokens"] = None  # unknown until the next request reports usage
         for key in self.reset_state_keys:
             state.pop(key, None)
-        return {"tokens_before": size, "summarized_items": cut, "kept_items": len(items) - cut, "summary": summary}
+        return {
+            "tokens_before": size, "summarized_items": cut, "kept_items": len(items) - cut,
+            "method": method, "summary": summary,
+        }
 
     async def _litellm_complete(self, messages: list[dict]) -> str:
         import litellm
