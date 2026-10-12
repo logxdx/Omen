@@ -417,6 +417,45 @@ llama.cpp reuses its KV cache only for an unchanged token prefix; the tool list 
 - [x] Dependencies: dropped `beautifulsoup4`, `crawl4ai`, `html2text`, `liteparse`, `piper-tts`, `spider_rs` (+ its `spider-py` source), `statsmodels`; speech packages (`faster-whisper`, `pyaudio`, `openwakeword`, `numpy`, `scipy`, `halo`, `markdown`, `torch>=2.14.0`) moved to the `voice` extra (`uv sync --extra voice`). A fresh `uv sync` is 238 MB instead of 6.4 GB, has no torch, and passes all 130 tests; `omen` CLI, server and TUI import cleanly.
 - [x] Docs rewritten: `README.md` (install, run, configuration table, personas/skills format, local-model notes) and `docs/architecture.md` (runtime, assistant, skills, model repairs, session tree, compaction, generative UI, server/web, voice, the SDK fork, evals).
 
+### Phase 8 — Small TTS engines (branch `tts-engines`, to be finished in its own session)
+
+Goal: let `omen voice` use small local TTS engines (CPU; the GPU is taken by the LLM) instead of
+only a Kokoro HTTP server, without juggling a pile of libraries: pick a few engines, measure them
+here, keep the rest out.
+
+Done on the branch:
+- [x] `omen/voice/tts.py`: `Engine` protocol (`synthesize(text) -> float32 numpy`, `sample_rate`),
+  `KokoroEngine` (HTTP), `make_engine()` (`OMEN_TTS`, "auto"), and `Speaker`: sentence-by-sentence
+  playback with the next sentence synthesized while the current one plays, stop / pause / play for
+  barge-in (same controls `VoiceSession` uses). `tests/test_tts.py` (fake engine and output): 6 tests.
+- [x] `pyproject.toml` extras `tts-pocket`, `tts-kitten`, `tts-sano`, `tts-supertonic`, `tts-kokoro`;
+  they resolve together in one lock (no conflicts). Not yet installed or exercised.
+
+To do:
+- [ ] Decide the engine set (suggest 2–3, see the research below). One library option worth testing
+  first: `sherpa-onnx` runs Kokoro, Kitten, Piper/VITS, Matcha and Pocket through ONNX in a single
+  package without torch (third-party claim, unverified) — it could replace most per-engine extras.
+- [ ] Implement the chosen engines in `tts.py`, wire `Speaker` + `make_engine` into
+  `omen/voice/frontend.py` (replace `KokoroTTS.py`), use real streaming where an engine has it
+  (Pocket: `generate_audio_stream(state, text, stop=Event)` with cancel on barge-in).
+- [ ] Benchmark on this laptop (CPU, i5-13420H): load time, time to first audio, real-time factor,
+  RAM; save sample WAVs to compare by ear; pick the `auto` order from the numbers.
+- [ ] README: engine table and install lines.
+
+Research (2026-10-12; APIs read from the wheels unless marked):
+| Engine | Package | Size | Output | Rate | Streaming | Deps / notes |
+|---|---|---|---|---|---|---|
+| Pocket TTS (Kyutai) | `pocket-tts` 3.3.0, MIT code / CC-BY-4.0 weights | ~100M | `TTSModel.load_model()`; `state = model.get_state_for_audio_prompt("alba")`; `generate_audio(state, text)` → 1-D torch float32 | 24 kHz | yes, cancellable | torch>=2.5, numpy>=2; 26 voices, 7 languages, voice cloning (gated weights); ~200 ms first chunk, 2–6x real time on CPU (vendor) |
+| sanoTTS (Ampixa) — "sano" | `sanotts` 0.5.0, MIT package (weights license unstated) | 0.3–2.3M / voice | `Synthesizer(voice="amy").synthesize(text)` → `.audio` float32, `.sample_rate` | 22.05 / 24 kHz | no (per sentence) | numpy only; voices amy, hfc, kristin, heart, heart-nano (+vi, id); lower quality than Kokoro/Pocket |
+| KittenTTS 0.8 | GitHub wheel `kittentts` 0.8.1 (Apache-2.0); PyPI `kittenml` 0.9.4 pulls torch/diffusers for KittenTTS 2 | 15M / 40M / 80M | `KittenTTS("KittenML/kitten-tts-nano-0.8").generate(text, voice="Leo")` → float32 (API checked on `kittenml`; the wheel's is assumed to match) | 24 kHz | per chunk | onnxruntime, misaki, spacy, espeakng_loader; 8 voices, English |
+| Supertonic 3 | `supertonic` 1.3.1, MIT code / OpenRAIL-M weights; upstream archived | ~99M | `TTS().synthesize(text, voice_style=tts.get_voice_style("M1"), lang="en")` → `(1, N)` float32 | 44.1 kHz | no | onnxruntime only; 10 voices, 31 languages; very fast |
+| Kokoro-82M in-process | `kokoro-onnx` 0.6.1 | 82M | `Kokoro(model, voices).create(text, voice="af_heart", lang="en-us")` → (float32, 24000) | 24 kHz | async | onnxruntime, phonemizer, espeakng-loader; best quality of the set; model files from the GitHub release |
+| Soprano (alternative "sano") | `soprano-tts` 0.2.0, Apache-2.0 | 80M | `SopranoTTS(device="cpu").infer(text)` → torch | 32 kHz | yes | heavy: transformers, gradio, sounddevice |
+
+Skipped: Piper (GPL, removed in Phase 7), NeuTTS (needs a reference clip + transcript, pins
+transformers 5.1), Chatterbox Turbo (pins numpy<2, torch 2.6), Kani (GPU), VibeVoice-Realtime
+(research license), MeloTTS (won't install on 3.12), OuteTTS (0.6B+ LM), KittenTTS 2 (1.7B).
+
 ---
 
 ## 8. Success criteria

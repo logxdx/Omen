@@ -32,6 +32,15 @@ voice = [
     "scipy",
     "torch>=2.14.0",
 ]
+# Text-to-speech engines for `omen voice` (omen/voice/tts.py), one extra each, used with `voice`:
+# `uv sync --extra voice --extra tts-pocket`. Kokoro over HTTP needs no extra (a Kokoro server).
+tts-pocket = ["pocket-tts>=3.3"]                    # Kyutai Pocket TTS, ~100M, streaming, 7 languages
+tts-kitten = [                                      # KittenTTS 0.8 nano/micro/mini (ONNX)
+    "kittentts @ https://github.com/KittenML/KittenTTS/releases/download/0.8.1/kittentts-0.8.1-py3-none-any.whl",
+]
+tts-sano = ["sanotts>=0.5"]                         # sanoTTS, 0.3-2.3M per voice, numpy only
+tts-supertonic = ["supertonic==1.3.1"]              # Supertonic 3 (archived upstream: pinned), 31 languages
+tts-kokoro = ["kokoro-onnx>=0.6"]                   # Kokoro-82M in-process (ONNX), no server
 
 [[tool.uv.index]]
 name = "pytorch-cuda"
